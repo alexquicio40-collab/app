@@ -33,6 +33,7 @@ export function buildCampoMapHtml() {
     var lastIdleFit = '';
     var lastFocusToken = 0;
     var lastRouteBounds = null;
+    var navPath = [];
     var followEnabled = false;
     var cameraHold = false;
     var trackingActive = false;
@@ -75,9 +76,41 @@ export function buildCampoMapHtml() {
 
     ${NAV_CAMERA_JS}
 
+    function bearingFrom(a, b) {
+      var dLng = (b.lng - a.lng) * Math.PI / 180;
+      var lat1 = a.lat * Math.PI / 180;
+      var lat2 = b.lat * Math.PI / 180;
+      var y = Math.sin(dLng) * Math.cos(lat2);
+      var x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    function headingAlongRoute(pos) {
+      if (!pos || !navPath || navPath.length < 2) return null;
+      var best = 0;
+      var bestD = 1e12;
+      for (var i = 0; i < navPath.length; i++) {
+        var d = metersApprox(pos, navPath[i]);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      var remain = 0;
+      var target = navPath[Math.min(best + 1, navPath.length - 1)];
+      for (var j = best; j < navPath.length - 1 && remain < 60; j++) {
+        remain += metersApprox(navPath[j], navPath[j + 1]);
+        target = navPath[j + 1];
+      }
+      if (best >= navPath.length - 1) {
+        return bearingFrom(navPath[navPath.length - 2], navPath[navPath.length - 1]);
+      }
+      if (metersApprox(pos, target) < 3) return null;
+      return bearingFrom(pos, target);
+    }
+
     function navHeading() {
-      if (courseReady) return lockedCourse;
-      return displayHeading || targetHeading || 0;
+      var along = headingAlongRoute(displayPos || targetPos);
+      if (along != null) return wrapDeg(along);
+      if (courseReady) return wrapDeg(lockedCourse);
+      return wrapDeg(displayHeading || targetHeading || 0);
     }
 
     function followCamera(pos, snap) {
@@ -277,6 +310,7 @@ export function buildCampoMapHtml() {
         if (layer.overlay) layer.overlay.setMap(null);
       });
       routeLayers = [];
+      navPath = [];
       if (traveledLine) { traveledLine.setMap(null); traveledLine = null; }
       lastTraveledKey = '';
     }
@@ -306,20 +340,28 @@ export function buildCampoMapHtml() {
     function meIcon(tracking, heading) {
       if (tracking) {
         var svg =
-          '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="58" viewBox="0 0 44 58">' +
-          '<ellipse cx="22" cy="52" rx="12" ry="4.4" fill="#000" opacity=".22"/>' +
-          '<path d="M12.6 40.5c0 3.4 18.8 3.4 18.8 0l2.2-15.2C34.2 16 29.2 10 22 10s-12.2 6-11.6 15.3z" fill="#F7F8FA" stroke="#C8CDD3" stroke-width="1.3"/>' +
-          '<path d="M16.2 23c.2-5.2 11.4-5.2 11.6 0l-.8 6.2c-.4 1.8-10 1.8-10.4 0z" fill="#90A4AE"/>' +
-          '<path d="M15.8 32.4h12.4l.8 6.6H15z" fill="#EEF1F4"/>' +
-          '<rect x="11.4" y="26.2" width="2.3" height="5.2" rx="1" fill="#1A73E8"/>' +
-          '<rect x="30.3" y="26.2" width="2.3" height="5.2" rx="1" fill="#1A73E8"/>' +
-          '<rect x="11.6" y="34.6" width="2.5" height="5.6" rx="1" fill="#263238"/>' +
-          '<rect x="29.9" y="34.6" width="2.5" height="5.6" rx="1" fill="#263238"/>' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="56" height="72" viewBox="0 0 56 72">' +
+          '<defs>' +
+          '<radialGradient id="halo" cx="50%" cy="48%" r="50%">' +
+          '<stop offset="0%" stop-color="#FFB300" stop-opacity=".42"/>' +
+          '<stop offset="100%" stop-color="#FFB300" stop-opacity="0"/>' +
+          '</radialGradient>' +
+          '</defs>' +
+          '<ellipse cx="28" cy="38" rx="22" ry="22" fill="url(#halo)"/>' +
+          '<ellipse cx="28" cy="64" rx="14" ry="5" fill="#000" opacity=".28"/>' +
+          '<path d="M15.2 48.4c0 4 25.6 4 25.6 0l2.6-18.2C44.2 18.4 37.4 11 28 11S11.8 18.4 12.6 30.2z" fill="#FFF7E6" stroke="#3D2200" stroke-width="2.4"/>' +
+          '<path d="M16.4 47.2c0 2.8 23.2 2.8 23.2 0l2.2-16.8C42.4 19.6 36.6 13.6 28 13.6s-14.4 6-13.8 16.8z" fill="#FF8F00"/>' +
+          '<path d="M19.4 27.2c.3-6.2 16.9-6.2 17.2 0l-1.1 7.4c-.5 2.2-14.5 2.2-15 0z" fill="#102832"/>' +
+          '<path d="M19.2 38.6h17.6l1 7.6H18.2z" fill="#FFCC4D"/>' +
+          '<rect x="13.2" y="31.4" width="3.1" height="6.2" rx="1.2" fill="#FFE082" stroke="#3D2200" stroke-width=".6"/>' +
+          '<rect x="39.7" y="31.4" width="3.1" height="6.2" rx="1.2" fill="#FFE082" stroke="#3D2200" stroke-width=".6"/>' +
+          '<rect x="13.6" y="41.2" width="3.4" height="6.6" rx="1.2" fill="#1A1208"/>' +
+          '<rect x="39" y="41.2" width="3.4" height="6.6" rx="1.2" fill="#1A1208"/>' +
           '</svg>';
         return {
           url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-          scaledSize: new google.maps.Size(44, 58),
-          anchor: new google.maps.Point(22, 40),
+          scaledSize: new google.maps.Size(56, 72),
+          anchor: new google.maps.Point(28, 48),
           rotation: Number(heading || 0),
         };
       }
@@ -451,6 +493,7 @@ export function buildCampoMapHtml() {
           return { lat: Number(p.lat), lng: Number(p.lng) };
         });
         if (path.length >= 2) {
+          navPath = path;
           path.forEach(function (p) { bounds.extend(p); hasBounds = true; });
           var line = new google.maps.Polyline({
             path: path,
@@ -508,7 +551,7 @@ export function buildCampoMapHtml() {
           lng: lerp(displayPos.lng, targetPos.lng, t),
         };
       }
-      var wantHeading = courseReady ? lockedCourse : targetHeading;
+      var wantHeading = navHeading();
       displayHeading = lerpAngle(displayHeading, wantHeading, t);
       meMarker.setPosition(displayPos);
       if (meMarker.__kind === 'arrow') {
@@ -516,6 +559,7 @@ export function buildCampoMapHtml() {
       }
       panFollow(displayPos);
       noteTravel(displayPos);
+      if (followEnabled && !northUp) applyHorizon();
       var headingGap = Math.abs(shortestDeg(displayHeading, wantHeading));
       if (jump > 0.35 || headingGap > 0.8) {
         animRaf = requestAnimationFrame(tickAnim);
@@ -577,10 +621,10 @@ export function buildCampoMapHtml() {
       targetHeading = nextHeading;
       if (starting) {
         displayPos = { lat: targetPos.lat, lng: targetPos.lng };
-        displayHeading = targetHeading;
-        northUp = true;
-        followEnabled = false;
-        cameraHold = false;
+        displayHeading = headingAlongRoute(displayPos) || targetHeading;
+        northUp = false;
+        followEnabled = true;
+        cameraHold = true;
         lastPan = null;
         lastNavZoom = 0;
         lockedCourse = targetHeading;
@@ -588,6 +632,7 @@ export function buildCampoMapHtml() {
         pendingCourse = null;
         courseAnchor = { lat: displayPos.lat, lng: displayPos.lng };
         emitFollow();
+        syncDrag();
       }
       ensureMeMarker(!!tracking, targetPos, targetHeading);
       trackingActive = !!tracking;
@@ -632,6 +677,8 @@ export function buildCampoMapHtml() {
           cameraHold = false;
           emitFollow();
           map.fitBounds(routeBounds, { top: 72, right: 36, bottom: 200, left: 36 });
+        } else if (followEnabled) {
+          applyHorizon();
         }
         return;
       }

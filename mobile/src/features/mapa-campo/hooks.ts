@@ -25,6 +25,11 @@ function isRutaActiva(route: RouteItem) {
   return !isRecolectado(route.estado) && !isCerrado(route.estado);
 }
 
+function withEmuDemo(routes: RouteItem[]) {
+  if (routes.length || !esEmuladorAndroid()) return routes;
+  return [rutaDemoEmulador()];
+}
+
 function routesFingerprint(items: RouteItem[]) {
   return items
     .map(
@@ -69,10 +74,11 @@ export function useMapaCampo() {
           const cached = peekLocalesCache();
           if (cached?.length) localesRef.current = cached;
         }
-        let mine = enrichRoutesWithLocales(rutas, localesRef.current)
-          .filter(isRutaActiva)
-          .sort(sortByOrden);
-        if (!mine.length && esEmuladorAndroid()) mine = [rutaDemoEmulador()];
+        const mine = withEmuDemo(
+          enrichRoutesWithLocales(rutas, localesRef.current)
+            .filter(isRutaActiva)
+            .sort(sortByOrden),
+        );
 
         const nextFp = routesFingerprint(mine);
         if (nextFp !== fingerprintRef.current) {
@@ -92,9 +98,11 @@ export function useMapaCampo() {
         if (!localesRef.current.length) {
           localesRef.current = await fetchLocales({ includeFotos: false }).catch(() => []);
           if (localesRef.current.length) {
-            const enriched = enrichRoutesWithLocales(rutas, localesRef.current)
-              .filter(isRutaActiva)
-              .sort(sortByOrden);
+            const enriched = withEmuDemo(
+              enrichRoutesWithLocales(rutas, localesRef.current)
+                .filter(isRutaActiva)
+                .sort(sortByOrden),
+            );
             const fp = routesFingerprint(enriched);
             if (fp !== fingerprintRef.current) {
               fingerprintRef.current = fp;

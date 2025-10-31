@@ -1,6 +1,7 @@
 import { fetchHojasRuta, fetchUserPlaca } from "@/features/hoja-ruta/api";
 import { fetchOperadorRutas } from "@/features/routes/api";
 import type { RouteItem } from "@/features/routes/types";
+import { esEmuladorAndroid, rutaDemoEmulador } from "@/lib/emulador";
 import { hoy } from "@/lib/fecha-lima";
 import { createStore } from "@/lib/fast-data";
 import { useAuth } from "@/providers/auth-provider";
@@ -43,7 +44,7 @@ export function useOperadorInicio() {
       }
       try {
         const fecha = hoy();
-        const [nextRutas, placa, hojas, gps] = await Promise.all([
+        const [fetchedRutas, placa, hojas, gps] = await Promise.all([
           fetchOperadorRutas(userId, fecha),
           fetchUserPlaca(userId).catch(() => ""),
           fetchHojasRuta({ fechaDesde: fecha, fechaHasta: fecha, conductorId: userId }).catch(
@@ -51,6 +52,8 @@ export function useOperadorInicio() {
           ),
           leerGps().catch(() => ({ activo: false, fondo: false })),
         ]);
+        const nextRutas =
+          fetchedRutas.length || !esEmuladorAndroid() ? fetchedRutas : [rutaDemoEmulador()];
         const gastos = hojas.reduce((sum, item) => sum + (item.totalGastos || 0), 0);
         const next = buildOperadorInicio({
           rutas: nextRutas,
@@ -65,7 +68,20 @@ export function useOperadorInicio() {
         hasData.current = true;
         setError(null);
       } catch (err) {
-        if (!hasData.current) {
+        if (esEmuladorAndroid() && !hasData.current) {
+          const demo = [rutaDemoEmulador()];
+          const next = buildOperadorInicio({
+            rutas: demo,
+            placa: "EMU-001",
+            gastos: 0,
+            gpsActivo: true,
+          });
+          operadorStore.remember({ data: next, rutas: demo }, true);
+          setRutas(demo);
+          setData(next);
+          hasData.current = true;
+          setError(null);
+        } else if (!hasData.current) {
           setError(err instanceof Error ? err.message : "No se pudo cargar tu ruta");
         }
       } finally {
