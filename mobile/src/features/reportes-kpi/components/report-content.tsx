@@ -1,0 +1,101 @@
+import { formatQty } from "@/features/reportes-kpi/lib/format";
+import type { ReportSnapshot } from "@/features/reportes-kpi/types";
+import { View } from "react-native";
+import { ReportEnvasesCard } from "./report-envases-card";
+import { ReportPlantaSection } from "./report-planta-section";
+import { ReportRutasSection } from "./report-rutas-section";
+import { ReportTableCard } from "./report-table-card";
+
+type ReportContentProps = {
+  snapshot: ReportSnapshot;
+  rangeLabel: string;
+};
+
+export function ReportContent({ snapshot, rangeLabel }: ReportContentProps) {
+  const hasRutas = snapshot.rutas.total > 0;
+  const hasPlanta = snapshot.plantaDetalle.length > 0;
+  const hasEnvases =
+    snapshot.envasesTotal.litros > 0 ||
+    snapshot.envasesTotal.baldes > 0 ||
+    snapshot.envasesTotal.galoneras > 0 ||
+    hasRutas ||
+    hasPlanta;
+
+  if (!hasRutas && !hasPlanta) {
+    return null;
+  }
+
+  return (
+    <View>
+      {hasEnvases ? (
+        <ReportEnvasesCard
+          total={snapshot.envasesTotal}
+          rutas={snapshot.envasesRutas}
+          planta={snapshot.envasesPlanta}
+          showRutas={hasRutas}
+          showPlanta={hasPlanta}
+        />
+      ) : null}
+
+      {hasRutas ? (
+        <>
+          <ReportRutasSection rutas={snapshot.rutas} />
+
+          <ReportTableCard
+            title="Por operador"
+            subtitle={`${snapshot.porConductor.length} operador${snapshot.porConductor.length === 1 ? "" : "es"}`}
+            columns={[
+              { key: "nombre", label: "Operador", width: 130 },
+              { key: "total", label: "Total", width: 52, align: "right" },
+              { key: "completada", label: "Compl.", width: 56, align: "right" },
+              { key: "pendiente", label: "Pend.", width: 52, align: "right" },
+              { key: "enRuta", label: "En ruta", width: 58, align: "right" },
+              { key: "cancelada", label: "Canc.", width: 52, align: "right" },
+              { key: "litros", label: "Litraje", width: 64, align: "right" },
+              { key: "baldes", label: "Baldes", width: 58, align: "right" },
+              { key: "galoneras", label: "Galon.", width: 58, align: "right" },
+            ]}
+            rows={snapshot.porConductor.map((item) => ({
+              id: item.id,
+              nombre: item.nombre,
+              total: formatQty(item.total),
+              completada: formatQty(item.completada),
+              pendiente: formatQty(item.pendiente),
+              enRuta: formatQty(item.enProceso + item.enRuta),
+              cancelada: formatQty(item.cancelada),
+              litros: formatQty(item.litros),
+              baldes: formatQty(item.baldes),
+              galoneras: formatQty(item.galoneras),
+            }))}
+          />
+
+          <ReportTableCard
+            title="Locales visitados"
+            subtitle="Top 20 por visitas"
+            columns={[
+              { key: "rank", label: "#", width: 36, align: "center" },
+              { key: "local", label: "Local", width: 160 },
+              { key: "total", label: "Total", width: 52, align: "right" },
+              { key: "completada", label: "Compl.", width: 56, align: "right" },
+              { key: "pendiente", label: "Pend.", width: 52, align: "right" },
+              { key: "cancelada", label: "Canc.", width: 52, align: "right" },
+            ]}
+            rows={snapshot.porLocal.map((item, index) => ({
+              id: item.id,
+              rank: String(index + 1),
+              local: item.nombre,
+              total: formatQty(item.total),
+              completada: formatQty(item.completada),
+              pendiente: formatQty(item.pendiente),
+              cancelada: formatQty(item.cancelada),
+            }))}
+          />
+        </>
+      ) : null}
+
+      {hasPlanta ? (
+        <ReportPlantaSection snapshot={snapshot} rangeLabel={rangeLabel} />
+      ) : null}
+    </View>
+  );
+}

@@ -1,0 +1,1 @@
+export { useRutasMapaScreen } from "./hooks";

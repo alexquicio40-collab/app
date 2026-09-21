@@ -1,0 +1,230 @@
+import { api, limaDate } from "@/lib/api";
+import { resolveMediaUrl } from "./lib/format";
+import type { ConductorOption, RouteItem, RouteMetodoPago } from "./types";
+
+type UnknownRecord = Record<string, unknown>;
+
+export type FetchRoutesQuery = {
+  fecha?: string | null;
+  conductorId?: string | null;
+  estado?: string | null;
+};
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function asRows(payload: unknown, key: string): UnknownRecord[] {
+  if (Array.isArray(payload)) return payload.filter(isRecord);
+  if (isRecord(payload)) {
+    const nested = payload[key];
+    if (Array.isArray(nested)) return nested.filter(isRecord);
+  }
+  return [];
+}
+
+function text(...values: unknown[]) {
+  for (const value of values) {
+    if (value == null) continue;
+    const next = String(value).trim();
+    if (next) return next;
+  }
+  return "";
+}
+
+function num(...values: unknown[]) {
+  for (const value of values) {
+    if (value == null || value === "") continue;
+    const parsed = typeof value === "number" ? value : Number(String(value).replace(",", "."));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function parseMetodos(raw: unknown): RouteMetodoPago[] {
+  if (!Array.isArray(raw)) return [];
+  const out: RouteMetodoPago[] = [];
+  for (const item of raw) {
+    if (typeof item === "string" && item.trim()) {
+      out.push({ id: out.length + 1, nombre: item.trim() });
+      continue;
+    }
+    if (!isRecord(item)) continue;
+    const nombre = text(item.nombre, item.name);
+    if (!nombre) continue;
+    out.push({ id: num(item.id) ?? out.length + 1, nombre });
+  }
+  return out;
+}
+
+function parseRoute(row: UnknownRecord): RouteItem | null {
+  const id = text(row.id);
+  if (!id) return null;
+
+  // URLs de fotos se resuelven al abrir el detalle (más rápido en listados grandes).
+  return {
+    id,
+    conductorId: text(row.conductor_id),
+    conductorNombre: text(row.conductor_nombre) || "Sin operador",
+    localId: text(row.local_id),
+    localNombre: text(row.local_nombre, row.nombre) || "Sin nombre",
+    localDireccion: text(row.local_direccion, row.direccion),
+    localLatitud: num(row.local_latitud, row.latitud, row.lat),
+    localLongitud: num(row.local_longitud, row.longitud, row.lng),
+    fechaAsignacion: text(row.fecha_asignacion),
+    observaciones: text(row.observaciones),
+    estado: text(row.estado) || "pendiente",
+    orden: num(row.orden),
+    fechaCompletada: text(row.fecha_completada) || null,
+    litraje: num(row.cantidad_litraje),
+    baldesVacios: num(row.cantidad_baldes_vacios),
+    galonerasVacias: num(row.cantidad_galoneras_vacias),
+    fotoGuia: text(row.foto_guia) || null,
+    fotoMercaderia: text(row.foto_mercaderia) || null,
+    encargadoNombre: text(row.encargado_tienda, row.encargado_nombre, row.local_encargado_nombre),
+    encargadoTelefono: text(
+      row.telefono_encargado,
+      row.encargado_telefono,
+      row.local_encargado_telefono,
+    ),
+    tipoEnvase: text(row.tipo_envase),
+    cantidadEnvases: num(row.cantidad_envases),
+    cantidadBidonesAzules: num(row.cantidad_bidones_azules),
+    cantidadBidonesBlancos: num(row.cantidad_bidones_blancos),
+    bidonPasadoPor: num(row.bidon_pasado_por),
+    metodosPago: parseMetodos(row.metodos_pago),
+  };
+}
+
+function buildQuery(query: FetchRoutesQuery) {
+  const params = new URLSearchParams();
+  if (query.fecha) params.set("fecha", query.fecha);
+  if (query.conductorId) params.set("conductor_id", query.conductorId);
+  if (query.estado) params.set("estado", query.estado);
+  const qs = params.toString();
+  return qs ? `/api/rutas?${qs}` : "/api/rutas";
+}
+
+function daysBetween(desde: string, hasta: string) {
+  const start = new Date(`${desde}T12:00:00`);
+  const end = new Date(`${hasta}T12:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [desde];
+  const out: string[] = [];
+  const cursor = new Date(start);
+  while (cursor <= end && out.length < 31) {
+    out.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out.length ? out : [desde];
+}
+
+async function fetchRoutesOnce(query: FetchRoutesQuery = {}): Promise<RouteItem[]> {
+  const payload = await api<unknown>(buildQuery(query));
+  return asRows(payload, "rutas")
+    .map(parseRoute)
+    .filter((item): item is RouteItem => Boolean(item));
+}
+
+/**
+ * Carga rutas acotadas por fecha (API `?fecha=`).
+ * Por defecto: hoy (evita traer todo el histórico).
+ * Rango: una petición por día en paralelo (máx. 14 días).
+ */
+export async function fetchRoutes(query: FetchRoutesQuery & {
+  fechaDesde?: string | null;
+  fechaHasta?: string | null;
+} = {}): Promise<RouteItem[]> {
+  const desde = query.fechaDesde ?? query.fecha ?? null;
+  const hasta = query.fechaHasta ?? query.fecha ?? null;
+
+  if (desde && hasta && desde !== hasta) {
+    const days = daysBetween(desde, hasta).slice(0, 14);
+    const batches = await Promise.all(
+      days.map((fecha) =>
+        fetchRoutesOnce({
+          fecha,
+          conductorId: query.conductorId,
+          estado: query.estado,
+        }),
+      ),
+    );
+    const map = new Map<string, RouteItem>();
+    for (const batch of batches) {
+      for (const item of batch) map.set(item.id, item);
+    }
+    return [...map.values()];
+  }
+
+  const fecha =
+    (desde && hasta && desde === hasta ? desde : null) ||
+    desde ||
+    hasta ||
+    query.fecha ||
+    limaDate();
+
+  return fetchRoutesOnce({
+    fecha,
+    conductorId: query.conductorId,
+    estado: query.estado,
+  });
+}
+
+/** Hoy en Lima — valor por defecto para listados rápidos. */
+export function defaultRoutesFecha() {
+  return limaDate();
+}
+
+export function withResolvedMedia(route: RouteItem): RouteItem {
+  return {
+    ...route,
+    fotoGuia: resolveMediaUrl(route.fotoGuia),
+    fotoMercaderia: resolveMediaUrl(route.fotoMercaderia),
+  };
+}
+
+export async function fetchConductores(): Promise<ConductorOption[]> {
+  const payload = await api<unknown>("/api/conductores").catch(() => ({ conductores: [] }));
+  const map = new Map<string, ConductorOption>();
+
+  for (const row of asRows(payload, "conductores")) {
+    const id = text(row.id, row.usuario_id, row.conductor_id);
+    if (!id || map.has(id)) continue;
+    map.set(id, {
+      id,
+      nombre: text(row.nombre, row.conductor_nombre, row.usuario) || `Operador ${id}`,
+    });
+  }
+
+  return [...map.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+}
+
+export type UpdateRouteInput = {
+  conductorId?: string;
+  localId?: string;
+  fechaAsignacion?: string;
+  observaciones?: string;
+  estado?: string;
+  orden?: number | null;
+};
+
+export async function updateRoute(id: string, input: UpdateRouteInput) {
+  const body: Record<string, unknown> = {};
+  if (input.conductorId != null) body.conductor_id = Number(input.conductorId);
+  if (input.localId != null) body.local_id = Number(input.localId);
+  if (input.fechaAsignacion != null) body.fecha_asignacion = input.fechaAsignacion;
+  if (input.observaciones != null) body.observaciones = input.observaciones;
+  if (input.estado != null) body.estado = input.estado;
+  if (input.orden !== undefined) body.orden = input.orden;
+
+  return api<{ success?: boolean; message?: string }>(`/api/rutas/${id}`, {
+    method: "PUT",
+    body,
+  });
+}
+
+export async function deleteRoute(id: string) {
+  return api<{ success?: boolean; message?: string }>(`/api/rutas/${id}`, {
+    method: "DELETE",
+  });
+}
+
