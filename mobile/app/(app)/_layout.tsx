@@ -2,7 +2,7 @@ import { canSeeMapaCampo, canSeeOperadores } from "@/lib/role-nav";
 import { theme } from "@/lib/theme";
 import { useAuth } from "@/providers/auth-provider";
 import { FloatingTabBar } from "@/ui/floating-tab-bar";
-import { Redirect, Tabs } from "expo-router";
+import { Tabs } from "expo-router";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 export default function AppLayout() {
@@ -11,16 +11,12 @@ export default function AppLayout() {
   const showOperadores = canSeeOperadores(rol);
   const showMapa = canSeeMapaCampo(rol);
 
-  if (status === "loading") {
+  if (status !== "authenticated") {
     return (
       <View style={styles.boot}>
         <ActivityIndicator color={theme.colors.accent} />
       </View>
     );
-  }
-
-  if (status === "guest") {
-    return <Redirect href="/" />;
   }
 
   return (

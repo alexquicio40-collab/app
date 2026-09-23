@@ -1,31 +1,66 @@
+import { InstalacionProvider, useInstalacionGate } from "@/features/instalacion";
 import { theme } from "@/lib/theme";
-import { AuthProvider } from "@/providers/auth-provider";
+import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-export const unstable_settings = {
-  initialRouteName: "index",
+const ROOT_STACK = {
+  headerShown: false,
+  animation: "fade" as const,
+  contentStyle: { backgroundColor: theme.colors.bg },
 };
 
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: "fade",
-            contentStyle: { backgroundColor: theme.colors.bg },
-          }}
-        >
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(instalacion)" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(app)" />
-        </Stack>
+        <InstalacionProvider>
+          <StatusBar style="light" />
+          <RootNavigator />
+        </InstalacionProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );
 }
+
+function RootNavigator() {
+  const auth = useAuth();
+  const setup = useInstalacionGate();
+
+  if (auth.status === "loading" || !setup.ready) {
+    return (
+      <View style={styles.boot}>
+        <ActivityIndicator color={theme.colors.accent} />
+      </View>
+    );
+  }
+
+  const showInstall = !setup.completed;
+  const showApp = setup.completed && auth.status === "authenticated";
+  const showAuth = setup.completed && !showApp;
+
+  return (
+    <Stack screenOptions={ROOT_STACK}>
+      <Stack.Protected guard={showInstall}>
+        <Stack.Screen name="instalacion" />
+      </Stack.Protected>
+      <Stack.Protected guard={showAuth}>
+        <Stack.Screen name="(auth)" />
+      </Stack.Protected>
+      <Stack.Protected guard={showApp}>
+        <Stack.Screen name="(app)" />
+      </Stack.Protected>
+    </Stack>
+  );
+}
+
+const styles = StyleSheet.create({
+  boot: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.bg,
+  },
+});

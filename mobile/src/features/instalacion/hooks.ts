@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { INSTALACION_PERMISSIONS } from "./lib/permissions-catalog";
 import { readAppPermission, requestAppPermission } from "./lib/request-permissions";
 import { isInstalacionDone, markInstalacionDone } from "./lib/storage";
@@ -19,8 +28,16 @@ const PENDING_MAP: Record<PermissionKind, PermissionGrant> = {
   photos: "pending",
 };
 
-/** Gate de arranque: ¿mostrar instalación o ir al login? */
-export function useInstalacionGate() {
+type InstalacionContextValue = {
+  ready: boolean;
+  completed: boolean;
+  completeSetup: () => Promise<void>;
+};
+
+const InstalacionContext = createContext<InstalacionContextValue | null>(null);
+
+/** Estado único de instalación, compartido por el layout raíz. */
+export function InstalacionProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [completed, setCompleted] = useState(false);
 
@@ -37,11 +54,31 @@ export function useInstalacionGate() {
     };
   }, []);
 
-  return { ready, completed };
+  const completeSetup = useCallback(async () => {
+    await markInstalacionDone();
+    setCompleted(true);
+  }, []);
+
+  const value = useMemo(
+    () => ({ ready, completed, completeSetup }),
+    [ready, completed, completeSetup],
+  );
+
+  return createElement(InstalacionContext.Provider, { value }, children);
+}
+
+/** Gate de arranque: ¿mostrar instalación o ir al login? */
+export function useInstalacionGate() {
+  const context = useContext(InstalacionContext);
+  if (!context) {
+    throw new Error("useInstalacionGate debe usarse dentro de InstalacionProvider");
+  }
+  return context;
 }
 
 /** Flujo de la pantalla: estado visual + pedir permisos + finalizar. */
-export function useInstalacionFlow(onFinished: () => void) {
+export function useInstalacionFlow() {
+  const { completeSetup } = useInstalacionGate();
   const [statusMap, setStatusMap] = useState(PENDING_MAP);
   const [busy, setBusy] = useState(false);
   const [activeKind, setActiveKind] = useState<PermissionKind | null>(null);
@@ -89,24 +126,22 @@ export function useInstalacionFlow(onFinished: () => void) {
         const result = await requestAppPermission(kind);
         setStatusMap((prev) => ({ ...prev, [kind]: result }));
       }
-      await markInstalacionDone();
-      onFinished();
+      await completeSetup();
     } finally {
       setBusy(false);
       setActiveKind(null);
     }
-  }, [busy, onFinished]);
+  }, [busy, completeSetup]);
 
   const skipSetup = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     try {
-      await markInstalacionDone();
-      onFinished();
+      await completeSetup();
     } finally {
       setBusy(false);
     }
-  }, [busy, onFinished]);
+  }, [busy, completeSetup]);
 
   return {
     rows,

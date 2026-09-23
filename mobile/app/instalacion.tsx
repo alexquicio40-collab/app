@@ -3,8 +3,7 @@ import { PermissionCard } from "@/features/instalacion/components/permission-car
 import { useInstalacionFlow } from "@/features/instalacion/hooks";
 import { theme } from "@/lib/theme";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -29,11 +28,7 @@ import Animated, {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function InstalacionScreen() {
-  const goLogin = useCallback(() => {
-    router.replace("/(auth)/login");
-  }, []);
-
-  const flow = useInstalacionFlow(goLogin);
+  const flow = useInstalacionFlow();
 
   const ready = !flow.booting && flow.grantedCount === flow.total;
 
