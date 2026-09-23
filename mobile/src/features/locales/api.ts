@@ -86,9 +86,13 @@ function parseFotos(value: unknown, localId: string): LocalFoto[] {
   return out.sort((a, b) => a.orden - b.orden);
 }
 
-export function parseLocal(row: UnknownRecord): LocalItem | null {
+export function parseLocal(
+  row: UnknownRecord,
+  opts?: { includeFotos?: boolean },
+): LocalItem | null {
   const id = text(row.id);
   if (!id) return null;
+  const includeFotos = opts?.includeFotos !== false;
 
   return {
     id,
@@ -116,7 +120,8 @@ export function parseLocal(row: UnknownRecord): LocalItem | null {
     bidonPasadoPor: num(row.bidon_pasado_por),
     frecuencias: parseFrecuencias(row.frecuencias_asignacion),
     metodosPago: parseMetodos(row.metodos_pago),
-    fotos: parseFotos(row.fotos, id),
+    // Fotos: caras de parsear en listados grandes; se hidratan al abrir detalle.
+    fotos: includeFotos ? parseFotos(row.fotos, id) : [],
   };
 }
 
@@ -148,11 +153,119 @@ function toBody(input: LocalFormInput) {
   };
 }
 
-export async function fetchLocales(): Promise<LocalItem[]> {
+export async function fetchLocales(opts?: {
+  force?: boolean;
+  /** Por defecto false: listado/mapa sin parsear fotos (mucho más rápido). */
+  includeFotos?: boolean;
+}): Promise<LocalItem[]> {
+  const includeFotos = opts?.includeFotos === true;
+  if (
+    !includeFotos &&
+    !opts?.force &&
+    localesListCache &&
+    Date.now() - localesListCache.at < LOCALES_LIST_CACHE_MS
+  ) {
+    return localesListCache.items;
+  }
+
   const payload = await api<unknown>("/api/locales");
-  return asRows(payload, "locales")
-    .map(parseLocal)
-    .filter((item): item is LocalItem => Boolean(item));
+  const raw = new Map<string, UnknownRecord>();
+  const items: LocalItem[] = [];
+  for (const row of asRows(payload, "locales")) {
+    const item = parseLocal(row, { includeFotos });
+    if (!item) continue;
+    raw.set(item.id, row);
+    items.push(item);
+  }
+
+  rawLocalesById = raw;
+  if (!includeFotos) {
+    localesListCache = { at: Date.now(), items };
+  } else {
+    localesListCache = null;
+  }
+  // Calienta el cache lite (Asignar / Hoja ruta) con el mismo payload.
+  localesLiteCache = {
+    at: Date.now(),
+    items: items.map((item) => ({
+      id: item.id,
+      nombre: item.nombre,
+      direccion: item.direccion,
+      activo: item.activo,
+    })),
+  };
+  return items;
+}
+
+/** Reparsea fotos desde el payload crudo (sin re-fetch) al abrir detalle/editar. */
+export function hydrateLocalFotos(local: LocalItem): LocalItem {
+  if (local.fotos.length) return local;
+  const raw = rawLocalesById.get(local.id);
+  if (!raw) return local;
+  return parseLocal(raw, { includeFotos: true }) ?? local;
+}
+
+export function invalidateLocalesCaches() {
+  localesListCache = null;
+  localesLiteCache = null;
+  rawLocalesById = new Map();
+}
+
+/** Opción liviana para pickers (hoja ruta, asignar, etc.). */
+export type LocalLiteOption = {
+  id: string;
+  nombre: string;
+  direccion: string;
+};
+
+type LocalLiteCached = LocalLiteOption & { activo: boolean };
+
+let localesLiteCache: { at: number; items: LocalLiteCached[] } | null = null;
+const LOCALES_LITE_CACHE_MS = 5 * 60 * 1000;
+
+/** Cache del listado de Locales (sin fotos). */
+let localesListCache: { at: number; items: LocalItem[] } | null = null;
+const LOCALES_LIST_CACHE_MS = 3 * 60 * 1000;
+
+/** Filas crudas para hidratar fotos on-demand. */
+let rawLocalesById = new Map<string, UnknownRecord>();
+
+/**
+ * Parsea solo id/nombre/dirección (sin fotos ni métodos).
+ * Cache 5 min compartida entre pantallas que listan locales.
+ */
+export async function fetchLocalesLite(opts?: {
+  force?: boolean;
+  onlyActivos?: boolean;
+}): Promise<LocalLiteOption[]> {
+  if (
+    !opts?.force &&
+    localesLiteCache &&
+    Date.now() - localesLiteCache.at < LOCALES_LITE_CACHE_MS
+  ) {
+    const cached = localesLiteCache.items;
+    const rows = opts?.onlyActivos ? cached.filter((item) => item.activo) : cached;
+    return rows.map(({ id, nombre, direccion }) => ({ id, nombre, direccion }));
+  }
+
+  const payload = await api<unknown>("/api/locales");
+  const items: LocalLiteCached[] = asRows(payload, "locales")
+    .map((row) => {
+      const id = text(row.id);
+      if (!id) return null;
+      return {
+        id,
+        nombre: text(row.nombre, row.local_nombre) || `Local ${id}`,
+        direccion: text(row.direccion, row.local_direccion),
+        activo: row.activo == null ? true : bool(row.activo),
+      };
+    })
+    .filter((item): item is LocalLiteCached => Boolean(item))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+  localesLiteCache = { at: Date.now(), items };
+  const rows = opts?.onlyActivos ? items.filter((item) => item.activo) : items;
+  return rows.map(({ id, nombre, direccion }) => ({ id, nombre, direccion }));
 }
 
 export async function createLocal(input: LocalFormInput) {

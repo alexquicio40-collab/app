@@ -9,6 +9,8 @@ import {
   extractCreatedLocalId,
   fetchLocales,
   fetchMetodosPago,
+  hydrateLocalFotos,
+  invalidateLocalesCaches,
   syncLocalFotos,
   updateLocal,
   updateLocalCertEstado,
@@ -62,23 +64,55 @@ export function useLocalesScreen() {
     else setRefreshing(true);
     setError(null);
     try {
-      const [rows, metodos] = await Promise.all([
-        fetchLocales(),
-        fetchMetodosPago().catch(() => [] as MetodoPagoOption[]),
-      ]);
+      // Sin parsear fotos: listado/mapa listos mucho antes.
+      const rows = await fetchLocales({
+        force: mode === "refresh",
+        includeFotos: false,
+      });
       setLocales(rows);
-      setMetodosPago(metodos);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar los locales");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+
+    // Métodos de pago no bloquean la pantalla.
+    void fetchMetodosPago()
+      .then(setMetodosPago)
+      .catch(() => setMetodosPago([]));
   }, []);
 
   useEffect(() => {
     void load("boot");
   }, [load]);
+
+  const enrichLocal = useCallback((id: string) => {
+    setLocales((prev) =>
+      prev.map((item) => (item.id === id ? hydrateLocalFotos(item) : item)),
+    );
+  }, []);
+
+  const openLocal = useCallback(
+    (id: string | null) => {
+      if (!id) {
+        setSelectedId(null);
+        return;
+      }
+      enrichLocal(id);
+      setSelectedId(id);
+    },
+    [enrichLocal],
+  );
+
+  const openEdit = useCallback(
+    (id: string) => {
+      enrichLocal(id);
+      setCreating(false);
+      setEditingId(id);
+    },
+    [enrichLocal],
+  );
 
   const filtered = useMemo(() => filterLocales(locales, filters), [locales, filters]);
 
@@ -117,11 +151,6 @@ export function useLocalesScreen() {
     setCreating(true);
   }, []);
 
-  const openEdit = useCallback((id: string) => {
-    setCreating(false);
-    setEditingId(id);
-  }, []);
-
   const closeForm = useCallback(() => {
     setCreating(false);
     setEditingId(null);
@@ -149,6 +178,7 @@ export function useLocalesScreen() {
 
         notify("Listo", editingId ? "Local actualizado" : "Local creado");
         closeForm();
+        invalidateLocalesCaches();
         await load("refresh");
       } catch (err) {
         notify("Error", err instanceof Error ? err.message : "No se pudo guardar");
@@ -167,6 +197,7 @@ export function useLocalesScreen() {
       setMutating(true);
       try {
         await deleteLocal(local.id);
+        invalidateLocalesCaches();
         setLocales((prev) => prev.filter((item) => item.id !== local.id));
         setSelectedId((prev) => (prev === local.id ? null : prev));
         notify("Listo", "Local eliminado");
@@ -295,7 +326,7 @@ export function useLocalesScreen() {
     addMetodoPago,
     renameMetodoPago,
     removeMetodoPago,
-    openLocal: setSelectedId,
+    openLocal,
     closeLocal: () => setSelectedId(null),
     openCreate,
     openEdit,

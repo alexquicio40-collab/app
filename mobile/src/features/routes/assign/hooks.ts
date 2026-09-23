@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { InteractionManager } from "react-native";
 import {
   createRestriction,
   createRoute,
@@ -31,20 +32,31 @@ export function useAssignWorkspace({ enabled = true }: AssignWorkspaceOptions = 
   const [locales, setLocales] = useState<LocalOption[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [restrictions, setRestrictions] = useState<RestrictionItem[]>([]);
+  /** Catálogos ligeros (programación / zonas). */
   const [loading, setLoading] = useState(false);
+  /** Lista de locales (payload grande). */
+  const [localesLoading, setLocalesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [booted, setBooted] = useState(false);
+
+  const loadLocales = useCallback(async (force = false) => {
+    setLocalesLoading(true);
+    try {
+      const locs = await fetchLocales({ force });
+      setLocales(locs);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron cargar los locales");
+    } finally {
+      setLocalesLoading(false);
+    }
+  }, []);
 
   const reload = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [locs, progs, zones] = await Promise.all([
-        fetchLocales(),
-        fetchSchedules(),
-        fetchRestrictions(),
-      ]);
-      setLocales(locs);
+      // Primero lo liviano → la UI del tab puede montarse.
+      const [progs, zones] = await Promise.all([fetchSchedules(), fetchRestrictions()]);
       setSchedules(progs);
       setRestrictions(zones);
       setBooted(true);
@@ -53,11 +65,21 @@ export function useAssignWorkspace({ enabled = true }: AssignWorkspaceOptions = 
     } finally {
       setLoading(false);
     }
-  }, []);
+
+    // Locales después (o desde cache compartida con Hoja ruta).
+    await loadLocales(false);
+  }, [loadLocales]);
 
   useEffect(() => {
     if (!enabled || booted) return;
-    void reload();
+    let cancelled = false;
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (!cancelled) void reload();
+    });
+    return () => {
+      cancelled = true;
+      task.cancel();
+    };
   }, [enabled, booted, reload]);
 
   const assignRoute = useCallback(async (input: AssignRouteInput) => {
@@ -66,7 +88,7 @@ export function useAssignWorkspace({ enabled = true }: AssignWorkspaceOptions = 
 
   const setRouteOrder = useCallback(async (orderedIds: string[]) => {
     for (let i = 0; i < orderedIds.length; i += 1) {
-      await updateRoute(orderedIds[i], { orden: i + 1 });
+      await updateRoute(orderedIds[i]!, { orden: i + 1 });
     }
   }, []);
 
@@ -84,22 +106,26 @@ export function useAssignWorkspace({ enabled = true }: AssignWorkspaceOptions = 
     return generateScheduledRoutes(desde, hasta);
   }, []);
 
-  const saveRestriction = useCallback(async (input: RestrictionInput, editId?: number) => {
-    if (editId != null) {
-      await updateRestriction(editId, {
-        tipo_vehiculo: input.tipoVehiculo,
-        tipo_via: "via",
-        nombre: input.nombre,
-        min_lat: input.minLat,
-        max_lat: input.maxLat,
-        min_lng: input.minLng,
-        max_lng: input.maxLng,
-      });
-    } else {
-      await createRestriction(input);
-    }
-    await reload();
-  }, [reload]);
+  const saveRestriction = useCallback(
+    async (input: RestrictionInput, editId?: number) => {
+      if (editId != null) {
+        await updateRestriction(editId, {
+          tipo_vehiculo: input.tipoVehiculo,
+          tipo_via: "via",
+          nombre: input.nombre,
+          min_lat: input.minLat,
+          max_lat: input.maxLat,
+          min_lng: input.minLng,
+          max_lng: input.maxLng,
+        });
+      } else {
+        await createRestriction(input);
+      }
+      const zones = await fetchRestrictions();
+      setRestrictions(zones);
+    },
+    [],
+  );
 
   const toggleRestriction = useCallback(async (item: RestrictionItem) => {
     await updateRestriction(item.id, { activo: item.activo ? 0 : 1 });
@@ -118,7 +144,9 @@ export function useAssignWorkspace({ enabled = true }: AssignWorkspaceOptions = 
     schedules,
     restrictions,
     loading,
+    localesLoading,
     error,
+    booted,
     reload,
     assignRoute,
     setRouteOrder,

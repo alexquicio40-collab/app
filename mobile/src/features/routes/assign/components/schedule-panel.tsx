@@ -24,6 +24,7 @@ const FREQ = [
 type SchedulePanelProps = {
   conductores: ConductorOption[];
   locales: LocalOption[];
+  localesLoading?: boolean;
   schedules: ScheduleItem[];
   bottomPad?: number;
   onSave: (input: {
@@ -50,6 +51,7 @@ function defaultRange() {
 export function SchedulePanel({
   conductores,
   locales,
+  localesLoading = false,
   schedules,
   bottomPad = 120,
   onSave,
@@ -178,7 +180,7 @@ export function SchedulePanel({
             flex
             label="Local *"
             value={localId}
-            placeholder="Local…"
+            placeholder={localesLoading && !locales.length ? "Cargando locales…" : "Local…"}
             searchable
             options={locales.map((item) => ({ value: item.id, label: item.nombre, hint: item.direccion }))}
             onChange={setLocalId}

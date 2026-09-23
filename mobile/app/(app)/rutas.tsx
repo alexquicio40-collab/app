@@ -68,12 +68,13 @@ export default function RutasScreen() {
       {tab === "listado" ? <ListadoPanel routes={routes} bottomPad={bottomPad} /> : null}
 
       {tab === "asignacion" ? (
-        assign.loading && !assign.locales.length ? (
+        assign.loading && !assign.booted ? (
           <Boot />
         ) : (
           <AssignPanel
             conductores={routes.conductores}
             locales={assign.locales}
+            localesLoading={assign.localesLoading}
             bottomPad={bottomPad}
             onAssign={async (input) => {
               await assign.assignRoute(input);
@@ -85,12 +86,13 @@ export default function RutasScreen() {
       ) : null}
 
       {tab === "programacion" ? (
-        assign.loading && !assign.schedules.length ? (
+        assign.loading && !assign.booted ? (
           <Boot />
         ) : (
           <SchedulePanel
             conductores={routes.conductores}
             locales={assign.locales}
+            localesLoading={assign.localesLoading}
             schedules={assign.schedules}
             bottomPad={bottomPad}
             onSave={assign.saveSchedule}
@@ -115,7 +117,7 @@ export default function RutasScreen() {
       ) : null}
 
       {tab === "restriccion" ? (
-        assign.loading && !assign.restrictions.length ? (
+        assign.loading && !assign.booted ? (
           <Boot />
         ) : (
           <RestrictionPanel

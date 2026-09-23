@@ -127,6 +127,10 @@ export default function LocalesScreen() {
         <FlatList
           data={screen.filtered}
           keyExtractor={(item) => item.id}
+          initialNumToRender={16}
+          maxToRenderPerBatch={16}
+          windowSize={7}
+          removeClippedSubviews
           contentContainerStyle={[styles.list, { paddingBottom: bottomPad }]}
           refreshControl={
             <RefreshControl

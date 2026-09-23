@@ -1,3 +1,4 @@
+import { useInstalacionGate } from "@/features/instalacion";
 import { theme } from "@/lib/theme";
 import { useAuth } from "@/providers/auth-provider";
 import { Redirect, Stack } from "expo-router";
@@ -5,13 +6,18 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 export default function AuthLayout() {
   const { status } = useAuth();
+  const setup = useInstalacionGate();
 
-  if (status === "loading") {
+  if (status === "loading" || !setup.ready) {
     return (
       <View style={styles.boot}>
         <ActivityIndicator color={theme.colors.accent} />
       </View>
     );
+  }
+
+  if (!setup.completed) {
+    return <Redirect href="/(instalacion)" />;
   }
 
   if (status === "authenticated") {

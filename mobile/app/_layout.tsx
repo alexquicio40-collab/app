@@ -5,7 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 export const unstable_settings = {
-  initialRouteName: "(auth)",
+  initialRouteName: "index",
 };
 
 export default function RootLayout() {
@@ -20,6 +20,8 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: theme.colors.bg },
           }}
         >
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(instalacion)" />
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(app)" />
         </Stack>

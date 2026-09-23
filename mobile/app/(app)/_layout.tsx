@@ -20,7 +20,7 @@ export default function AppLayout() {
   }
 
   if (status === "guest") {
-    return <Redirect href="/(auth)/login" />;
+    return <Redirect href="/" />;
   }
 
   return (

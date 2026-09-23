@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { fetchLocalesLite } from "@/features/locales/api";
 import type {
   AssignRouteInput,
   LocalOption,
@@ -41,20 +42,9 @@ function num(...values: unknown[]) {
   return null;
 }
 
-export async function fetchLocales(): Promise<LocalOption[]> {
-  const payload = await api<unknown>("/api/locales").catch(() => ({ locales: [] }));
-  return asRows(payload, "locales")
-    .map((row) => {
-      const id = text(row.id);
-      if (!id) return null;
-      return {
-        id,
-        nombre: text(row.nombre, row.local_nombre) || `Local ${id}`,
-        direccion: text(row.direccion, row.local_direccion),
-      };
-    })
-    .filter((item): item is LocalOption => Boolean(item))
-    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+/** Lista liviana + cache compartida (misma que Hoja ruta). */
+export async function fetchLocales(opts?: { force?: boolean }): Promise<LocalOption[]> {
+  return fetchLocalesLite({ force: opts?.force });
 }
 
 export async function createRoute(input: AssignRouteInput) {

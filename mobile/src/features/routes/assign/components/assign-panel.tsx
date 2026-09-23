@@ -18,6 +18,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 type AssignPanelProps = {
   conductores: ConductorOption[];
   locales: LocalOption[];
+  localesLoading?: boolean;
   bottomPad?: number;
   onAssign: (input: {
     conductorId: string;
@@ -28,7 +29,14 @@ type AssignPanelProps = {
   onDone?: () => void;
 };
 
-export function AssignPanel({ conductores, locales, bottomPad = 120, onAssign, onDone }: AssignPanelProps) {
+export function AssignPanel({
+  conductores,
+  locales,
+  localesLoading = false,
+  bottomPad = 120,
+  onAssign,
+  onDone,
+}: AssignPanelProps) {
   const [conductorId, setConductorId] = useState<string | null>(null);
   const [localId, setLocalId] = useState<string | null>(null);
   const [fecha, setFecha] = useState(limaDate());
@@ -86,7 +94,7 @@ export function AssignPanel({ conductores, locales, bottomPad = 120, onAssign, o
             flex
             label="Local *"
             value={localId}
-            placeholder="Local…"
+            placeholder={localesLoading && !locales.length ? "Cargando locales…" : "Local…"}
             searchable
             options={locales.map((item) => ({
               value: item.id,

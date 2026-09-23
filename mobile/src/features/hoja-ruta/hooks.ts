@@ -11,8 +11,8 @@ import type { GastoForm, LocalOption, LocalVisitaForm } from "@/features/hoja-ru
 import { useAuth } from "@/providers/auth-provider";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Platform } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, InteractionManager, Platform } from "react-native";
 
 function emptyFila(local: LocalOption): LocalVisitaForm {
   return {
@@ -43,12 +43,17 @@ export function useHojaRutaScreen() {
   const [filas, setFilas] = useState<LocalVisitaForm[]>([]);
   const [gastos, setGastos] = useState<GastoForm[]>([]);
   const [locales, setLocales] = useState<LocalOption[]>([]);
+  /** Solo bloquea el shell inicial (placa/caja). Los locales van aparte. */
   const [loading, setLoading] = useState(true);
+  const [localesLoading, setLocalesLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const localesTask = useRef<ReturnType<typeof InteractionManager.runAfterInteractions> | null>(
+    null,
+  );
 
   const totales = useMemo(() => computeTotales(filas, gastos, caja), [filas, gastos, caja]);
   const selectedIds = useMemo(() => new Set(filas.map((f) => f.local.id)), [filas]);
@@ -61,6 +66,18 @@ export function useHojaRutaScreen() {
     });
   }, []);
 
+  const loadLocales = useCallback(async (force = false) => {
+    setLocalesLoading(true);
+    try {
+      const ops = await fetchLocalesActivos({ force });
+      setLocales(ops);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron cargar los locales");
+    } finally {
+      setLocalesLoading(false);
+    }
+  }, []);
+
   const load = useCallback(
     async (mode: "boot" | "refresh" = "boot") => {
       if (!user) return;
@@ -68,27 +85,46 @@ export function useHojaRutaScreen() {
       else setRefreshing(true);
       setError(null);
       try {
-        const [ops, userPlaca] = await Promise.all([
-          fetchLocalesActivos(),
+        // Ruta crítica: desbloquea el formulario en cuanto llegan placa + caja.
+        const [userPlaca] = await Promise.all([
           fetchUserPlaca(user.id),
+          precargarCaja(fecha),
         ]);
-        setLocales(ops);
         setPlaca(userPlaca);
-        await precargarCaja(fecha);
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo cargar la hoja");
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
+
+      // Locales (payload grande): después del primer paint / en refresh forzado.
+      if (mode === "refresh") {
+        await loadLocales(true);
+        return;
+      }
+      localesTask.current?.cancel();
+      localesTask.current = InteractionManager.runAfterInteractions(() => {
+        void loadLocales(false);
+      });
     },
-    [user, fecha, precargarCaja],
+    [user, fecha, precargarCaja, loadLocales],
   );
 
   useEffect(() => {
     void load("boot");
+    return () => {
+      localesTask.current?.cancel();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  const openPicker = useCallback(() => {
+    setPickerOpen(true);
+    if (!locales.length && !localesLoading) {
+      void loadLocales(false);
+    }
+  }, [locales.length, localesLoading, loadLocales]);
 
   const changeFecha = useCallback(
     async (next: string) => {
@@ -244,12 +280,14 @@ export function useHojaRutaScreen() {
     selectedIds,
     totales,
     loading,
+    localesLoading,
     refreshing,
     exporting,
     error,
     pickerOpen,
     expandedKey,
     setPickerOpen,
+    openPicker,
     setAcompanante,
     setCaja,
     changeFecha,

@@ -102,17 +102,6 @@ function NuevaPanel({
     );
   }
 
-  if (screen.error && !screen.filas.length && !screen.locales.length) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{screen.error}</Text>
-        <Pressable onPress={() => void screen.reload()} style={styles.retry}>
-          <Text style={styles.retryText}>Reintentar</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
   return (
     <>
       <ScrollView
@@ -142,8 +131,10 @@ function NuevaPanel({
               {screen.filas.length} local{screen.filas.length === 1 ? "" : "es"}
             </Text>
           </View>
-          <Pressable onPress={() => screen.setPickerOpen(true)} style={styles.addLocal}>
-            <Text style={styles.addLocalText}>+ Local</Text>
+          <Pressable onPress={screen.openPicker} style={styles.addLocal}>
+            <Text style={styles.addLocalText}>
+              {screen.localesLoading && !screen.locales.length ? "…" : "+ Local"}
+            </Text>
           </Pressable>
         </View>
 
@@ -189,6 +180,7 @@ function NuevaPanel({
       <HojaLocalPicker
         open={screen.pickerOpen}
         locales={screen.locales}
+        loading={screen.localesLoading}
         selectedIds={screen.selectedIds}
         onClose={() => screen.setPickerOpen(false)}
         onSelect={screen.addLocal}

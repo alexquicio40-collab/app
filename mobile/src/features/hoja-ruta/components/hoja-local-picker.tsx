@@ -2,6 +2,7 @@ import type { LocalOption } from "@/features/hoja-ruta/types";
 import { theme } from "@/lib/theme";
 import { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   Pressable,
@@ -15,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 type HojaLocalPickerProps = {
   open: boolean;
   locales: LocalOption[];
+  loading?: boolean;
   selectedIds: Set<string>;
   onClose: () => void;
   onSelect: (local: LocalOption) => void;
@@ -23,6 +25,7 @@ type HojaLocalPickerProps = {
 export function HojaLocalPicker({
   open,
   locales,
+  loading = false,
   selectedIds,
   onClose,
   onSelect,
@@ -50,7 +53,11 @@ export function HojaLocalPicker({
           <View style={styles.head}>
             <View style={styles.headCopy}>
               <Text style={styles.title}>Agregar local</Text>
-              <Text style={styles.meta}>{filtered.length} disponibles</Text>
+              <Text style={styles.meta}>
+                {loading && !locales.length
+                  ? "Cargando locales…"
+                  : `${filtered.length} disponibles`}
+              </Text>
             </View>
             <Pressable onPress={onClose} style={styles.close}>
               <Text style={styles.closeText}>×</Text>
@@ -65,12 +72,22 @@ export function HojaLocalPicker({
               placeholderTextColor={theme.colors.muted}
               style={styles.search}
               autoCorrect={false}
+              editable={!loading || locales.length > 0}
             />
           </View>
 
+          {loading && !locales.length ? (
+            <View style={styles.boot}>
+              <ActivityIndicator color={theme.colors.accent} />
+              <Text style={styles.empty}>Cargando lista de locales…</Text>
+            </View>
+          ) : (
           <FlatList
             data={filtered}
             keyExtractor={(item) => item.id}
+            initialNumToRender={24}
+            maxToRenderPerBatch={24}
+            windowSize={7}
             contentContainerStyle={styles.list}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
@@ -97,6 +114,7 @@ export function HojaLocalPicker({
               </Pressable>
             )}
           />
+          )}
         </View>
       </View>
     </Modal>
@@ -167,6 +185,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     paddingTop: 28,
+  },
+  boot: {
+    paddingVertical: 40,
+    alignItems: "center",
+    gap: 12,
   },
   row: {
     padding: 12,

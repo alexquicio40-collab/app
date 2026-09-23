@@ -1,5 +1,5 @@
+import { fetchLocalesLite } from "@/features/locales/api";
 import { api } from "@/lib/api";
-import { fetchLocales } from "@/features/locales/api";
 import type {
   CreateHojaRutaInput,
   HistorialFilters,
@@ -121,16 +121,9 @@ function parsePayloadData(raw: unknown): HojaRutaPayloadData | null {
   };
 }
 
-export async function fetchLocalesActivos(): Promise<LocalOption[]> {
-  const locales = await fetchLocales();
-  return locales
-    .filter((item) => item.activo)
-    .map((item) => ({
-      id: item.id,
-      nombre: item.nombre,
-      direccion: item.direccion,
-    }))
-    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+/** Activos only + cache compartida con Asignar / otras pantallas. */
+export async function fetchLocalesActivos(opts?: { force?: boolean }): Promise<LocalOption[]> {
+  return fetchLocalesLite({ force: opts?.force, onlyActivos: true });
 }
 
 export async function fetchUserPlaca(userId: number | string): Promise<string> {
