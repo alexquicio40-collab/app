@@ -114,10 +114,13 @@ export function formatDateTime(value?: string | null) {
 
 export function toDayKey(value?: string | null) {
   if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value.slice(0, 10);
-  }
+  const raw = String(value).trim();
+  // Asignaciones vienen como día calendario (YYYY-MM-DD o medianoche UTC).
+  // No convertir a Lima: 2026-09-23T00:00:00Z sería 22/09 en Perú y el filtro las oculta.
+  const calendar = /^(\d{4}-\d{2}-\d{2})/.exec(raw);
+  if (calendar) return calendar[1]!;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleDateString("en-CA", { timeZone: "America/Lima" });
 }
 

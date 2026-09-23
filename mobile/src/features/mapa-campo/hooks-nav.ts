@@ -1,10 +1,22 @@
 import {
   ARRIVAL_METERS,
-  distanceToPolylineMeters,
+  advanceAlongPath,
+  haversineMeters,
   OFF_ROUTE_METERS,
+  offsetPerpendicular,
+  pathLengthMeters,
   RECALC_COOLDOWN_MS,
-  remainingPathMeters,
+  SNAP_METERS,
+  shouldAcceptMove,
+  slicePathBehind,
+  snapToPolyline,
 } from "@/features/mapa-campo/lib/geo-nav";
+import {
+  headingToward,
+  isWebMockGpsEnabled,
+  MOCK_GPS_LIMA,
+  mockOriginNear,
+} from "@/features/mapa-campo/lib/web-mock-gps";
 import type { CampoMapPayload, CampoNavState } from "@/features/mapa-campo/nav-types";
 import { loadVehicleType } from "@/features/routes/flujo/lib/vehicle-store";
 import { fetchSuggestedRoutes, loadNavRestrictions } from "@/features/routes/navegacion/api";
@@ -49,6 +61,7 @@ function toPayload(
   dest: LatLng | null,
   result: DirectionsResult | null,
   selectedId: string | null,
+  traveled: LatLng[],
 ): CampoMapPayload {
   const routes = result ? [result.best, ...result.alternatives.slice(0, 3)] : [];
   const activeSeconds =
@@ -63,6 +76,7 @@ function toPayload(
     heading,
     dest,
     selectedId,
+    traveled,
     routes: routes.map((item) => {
       const traffic = trafficLabel(item.trafficRatio);
       return {
@@ -97,44 +111,55 @@ const IDLE: Omit<CampoNavState, "selected"> = {
   vehicleType: null,
 };
 
-async function readPosition(): Promise<{ origin: LatLng; heading: number }> {
-  const perm = await Location.requestForegroundPermissionsAsync();
-  if (!perm.granted) {
-    throw new Error("Activa el permiso de ubicación del navegador/dispositivo para navegar");
+async function readPosition(): Promise<{ origin: LatLng; heading: number; mocked: boolean }> {
+  // Web demo: no pedir GPS real (el prompt puede colgarse detrás del lock del browser).
+  if (isWebMockGpsEnabled()) {
+    return { origin: MOCK_GPS_LIMA, heading: 0, mocked: true };
   }
 
   try {
-    const pos = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-    return {
-      origin: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-      heading:
-        Number.isFinite(pos.coords.heading) && (pos.coords.heading ?? -1) >= 0
-          ? Number(pos.coords.heading)
-          : 0,
-    };
-  } catch {
-    // Fallback web: Geolocation API nativa
-    if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.geolocation) {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 12000,
-        });
+    const perm = await Location.requestForegroundPermissionsAsync();
+    if (!perm.granted) {
+      throw new Error("permiso");
+    }
+
+    try {
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
       });
       return {
         origin: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-        heading: Number(pos.coords.heading) >= 0 ? Number(pos.coords.heading) : 0,
+        heading:
+          Number.isFinite(pos.coords.heading) && (pos.coords.heading ?? -1) >= 0
+            ? Number(pos.coords.heading)
+            : 0,
+        mocked: false,
       };
+    } catch {
+      if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.geolocation) {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: false,
+            timeout: 4000,
+          });
+        });
+        return {
+          origin: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+          heading: Number(pos.coords.heading) >= 0 ? Number(pos.coords.heading) : 0,
+          mocked: false,
+        };
+      }
+      throw new Error("gps");
     }
-    throw new Error("No se pudo obtener tu ubicación GPS");
+  } catch {
+    throw new Error("Activa el permiso de ubicación o prueba en un dispositivo con GPS");
   }
 }
 
 /** Navegación in-app estilo Waze (sin abrir apps externas). */
 export function useCampoNav() {
   const [state, setState] = useState(IDLE);
+  const [mockingGps, setMockingGps] = useState(false);
   const watchRef = useRef<Location.LocationSubscription | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastRecalcRef = useRef(0);
@@ -142,6 +167,16 @@ export function useCampoNav() {
   const destRef = useRef<LatLng | null>(null);
   const vehicleRef = useRef<VehicleTypeNav | null>(null);
   const activeRef = useRef(false);
+  const mockPosRef = useRef<LatLng | null>(null);
+  const mockingRef = useRef(false);
+  const lastPosRef = useRef<LatLng | null>(null);
+  const lastPosAtRef = useRef(0);
+  const lastOnRouteRef = useRef<LatLng | null>(null);
+  /** Recorrido atrás (congelado al recalcular). */
+  const traveledRef = useRef<LatLng[]>([]);
+  /** Base fija en el momento del desvío (no se pisa). */
+  const traveledBaseRef = useRef<LatLng[]>([]);
+  const [traveled, setTraveled] = useState<LatLng[]>([]);
 
   const selected = findRoute(state.result, state.selectedId);
   selectedRef.current = selected;
@@ -157,6 +192,15 @@ export function useCampoNav() {
 
   const stop = useCallback(() => {
     activeRef.current = false;
+    mockingRef.current = false;
+    mockPosRef.current = null;
+    lastPosRef.current = null;
+    lastPosAtRef.current = 0;
+    lastOnRouteRef.current = null;
+    traveledRef.current = [];
+    traveledBaseRef.current = [];
+    setTraveled([]);
+    setMockingGps(false);
     stopWatch();
     setState(IDLE);
     destRef.current = null;
@@ -165,11 +209,36 @@ export function useCampoNav() {
   }, [stopWatch]);
 
   const applyDirections = useCallback(
-    (directions: DirectionsResult, position: LatLng, heading: number) => {
+    (
+      directions: DirectionsResult,
+      position: LatLng,
+      heading: number,
+      opts?: { keepTraveled?: boolean },
+    ) => {
       const pick = directions.best;
       selectedRef.current = pick;
-      const remaining = remainingPathMeters(position, pick.coords);
+      const snap = snapToPolyline(position, pick.coords);
+      const onRoad = snap.dist <= SNAP_METERS ? snap.point : position;
+      const roadHeading = snap.dist <= SNAP_METERS ? snap.heading : heading;
+      const remaining =
+        snap.dist <= SNAP_METERS
+          ? snap.remainingMeters
+          : pathLengthMeters(pick.coords);
       const speedFactor = Math.max(remaining / Math.max(pick.distMeters, 1), 0.15);
+      lastPosRef.current = onRoad;
+      lastOnRouteRef.current = onRoad;
+      lastPosAtRef.current = Date.now();
+      if (mockingRef.current) mockPosRef.current = onRoad;
+
+      // Ruta nueva completa: limpia el historial. Tras un desvío: conserva el atrás.
+      if (!opts?.keepTraveled) {
+        traveledRef.current = [];
+        traveledBaseRef.current = [];
+        setTraveled([]);
+      } else {
+        traveledBaseRef.current = traveledRef.current.slice();
+      }
+
       setState((prev) => ({
         ...prev,
         active: true,
@@ -178,8 +247,8 @@ export function useCampoNav() {
         error: null,
         result: directions,
         selectedId: pick.id,
-        position,
-        heading,
+        position: onRoad,
+        heading: roadHeading,
         remainingMeters: remaining,
         etaSeconds: Math.round(pick.durationSeconds * speedFactor),
       }));
@@ -201,17 +270,65 @@ export function useCampoNav() {
   );
 
   const onPosition = useCallback(
-    async (coords: { latitude: number; longitude: number; heading?: number | null }) => {
+    async (
+      coords: {
+        latitude: number;
+        longitude: number;
+        heading?: number | null;
+      },
+      opts?: { force?: boolean },
+    ) => {
       if (!activeRef.current) return;
-      const position = { lat: coords.latitude, lng: coords.longitude };
-      const heading =
-        Number.isFinite(coords.heading) && (coords.heading ?? -1) >= 0
-          ? Number(coords.heading)
-          : 0;
+      const raw = { lat: coords.latitude, lng: coords.longitude };
+      const now = Date.now();
+      const dt = lastPosAtRef.current ? now - lastPosAtRef.current : 1000;
+
+      if (!opts?.force && !shouldAcceptMove(lastPosRef.current, raw, dt)) return;
+
       const path = selectedRef.current?.coords ?? [];
       const dest = destRef.current;
+      const gpsHeading =
+        Number.isFinite(coords.heading) && (coords.heading ?? -1) >= 0
+          ? Number(coords.heading)
+          : null;
 
-      if (dest && haversineArrival(position, dest) <= ARRIVAL_METERS) {
+      let position = raw;
+      let heading = gpsHeading ?? 0;
+      let remaining = 0;
+      let offRoute = false;
+
+      if (path.length >= 2) {
+        const snap = snapToPolyline(raw, path);
+        offRoute = snap.dist > OFF_ROUTE_METERS;
+        remaining = snap.remainingMeters;
+        if (snap.dist <= SNAP_METERS) {
+          position = snap.point;
+          heading = gpsHeading ?? snap.heading;
+          lastOnRouteRef.current = position;
+          const progress = slicePathBehind(path, snap);
+          const base = traveledBaseRef.current;
+          const behind =
+            base.length >= 1
+              ? (() => {
+                  const head = base.slice();
+                  const junction = progress[0] ?? position;
+                  const last = head[head.length - 1];
+                  if (!last || haversineMeters(last, junction) > 2) head.push(junction);
+                  const rest = progress.slice(1);
+                  return [...head, ...rest];
+                })()
+              : progress;
+          traveledRef.current = behind;
+          setTraveled(behind);
+        } else {
+          heading = gpsHeading ?? snap.heading;
+        }
+      }
+
+      lastPosRef.current = position;
+      lastPosAtRef.current = now;
+
+      if (dest && haversineMeters(position, dest) <= ARRIVAL_METERS) {
         setState((prev) => ({
           ...prev,
           position,
@@ -223,32 +340,32 @@ export function useCampoNav() {
         return;
       }
 
-      if (path.length >= 2) {
-        const off = distanceToPolylineMeters(position, path);
-        const now = Date.now();
-        if (
-          off > OFF_ROUTE_METERS &&
-          dest &&
-          now - lastRecalcRef.current > RECALC_COOLDOWN_MS
-        ) {
-          lastRecalcRef.current = now;
-          setState((prev) => ({ ...prev, recalculating: true, position, heading }));
-          try {
-            const directions = await calculate(position, dest, vehicleRef.current);
-            if (!activeRef.current) return;
-            applyDirections(directions, position, heading);
-          } catch {
-            setState((prev) => ({
-              ...prev,
-              recalculating: false,
-              position,
-              heading,
-            }));
-          }
-          return;
+      if (path.length >= 2 && offRoute && dest && now - lastRecalcRef.current > RECALC_COOLDOWN_MS) {
+        lastRecalcRef.current = now;
+        // Fija recorrido hasta el último punto válido en la ruta antigua
+        if (traveledRef.current.length < 2) {
+          const anchor = lastOnRouteRef.current ?? path[0]!;
+          const seed = path[0] && path[0] !== anchor ? [path[0], anchor] : [anchor];
+          traveledRef.current = seed;
+          setTraveled(seed);
         }
+        setState((prev) => ({ ...prev, recalculating: true, position, heading }));
+        try {
+          const directions = await calculate(raw, dest, vehicleRef.current);
+          if (!activeRef.current) return;
+          applyDirections(directions, raw, heading, { keepTraveled: true });
+        } catch {
+          setState((prev) => ({
+            ...prev,
+            recalculating: false,
+            position,
+            heading,
+          }));
+        }
+        return;
+      }
 
-        const remaining = remainingPathMeters(position, path);
+      if (path.length >= 2) {
         const baseDuration = selectedRef.current?.durationSeconds ?? 0;
         const baseDist = Math.max(selectedRef.current?.distMeters ?? 1, 1);
         setState((prev) => ({
@@ -268,19 +385,64 @@ export function useCampoNav() {
 
   const startWatch = useCallback(async () => {
     stopWatch();
+
+    // Web sin GPS: avanza SUAVE sobre la polyline (no en línea recta)
+    if (mockingRef.current) {
+      pollRef.current = setInterval(() => {
+        void (async () => {
+          const path = selectedRef.current?.coords ?? [];
+          const from = mockPosRef.current;
+          if (!from || !activeRef.current) return;
+          if (path.length >= 2) {
+            // Si ya está fuera de ruta, no re-pegar a la polyline: deja que
+            // onPosition dispare el recálculo parcial (demo desvío).
+            const snap = snapToPolyline(from, path);
+            if (snap.dist > OFF_ROUTE_METERS) {
+              await onPosition(
+                {
+                  latitude: from.lat,
+                  longitude: from.lng,
+                  heading: snap.heading,
+                },
+                { force: true },
+              );
+              return;
+            }
+            const next = advanceAlongPath(from, path, 28);
+            mockPosRef.current = next.point;
+            await onPosition({
+              latitude: next.point.lat,
+              longitude: next.point.lng,
+              heading: next.heading,
+            });
+            return;
+          }
+          const dest = destRef.current;
+          if (!dest) return;
+          const next = advanceAlongPath(from, [from, dest], 28);
+          mockPosRef.current = next.point;
+          await onPosition({
+            latitude: next.point.lat,
+            longitude: next.point.lng,
+            heading: headingToward(from, dest),
+          });
+        })();
+      }, 1800);
+      return;
+    }
+
     try {
       watchRef.current = await Location.watchPositionAsync(
         {
-          accuracy: Location.Accuracy.Balanced,
-          timeInterval: 2000,
-          distanceInterval: 8,
+          accuracy: Location.Accuracy.High,
+          timeInterval: 1200,
+          distanceInterval: 4,
         },
         (pos) => {
           void onPosition(pos.coords);
         },
       );
     } catch {
-      // Web / entornos sin watch: polling
       pollRef.current = setInterval(() => {
         void (async () => {
           try {
@@ -294,7 +456,7 @@ export function useCampoNav() {
             // ignore tick
           }
         })();
-      }, 2500);
+      }, 2000);
     }
   }, [onPosition, stopWatch]);
 
@@ -309,6 +471,9 @@ export function useCampoNav() {
       destRef.current = dest;
       activeRef.current = true;
       lastRecalcRef.current = 0;
+      mockingRef.current = false;
+      mockPosRef.current = null;
+      setMockingGps(false);
 
       setState({
         ...IDLE,
@@ -324,16 +489,35 @@ export function useCampoNav() {
 
         let origin: LatLng;
         let heading = 0;
+        let mocked = false;
+
         try {
           const pos = await readPosition();
-          origin = pos.origin;
-          heading = pos.heading;
+          mocked = pos.mocked;
+          // Si el mock genérico (Lima) está lejos del local, anclar cerca del destino
+          if (mocked) {
+            origin = mockOriginNear(dest);
+            heading = headingToward(origin, dest);
+          } else {
+            origin = pos.origin;
+            heading = pos.heading;
+          }
         } catch (gpsErr) {
-          if (opts?.originHint) {
+          if (isWebMockGpsEnabled()) {
+            origin = opts?.originHint ?? mockOriginNear(dest);
+            heading = headingToward(origin, dest);
+            mocked = true;
+          } else if (opts?.originHint) {
             origin = opts.originHint;
           } else {
             throw gpsErr;
           }
+        }
+
+        if (mocked) {
+          mockingRef.current = true;
+          mockPosRef.current = origin;
+          setMockingGps(true);
         }
 
         const directions = await calculate(origin, dest, saved);
@@ -345,8 +529,10 @@ export function useCampoNav() {
           routeItem: item,
         }));
         applyDirections(directions, origin, heading);
+        if (mocked && lastPosRef.current) {
+          mockPosRef.current = lastPosRef.current;
+        }
 
-        // El seguimiento no debe tumbar una navegación ya calculada.
         try {
           await startWatch();
         } catch {
@@ -354,6 +540,8 @@ export function useCampoNav() {
         }
       } catch (err) {
         activeRef.current = false;
+        mockingRef.current = false;
+        setMockingGps(false);
         stopWatch();
         const message = errMessage(err, "No se pudo iniciar la navegación");
         setState({
@@ -370,14 +558,18 @@ export function useCampoNav() {
       const pick = findRoute(prev.result, id);
       if (!pick || !prev.position) return prev;
       selectedRef.current = pick;
-      const remaining = remainingPathMeters(prev.position, pick.coords);
+      const snap = snapToPolyline(prev.position, pick.coords);
+      const position = snap.dist <= SNAP_METERS ? snap.point : prev.position;
+      lastPosRef.current = position;
       return {
         ...prev,
         selectedId: id,
-        remainingMeters: remaining,
+        position,
+        heading: snap.dist <= SNAP_METERS ? snap.heading : prev.heading,
+        remainingMeters: snap.remainingMeters,
         etaSeconds: Math.max(
           30,
-          Math.round(pick.durationSeconds * (remaining / Math.max(pick.distMeters, 1))),
+          Math.round(pick.durationSeconds * (snap.remainingMeters / Math.max(pick.distMeters, 1))),
         ),
       };
     });
@@ -399,30 +591,58 @@ export function useCampoNav() {
         dest,
         state.result,
         state.selectedId,
+        traveled,
       ),
-    [state.active, state.position, state.heading, dest, state.result, state.selectedId],
+    [state.active, state.position, state.heading, dest, state.result, state.selectedId, traveled],
   );
+
+  /** Web/mock: fuerza un desvío ~120 m para probar el recálculo parcial. */
+  const simulateDetour = useCallback(() => {
+    if (!activeRef.current) return;
+    const path = selectedRef.current?.coords ?? [];
+    const from = lastPosRef.current ?? mockPosRef.current;
+    if (!from || path.length < 2) return;
+    const snap = snapToPolyline(from, path);
+    const next = offsetPerpendicular(from, snap.heading, 120);
+    mockPosRef.current = next;
+    lastRecalcRef.current = 0;
+    void onPosition(
+      {
+        latitude: next.lat,
+        longitude: next.lng,
+        heading: snap.heading,
+      },
+      { force: true },
+    );
+  }, [onPosition]);
+
+  /** Web/mock: salta al destino para probar el panel Llegaste. */
+  const simulateArrive = useCallback(() => {
+    if (!activeRef.current) return;
+    const dest = destRef.current;
+    if (!dest) return;
+    mockPosRef.current = dest;
+    lastPosRef.current = dest;
+    setState((prev) => ({
+      ...prev,
+      position: dest,
+      arrived: true,
+      remainingMeters: 0,
+      etaSeconds: 0,
+      recalculating: false,
+    }));
+  }, []);
 
   return {
     ...state,
     selected,
     dest,
     mapPayload,
+    mockingGps,
     start,
     stop,
     selectAlternative,
+    simulateDetour,
+    simulateArrive,
   };
-}
-
-function haversineArrival(a: LatLng, b: LatLng) {
-  const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }

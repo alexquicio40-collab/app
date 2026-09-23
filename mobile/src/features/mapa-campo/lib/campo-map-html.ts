@@ -1,8 +1,8 @@
 import { getGoogleMapsKey } from "@/features/map/lib/google-map";
 
 /**
- * Mapa de campo con navegación in-app (estilo Waze):
- * polyline principal + alternativas, follow GPS, tips, tip tap → select-route.
+ * Mapa de campo: rutas estables + seguimiento suave del marker/cámara.
+ * No redibuja polylines en cada tick GPS (evita “rayado”).
  */
 export function buildCampoMapHtml() {
   const key = getGoogleMapsKey();
@@ -32,6 +32,17 @@ export function buildCampoMapHtml() {
     var map = null, ready = false, pending = null;
     var meMarker = null, destMarker = null;
     var routeLayers = [];
+    var traveledLine = null;
+    var lastRoutesKey = '';
+    var lastSelectedId = null;
+    var lastDestKey = '';
+    var lastTraveledKey = '';
+    var followEnabled = true;
+    var anim = null;
+    var displayPos = null;
+    var targetPos = null;
+    var displayHeading = 0;
+    var targetHeading = 0;
     var PRIMARY = '#0B5340';
     var ALT = ['#5C8F7E', '#7FA898', '#A3C1B5'];
 
@@ -44,17 +55,46 @@ export function buildCampoMapHtml() {
       } catch (e) {}
     }
 
+    function routesKey(routes, selectedId, traveled) {
+      var parts = (routes || []).map(function (r) {
+        var first = r.coords && r.coords[0] ? r.coords[0].lat + ',' + r.coords[0].lng : '';
+        var last = r.coords && r.coords.length ? r.coords[r.coords.length - 1].lat + ',' + r.coords[r.coords.length - 1].lng : '';
+        return r.id + ':' + (r.coords ? r.coords.length : 0) + ':' + first + ':' + last + ':' + (r.minsLabel || '');
+      });
+      var tLen = (traveled || []).length;
+      return selectedId + '|t' + tLen + '|' + parts.join('|');
+    }
+
     function clearRoutes() {
       routeLayers.forEach(function (layer) {
         if (layer.line) layer.line.setMap(null);
         if (layer.overlay) layer.overlay.setMap(null);
       });
       routeLayers = [];
+      if (traveledLine) { traveledLine.setMap(null); traveledLine = null; }
+      lastTraveledKey = '';
     }
 
-    function clearEnds() {
-      if (meMarker) { meMarker.setMap(null); meMarker = null; }
-      if (destMarker) { destMarker.setMap(null); destMarker = null; }
+    function drawTraveled(traveled) {
+      var path = (traveled || []).map(function (p) {
+        return { lat: Number(p.lat), lng: Number(p.lng) };
+      });
+      var key = path.length + ':' + (path[0] ? path[0].lat + ',' + path[0].lng : '') + ':' +
+        (path.length ? path[path.length - 1].lat + ',' + path[path.length - 1].lng : '');
+      if (key === lastTraveledKey) return;
+      lastTraveledKey = key;
+      if (traveledLine) { traveledLine.setMap(null); traveledLine = null; }
+      if (path.length < 2) return;
+      traveledLine = new google.maps.Polyline({
+        path: path,
+        geodesic: true,
+        strokeColor: '#8AA399',
+        strokeOpacity: 0.55,
+        strokeWeight: 5,
+        zIndex: 25,
+        map: map,
+        clickable: false,
+      });
     }
 
     function tipHtml(item, selectedId) {
@@ -97,21 +137,51 @@ export function buildCampoMapHtml() {
       return overlay;
     }
 
-    function draw(payload) {
-      if (!ready || !map) { pending = payload; return; }
-      clearRoutes();
-      clearEnds();
+    function ensureMeMarker() {
+      if (meMarker) return;
+      meMarker = new google.maps.Marker({
+        map: map, title: 'Yo', zIndex: 60,
+        icon: {
+          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+          scale: 7, fillColor: '#0B5340', fillOpacity: 1,
+          strokeColor: '#FFFFFF', strokeWeight: 2, rotation: 0,
+        },
+      });
+    }
 
-      var tracking = !!payload.tracking;
-      var position = payload.position;
-      var dest = payload.dest;
-      var heading = Number(payload.heading || 0);
-      var selectedId = payload.selectedId;
-      var routes = payload.routes || [];
+    function ensureDestMarker(dest) {
+      var key = dest ? dest.lat + ',' + dest.lng : '';
+      if (!dest) {
+        if (destMarker) { destMarker.setMap(null); destMarker = null; }
+        lastDestKey = '';
+        return;
+      }
+      if (key === lastDestKey && destMarker) return;
+      lastDestKey = key;
+      if (destMarker) destMarker.setMap(null);
+      destMarker = new google.maps.Marker({
+        position: dest, map: map, title: 'Destino', zIndex: 45,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE, scale: 8,
+          fillColor: '#B42318', fillOpacity: 1, strokeColor: '#FFFFFF', strokeWeight: 2,
+        },
+      });
+    }
+
+    function drawRoutes(routes, selectedId, traveled) {
+      var key = routesKey(routes, selectedId, traveled);
+      if (key === lastRoutesKey) {
+        drawTraveled(traveled);
+        return null;
+      }
+      lastRoutesKey = key;
+      lastSelectedId = selectedId;
+      clearRoutes();
+      drawTraveled(traveled);
+
       var bounds = new google.maps.LatLngBounds();
       var hasBounds = false;
-
-      var ordered = routes.slice().sort(function (a, b) {
+      var ordered = (routes || []).slice().sort(function (a, b) {
         if (a.id === selectedId) return 1;
         if (b.id === selectedId) return -1;
         return 0;
@@ -146,38 +216,100 @@ export function buildCampoMapHtml() {
         routeLayers.push({ line: line, overlay: overlay });
       });
 
-      if (dest) {
-        bounds.extend(dest); hasBounds = true;
-        destMarker = new google.maps.Marker({
-          position: dest, map: map, title: 'Destino', zIndex: 45,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE, scale: 8,
-            fillColor: '#B42318', fillOpacity: 1, strokeColor: '#FFFFFF', strokeWeight: 2,
-          },
-        });
-      }
+      return hasBounds ? bounds : null;
+    }
 
-      if (position) {
-        bounds.extend(position); hasBounds = true;
-        meMarker = new google.maps.Marker({
-          position: position, map: map, title: 'Yo', zIndex: 60,
-          icon: {
-            path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-            scale: 7, fillColor: '#0B5340', fillOpacity: 1,
-            strokeColor: '#FFFFFF', strokeWeight: 2, rotation: heading,
-          },
-        });
-      }
+    function lerp(a, b, t) { return a + (b - a) * t; }
 
-      if (tracking && position) {
-        map.setCenter(position);
-        map.setZoom(17.2);
-        if (map.setTilt) map.setTilt(48);
-        if (map.setHeading) map.setHeading(heading);
-      } else if (hasBounds) {
+    function lerpAngle(a, b, t) {
+      var diff = ((b - a + 540) % 360) - 180;
+      return (a + diff * t + 360) % 360;
+    }
+
+    function tickAnim() {
+      anim = null;
+      if (!targetPos || !meMarker) return;
+      if (!displayPos) displayPos = { lat: targetPos.lat, lng: targetPos.lng };
+      var t = 0.28;
+      displayPos = {
+        lat: lerp(displayPos.lat, targetPos.lat, t),
+        lng: lerp(displayPos.lng, targetPos.lng, t),
+      };
+      displayHeading = lerpAngle(displayHeading, targetHeading, 0.35);
+      meMarker.setPosition(displayPos);
+      var icon = meMarker.getIcon();
+      if (icon) {
+        icon.rotation = displayHeading;
+        meMarker.setIcon(icon);
+      }
+      if (followEnabled) {
+        map.panTo(displayPos);
+        if (map.setHeading) map.setHeading(displayHeading);
+      }
+      var dx = Math.abs(displayPos.lat - targetPos.lat) + Math.abs(displayPos.lng - targetPos.lng);
+      if (dx > 0.000004) {
+        anim = requestAnimationFrame(tickAnim);
+      }
+    }
+
+    function setMe(position, heading, tracking) {
+      if (!position) {
+        if (meMarker) { meMarker.setMap(null); meMarker = null; }
+        displayPos = null;
+        targetPos = null;
+        return;
+      }
+      ensureMeMarker();
+      followEnabled = !!tracking;
+      targetPos = { lat: Number(position.lat), lng: Number(position.lng) };
+      targetHeading = Number(heading || 0);
+      if (!displayPos) {
+        displayPos = { lat: targetPos.lat, lng: targetPos.lng };
+        displayHeading = targetHeading;
+        meMarker.setPosition(displayPos);
+        var icon = meMarker.getIcon();
+        if (icon) {
+          icon.rotation = displayHeading;
+          meMarker.setIcon(icon);
+        }
+        if (followEnabled) {
+          map.setCenter(displayPos);
+          map.setZoom(17);
+          if (map.setTilt) map.setTilt(45);
+          if (map.setHeading) map.setHeading(displayHeading);
+        }
+      }
+      if (!anim) anim = requestAnimationFrame(tickAnim);
+    }
+
+    function draw(payload) {
+      if (!ready || !map) { pending = payload; return; }
+
+      var tracking = !!payload.tracking;
+      var position = payload.position;
+      var dest = payload.dest;
+      var heading = Number(payload.heading || 0);
+      var selectedId = payload.selectedId;
+      var routes = payload.routes || [];
+
+      var routeBounds = drawRoutes(routes, selectedId, payload.traveled || []);
+      ensureDestMarker(dest);
+      setMe(position, heading, tracking);
+
+      if (!tracking && routeBounds) {
         if (map.setTilt) map.setTilt(0);
         if (map.setHeading) map.setHeading(0);
-        map.fitBounds(bounds, { top: 56, right: 40, bottom: 120, left: 40 });
+        if (dest) routeBounds.extend(dest);
+        if (position) routeBounds.extend(position);
+        map.fitBounds(routeBounds, { top: 56, right: 40, bottom: 120, left: 40 });
+      } else if (!tracking && !routes.length) {
+        if (map.setTilt) map.setTilt(0);
+        if (map.setHeading) map.setHeading(0);
+        var idle = new google.maps.LatLngBounds();
+        var has = false;
+        if (dest) { idle.extend(dest); has = true; }
+        if (position) { idle.extend(position); has = true; }
+        if (has) map.fitBounds(idle, 64);
       }
     }
 
@@ -194,6 +326,11 @@ export function buildCampoMapHtml() {
           { featureType: 'poi', stylers: [{ visibility: 'off' }] },
           { featureType: 'transit', stylers: [{ visibility: 'off' }] },
         ],
+      });
+      google.maps.event.addListener(map, 'dragstart', function () {
+        // el usuario mueve el mapa: no pelear con el follow un momento
+        followEnabled = false;
+        setTimeout(function () { followEnabled = true; }, 4000);
       });
       ready = true;
       if (pending) { draw(pending); pending = null; }

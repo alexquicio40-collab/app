@@ -12,30 +12,33 @@ type NavHudProps = {
   remainingMeters: number;
   etaSeconds: number;
   recalculating: boolean;
-  arrived: boolean;
   selected: SuggestedRoute | null;
   vehicleType: string | null;
   onStop: () => void;
+  recogeHint?: string | null;
+  pagoHint?: string | null;
 };
 
-/** HUD mínimo: ETA + distancia + detener. El mapa queda libre. */
+/** HUD en ruta: ETA + distancia. La llegada usa `ArrivalPanel`. */
 export function NavHud({
   localNombre,
   remainingMeters,
   etaSeconds,
   recalculating,
-  arrived,
   selected,
   vehicleType,
   onStop,
+  pagoHint,
+  recogeHint,
 }: NavHudProps) {
   const traffic = trafficLabel(selected?.trafficRatio ?? null);
+  const tip = [recogeHint, pagoHint].filter(Boolean).join(" · ");
 
   return (
     <View style={styles.bar}>
       <View style={styles.copy}>
         <Text style={styles.kicker} numberOfLines={1}>
-          {arrived ? "Llegaste" : recalculating ? "Recalculando…" : "En ruta"}
+          {recalculating ? "Recalculando…" : "En ruta"}
           {vehicleType ? ` · ${vehicleType}` : ""}
           {" · "}
           {traffic.text}
@@ -43,13 +46,16 @@ export function NavHud({
         <Text style={styles.title} numberOfLines={1}>
           {localNombre}
         </Text>
+        {tip ? (
+          <Text style={styles.tip} numberOfLines={1}>
+            {tip}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.metrics}>
-        <Text style={styles.eta}>{arrived ? "—" : formatDuration(etaSeconds)}</Text>
-        <Text style={styles.dist}>
-          {arrived ? "0 m" : formatDistance(remainingMeters)}
-        </Text>
+        <Text style={styles.eta}>{formatDuration(etaSeconds)}</Text>
+        <Text style={styles.dist}>{formatDistance(remainingMeters)}</Text>
       </View>
 
       {recalculating ? (
@@ -57,7 +63,7 @@ export function NavHud({
       ) : null}
 
       <Pressable onPress={onStop} style={styles.stop} hitSlop={6}>
-        <Text style={styles.stopText}>{arrived ? "OK" : "Detener"}</Text>
+        <Text style={styles.stopText}>Detener</Text>
       </Pressable>
     </View>
   );
@@ -84,6 +90,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   title: { color: theme.colors.ink, fontSize: 12, fontWeight: "900" },
+  tip: { color: theme.colors.accent, fontSize: 9, fontWeight: "700", marginTop: 1 },
   metrics: { alignItems: "flex-end", gap: 0 },
   eta: { color: theme.colors.accent, fontSize: 13, fontWeight: "900" },
   dist: { color: theme.colors.muted, fontSize: 10, fontWeight: "700" },

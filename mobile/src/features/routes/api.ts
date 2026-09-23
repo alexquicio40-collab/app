@@ -61,16 +61,37 @@ function parseRoute(row: UnknownRecord): RouteItem | null {
   const id = text(row.id);
   if (!id) return null;
 
+  // Algunos endpoints anidan el local; Flutter lee tipo_envase plano desde el JOIN.
+  const local = isRecord(row.local) ? row.local : null;
+  const pick = (...keys: unknown[]) => {
+    for (const key of keys) {
+      if (key != null && key !== "") return key;
+    }
+    return null;
+  };
+
   // URLs de fotos se resuelven al abrir el detalle (más rápido en listados grandes).
   return {
     id,
-    conductorId: text(row.conductor_id),
+    conductorId: text(row.conductor_id, row.usuario_id),
     conductorNombre: text(row.conductor_nombre) || "Sin operador",
-    localId: text(row.local_id),
-    localNombre: text(row.local_nombre, row.nombre) || "Sin nombre",
-    localDireccion: text(row.local_direccion, row.direccion),
-    localLatitud: num(row.local_latitud, row.latitud, row.lat),
-    localLongitud: num(row.local_longitud, row.longitud, row.lng),
+    localId: text(row.local_id, local?.id),
+    localNombre: text(row.local_nombre, row.nombre, local?.nombre) || "Sin nombre",
+    localDireccion: text(row.local_direccion, row.direccion, local?.direccion),
+    localLatitud: num(
+      row.local_latitud,
+      row.latitud,
+      row.lat,
+      local?.latitud,
+      local?.lat,
+    ),
+    localLongitud: num(
+      row.local_longitud,
+      row.longitud,
+      row.lng,
+      local?.longitud,
+      local?.lng,
+    ),
     fechaAsignacion: text(row.fecha_asignacion),
     observaciones: text(row.observaciones),
     estado: text(row.estado) || "pendiente",
@@ -81,18 +102,47 @@ function parseRoute(row: UnknownRecord): RouteItem | null {
     galonerasVacias: num(row.cantidad_galoneras_vacias),
     fotoGuia: text(row.foto_guia) || null,
     fotoMercaderia: text(row.foto_mercaderia) || null,
-    encargadoNombre: text(row.encargado_tienda, row.encargado_nombre, row.local_encargado_nombre),
+    encargadoNombre: text(
+      row.encargado_tienda,
+      row.encargado_nombre,
+      row.local_encargado_nombre,
+      local?.encargado_tienda,
+    ),
     encargadoTelefono: text(
       row.telefono_encargado,
       row.encargado_telefono,
       row.local_encargado_telefono,
+      local?.telefono_encargado,
     ),
-    tipoEnvase: text(row.tipo_envase),
-    cantidadEnvases: num(row.cantidad_envases),
-    cantidadBidonesAzules: num(row.cantidad_bidones_azules),
-    cantidadBidonesBlancos: num(row.cantidad_bidones_blancos),
-    bidonPasadoPor: num(row.bidon_pasado_por),
-    metodosPago: parseMetodos(row.metodos_pago),
+    tipoEnvase: text(
+      row.tipo_envase,
+      row.tipoEnvase,
+      local?.tipo_envase,
+      local?.tipoEnvase,
+    ),
+    cantidadEnvases: num(
+      row.cantidad_envases,
+      row.cantidadEnvases,
+      local?.cantidad_envases,
+    ),
+    cantidadBidonesAzules: num(
+      row.cantidad_bidones_azules,
+      row.cantidadBidonesAzules,
+      local?.cantidad_bidones_azules,
+    ),
+    cantidadBidonesBlancos: num(
+      row.cantidad_bidones_blancos,
+      row.cantidadBidonesBlancos,
+      local?.cantidad_bidones_blancos,
+    ),
+    bidonPasadoPor: num(
+      row.bidon_pasado_por,
+      row.bidonPasadoPor,
+      local?.bidon_pasado_por,
+    ),
+    metodosPago: parseMetodos(
+      pick(row.metodos_pago, row.metodosPago, local?.metodos_pago, local?.metodosPago),
+    ),
   };
 }
 
@@ -120,6 +170,18 @@ function daysBetween(desde: string, hasta: string) {
 
 async function fetchRoutesOnce(query: FetchRoutesQuery = {}): Promise<RouteItem[]> {
   const payload = await api<unknown>(buildQuery(query));
+  return asRows(payload, "rutas")
+    .map(parseRoute)
+    .filter((item): item is RouteItem => Boolean(item));
+}
+
+/**
+ * Rutas del operador con JOIN de local (envases + métodos de pago).
+ * Paridad Flutter `getRutasOperador` → `/api/conductores/:id/rutas`.
+ */
+export async function fetchOperadorRutas(operadorId: string, fecha?: string | null) {
+  const qs = fecha ? `?fecha=${encodeURIComponent(fecha)}` : "";
+  const payload = await api<unknown>(`/api/conductores/${operadorId}/rutas${qs}`);
   return asRows(payload, "rutas")
     .map(parseRoute)
     .filter((item): item is RouteItem => Boolean(item));

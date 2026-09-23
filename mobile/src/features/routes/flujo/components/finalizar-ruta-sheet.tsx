@@ -156,10 +156,15 @@ export function FinalizarRutaSheet({
           <View style={styles.handle} />
           <View style={styles.head}>
             <View style={styles.headCopy}>
-              <Text style={styles.kicker}>Finalizar ruta</Text>
+              <Text style={styles.kicker}>Llegaste a</Text>
               <Text style={styles.title} numberOfLines={2}>
                 {route.localNombre}
               </Text>
+              {route.localDireccion ? (
+                <Text style={styles.address} numberOfLines={2}>
+                  {route.localDireccion}
+                </Text>
+              ) : null}
               <Text style={styles.meta} numberOfLines={1}>
                 {route.localDireccion || "Sin dirección"}
               </Text>
@@ -375,13 +380,12 @@ const styles = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginBottom: 6 },
   headCopy: { flex: 1, minWidth: 0, gap: 2 },
   kicker: {
-    color: theme.colors.gold,
-    fontSize: 10,
+    color: theme.colors.accent,
+    fontSize: 12,
     fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
   },
   title: { color: theme.colors.ink, fontSize: 16, fontWeight: "900" },
+  address: { color: theme.colors.muted, fontSize: 12, fontWeight: "600", lineHeight: 16 },
   meta: { color: theme.colors.muted, fontSize: 12, fontWeight: "600" },
   close: {
     paddingHorizontal: 10,

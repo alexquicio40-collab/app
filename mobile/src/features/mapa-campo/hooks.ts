@@ -1,8 +1,13 @@
 import { fetchLocales } from "@/features/locales/api";
 import { ROUTES_POLL_MS } from "@/features/map/constants";
 import { connectLiveSocket } from "@/features/map/socket";
-import { fetchRoutes } from "@/features/routes/api";
+import {
+  isWebMockGpsEnabled,
+  MOCK_GPS_LIMA,
+} from "@/features/mapa-campo/lib/web-mock-gps";
+import { fetchOperadorRutas } from "@/features/routes/api";
 import { enrichRoutesWithLocales } from "@/features/routes/lib/enrich";
+import { normalizeEstado } from "@/features/routes/lib/permissions";
 import type { RouteItem } from "@/features/routes/types";
 import type { LatLng } from "@/features/routes/navegacion/types";
 import { limaDate } from "@/lib/api";
@@ -17,8 +22,19 @@ function sortByOrden(a: RouteItem, b: RouteItem) {
   return a.localNombre.localeCompare(b.localNombre, "es");
 }
 
+/** Solo rutas aún por hacer / en curso (no completadas ni canceladas). */
+function isRutaActiva(route: RouteItem) {
+  const estado = normalizeEstado(route.estado);
+  return estado !== "completada" && estado !== "cancelada";
+}
+
 function routesFingerprint(items: RouteItem[]) {
-  return items.map((item) => `${item.id}:${item.estado}:${item.orden ?? ""}`).join("|");
+  return items
+    .map(
+      (item) =>
+        `${item.id}:${item.estado}:${item.orden ?? ""}:${item.tipoEnvase}:${item.cantidadEnvases ?? ""}:${item.cantidadBidonesAzules ?? ""}:${item.cantidadBidonesBlancos ?? ""}:${item.bidonPasadoPor ?? ""}:${item.metodosPago.map((m) => m.nombre).join(",")}`,
+    )
+    .join("|");
 }
 
 /** Mis rutas del día + GPS propio (Mapa de campo ≠ Operadores flota). */
@@ -49,12 +65,14 @@ export function useMapaCampo() {
       }
       try {
         const fecha = limaDate();
+        // Endpoint Flutter: trae tipo_envase / bidones / metodos_pago del local
+        const rutas = await fetchOperadorRutas(userId, fecha);
+        // Refuerzo: si algún campo falta, completar desde catálogo de locales
         if (!localesRef.current.length) {
           localesRef.current = await fetchLocales().catch(() => []);
         }
-        const rutas = await fetchRoutes({ fecha, conductorId: userId });
         const mine = enrichRoutesWithLocales(rutas, localesRef.current)
-          .filter((item) => item.conductorId === userId)
+          .filter(isRutaActiva)
           .sort(sortByOrden);
 
         const nextFp = routesFingerprint(mine);
@@ -87,13 +105,18 @@ export function useMapaCampo() {
   const refreshOrigin = useCallback(async () => {
     try {
       const perm = await Location.requestForegroundPermissionsAsync();
-      if (!perm.granted) return;
+      if (!perm.granted) throw new Error("perm");
       const pos = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
       setOrigin({ lat: pos.coords.latitude, lng: pos.coords.longitude });
     } catch {
-      // sin GPS no bloqueamos la pantalla
+      if (!isWebMockGpsEnabled()) return;
+      // Idle: anclar cerca de la ruta seleccionada / primera con coords
+      setOrigin((prev) => {
+        if (prev) return prev;
+        return MOCK_GPS_LIMA;
+      });
     }
   }, []);
 

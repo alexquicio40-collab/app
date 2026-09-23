@@ -156,8 +156,23 @@ function loadGoogleMapsJs(): Promise<void> {
   return new Promise((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>("script[data-bioclim-maps]");
     if (existing) {
+      if (g.google?.maps?.DirectionsService) {
+        resolve();
+        return;
+      }
       existing.addEventListener("load", () => resolve());
       existing.addEventListener("error", () => reject(new Error("No se pudo cargar Google Maps")));
+      // Script ya cargado pero google aún no visible: reintentar breve.
+      const started = Date.now();
+      const poll = setInterval(() => {
+        if (g.google?.maps?.DirectionsService) {
+          clearInterval(poll);
+          resolve();
+        } else if (Date.now() - started > 12_000) {
+          clearInterval(poll);
+          reject(new Error("Timeout cargando Google Maps"));
+        }
+      }, 100);
       return;
     }
     const script = document.createElement("script");

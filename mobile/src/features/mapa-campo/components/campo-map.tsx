@@ -30,6 +30,7 @@ export function CampoMap({ payload, idleOrigin, idleDest, onSelectRoute }: Campo
       dest: idleDest ?? null,
       selectedId: null,
       routes: [],
+      traveled: [],
     };
   }, [payload, idleOrigin, idleDest]);
 

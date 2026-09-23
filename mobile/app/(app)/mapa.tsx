@@ -1,4 +1,13 @@
-import { CampoMap, MisRutasPanel, NavHud, useCampoNav, useMapaCampo } from "@/features/mapa-campo";
+import {
+  ArrivalPanel,
+  CampoMap,
+  MisRutasPanel,
+  NavHud,
+  RouteBriefBanner,
+  useCampoNav,
+  useMapaCampo,
+} from "@/features/mapa-campo";
+import { routePagoHint, routeRecogeHint } from "@/features/mapa-campo/lib/route-hints";
 import {
   CompanionsSheet,
   FinalizarRutaSheet,
@@ -13,11 +22,15 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 /**
  * Mapa de campo del operador (Flutter MapaScreen).
  * Navegación IN-APP estilo Waze — no abre Google Maps ni Waze.
+ * En web sin GPS se simula la ubicación cerca del local.
  */
 export default function MapaScreen() {
   const campo = useMapaCampo();
   const nav = useCampoNav();
-  const flujo = useRutaFlujo(() => void campo.reload());
+  const flujo = useRutaFlujo(() => {
+    nav.stop();
+    void campo.reload();
+  });
   const bottomPad = useContentBottomPad(8);
 
   return (
@@ -25,9 +38,11 @@ export default function MapaScreen() {
       <ScreenHeader
         title={
           nav.active
-            ? nav.recalculating
-              ? "Recalculando…"
-              : "En ruta"
+            ? nav.arrived
+              ? "Llegaste"
+              : nav.recalculating
+                ? "Recalculando…"
+                : "En ruta"
             : "Mapa"
         }
         compact
@@ -57,6 +72,27 @@ export default function MapaScreen() {
           />
         )}
 
+        {nav.mockingGps && nav.active && !nav.arrived ? (
+          <View style={styles.mockActions}>
+            <Pressable onPress={nav.simulateDetour} style={styles.detourBtn}>
+              <Text style={styles.detourBtnText}>Simular desvío</Text>
+            </Pressable>
+            <Pressable onPress={nav.simulateArrive} style={styles.arriveBtn}>
+              <Text style={styles.detourBtnText}>Simular llegada</Text>
+            </Pressable>
+          </View>
+        ) : nav.mockingGps && !nav.active ? (
+          <View style={styles.mockBadge} pointerEvents="none">
+            <Text style={styles.mockBadgeText}>GPS simulado (web)</Text>
+          </View>
+        ) : null}
+
+        {nav.active && nav.routeItem && !nav.arrived ? (
+          <View style={styles.briefTop} pointerEvents="box-none">
+            <RouteBriefBanner route={nav.routeItem} />
+          </View>
+        ) : null}
+
         {nav.loading ? (
           <View style={styles.navBanner}>
             <ActivityIndicator color="#fff" size="small" />
@@ -77,16 +113,26 @@ export default function MapaScreen() {
 
         <View style={[styles.bottom, { bottom: bottomPad }]}>
           {nav.active && nav.routeItem ? (
-            <NavHud
-              localNombre={nav.routeItem.localNombre}
-              remainingMeters={nav.remainingMeters}
-              etaSeconds={nav.etaSeconds}
-              recalculating={nav.recalculating}
-              arrived={nav.arrived}
-              selected={nav.selected}
-              vehicleType={nav.vehicleType}
-              onStop={nav.stop}
-            />
+            nav.arrived ? (
+              <ArrivalPanel
+                route={nav.routeItem}
+                onFinalize={() => void flujo.openFinish(nav.routeItem!)}
+                onStop={nav.stop}
+              />
+            ) : (
+              <NavHud
+                localNombre={nav.routeItem.localNombre}
+                remainingMeters={nav.remainingMeters}
+                etaSeconds={nav.etaSeconds}
+                recalculating={nav.recalculating}
+                arrived={false}
+                selected={nav.selected}
+                vehicleType={nav.vehicleType}
+                onStop={nav.stop}
+                recogeHint={routeRecogeHint(nav.routeItem)}
+                pagoHint={routePagoHint(nav.routeItem)}
+              />
+            )
           ) : (
             <MisRutasPanel
               routes={campo.routes}
@@ -94,8 +140,13 @@ export default function MapaScreen() {
               expanded={campo.panelOpen}
               onToggle={() => campo.setPanelOpen((v) => !v)}
               onSelect={campo.setSelectedId}
-              onNavigate={(route) => void nav.start(route, { originHint: campo.origin })}
-              onStart={(route) => void flujo.openStart(route)}
+              onStart={(route) => {
+                if (route.estado === "pendiente") {
+                  void flujo.openStart(route);
+                  return;
+                }
+                void nav.start(route, { originHint: campo.origin });
+              }}
               onFinalize={(route) => void flujo.openFinish(route)}
             />
           )}
@@ -104,6 +155,7 @@ export default function MapaScreen() {
 
       <VehicleTypeSheet
         open={flujo.vehicleOpen}
+        route={flujo.startRoute}
         localNombre={flujo.startRoute?.localNombre}
         initial={flujo.savedVehicle}
         saving={flujo.mutating}
@@ -177,12 +229,55 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.12)",
   },
   refreshText: { color: "#fff", fontSize: 12, fontWeight: "700" },
-  banner: {
+  mockBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(184,134,11,0.92)",
+  },
+  mockBadgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
+  mockActions: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 6,
+    gap: 6,
+    alignItems: "flex-end",
+  },
+  detourBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(184,134,11,0.95)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+  },
+  arriveBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(11,83,64,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+  },
+  detourBtnText: { color: "#fff", fontSize: 10, fontWeight: "800" },
+  briefTop: {
     position: "absolute",
     top: 8,
     left: 8,
     right: 8,
     zIndex: 4,
+  },
+  banner: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    right: 8,
+    zIndex: 5,
     borderRadius: 10,
     backgroundColor: theme.colors.dangerSoft,
     paddingHorizontal: 10,

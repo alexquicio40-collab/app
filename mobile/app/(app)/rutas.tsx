@@ -296,6 +296,7 @@ function ListadoPanel({
 
       <VehicleTypeSheet
         open={flujo.vehicleOpen}
+        route={flujo.startRoute}
         localNombre={flujo.startRoute?.localNombre}
         initial={flujo.savedVehicle}
         saving={flujo.mutating}

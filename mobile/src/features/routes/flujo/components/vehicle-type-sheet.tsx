@@ -1,11 +1,22 @@
+import { RouteBriefBar } from "@/features/routes/components/route-brief-bar";
 import type { VehicleType } from "@/features/routes/flujo/types";
+import type { RouteItem } from "@/features/routes/types";
 import { theme } from "@/lib/theme";
 import { useEffect, useState } from "react";
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type VehicleTypeSheetProps = {
   open: boolean;
+  route?: RouteItem | null;
   localNombre?: string;
   initial?: VehicleType | null;
   saving?: boolean;
@@ -22,8 +33,10 @@ const OPTIONS: {
   { value: "pesado", label: "Pesado", hint: "Camión / tracto" },
 ];
 
+/** Primer paso al iniciar: qué recoger / cómo pagar + tipo de vehículo. */
 export function VehicleTypeSheet({
   open,
+  route = null,
   localNombre,
   initial = null,
   saving = false,
@@ -42,6 +55,8 @@ export function VehicleTypeSheet({
 
   if (!open) return null;
 
+  const titleLocal = localNombre ?? route?.localNombre;
+
   const submit = async () => {
     if (!selected) {
       setError("Selecciona ligero o pesado");
@@ -58,45 +73,60 @@ export function VehicleTypeSheet({
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <View style={styles.handle} />
 
-          <Text style={styles.title}>Tipo de vehículo</Text>
-          {localNombre ? (
+          <Text style={styles.kicker}>Antes de salir</Text>
+          <Text style={styles.title}>Iniciar ruta</Text>
+          {titleLocal ? (
             <Text style={styles.meta} numberOfLines={1}>
-              {localNombre}
+              {titleLocal}
             </Text>
           ) : null}
 
-          <View style={styles.row}>
-            {OPTIONS.map((item) => {
-              const on = selected === item.value;
-              return (
-                <Pressable
-                  key={item.value}
-                  onPress={() => {
-                    setSelected(item.value);
-                    setError(null);
-                  }}
-                  style={[styles.card, on ? styles.cardOn : null]}
-                >
-                  {on ? (
-                    <View style={styles.check}>
-                      <View style={styles.checkMark} />
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollBody}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            {route ? (
+              <View style={styles.brief}>
+                <RouteBriefBar route={route} />
+              </View>
+            ) : null}
+
+            <Text style={styles.section}>Tipo de vehículo</Text>
+            <View style={styles.row}>
+              {OPTIONS.map((item) => {
+                const on = selected === item.value;
+                return (
+                  <Pressable
+                    key={item.value}
+                    onPress={() => {
+                      setSelected(item.value);
+                      setError(null);
+                    }}
+                    style={[styles.card, on ? styles.cardOn : null]}
+                  >
+                    {on ? (
+                      <View style={styles.check}>
+                        <View style={styles.checkMark} />
+                      </View>
+                    ) : null}
+                    <View style={[styles.iconWrap, on ? styles.iconWrapOn : null]}>
+                      {item.value === "ligero" ? (
+                        <LigeroIcon active={on} />
+                      ) : (
+                        <PesadoIcon active={on} />
+                      )}
                     </View>
-                  ) : null}
-                  <View style={[styles.iconWrap, on ? styles.iconWrapOn : null]}>
-                    {item.value === "ligero" ? (
-                      <LigeroIcon active={on} />
-                    ) : (
-                      <PesadoIcon active={on} />
-                    )}
-                  </View>
-                  <Text style={[styles.cardLabel, on ? styles.cardLabelOn : null]}>
-                    {item.label}
-                  </Text>
-                  <Text style={styles.cardHint}>{item.hint}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+                    <Text style={[styles.cardLabel, on ? styles.cardLabelOn : null]}>
+                      {item.label}
+                    </Text>
+                    <Text style={styles.cardHint}>{item.hint}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -171,12 +201,13 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: theme.colors.surface,
-    borderRadius: 16,
+    borderRadius: 18,
     paddingHorizontal: 12,
     paddingTop: 8,
     gap: 8,
+    maxHeight: "88%",
     ...Platform.select({
-      web: { maxWidth: 420, width: "100%", alignSelf: "center" },
+      web: { maxWidth: 440, width: "100%", alignSelf: "center" },
       default: {},
     }),
   },
@@ -188,8 +219,23 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.line,
     marginBottom: 2,
   },
-  title: { color: theme.colors.ink, fontSize: 15, fontWeight: "900" },
-  meta: { color: theme.colors.muted, fontSize: 11, fontWeight: "600", marginTop: -4 },
+  kicker: {
+    color: theme.colors.gold,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  title: { color: theme.colors.ink, fontSize: 18, fontWeight: "900", marginTop: -2 },
+  meta: { color: theme.colors.muted, fontSize: 12, fontWeight: "600", marginTop: -4 },
+  scroll: { flexGrow: 0 },
+  scrollBody: { gap: 10, paddingBottom: 4 },
+  brief: { gap: 8 },
+  section: {
+    color: theme.colors.ink,
+    fontSize: 13,
+    fontWeight: "900",
+  },
   row: { flexDirection: "row", gap: 8 },
   card: {
     flex: 1,
@@ -318,8 +364,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: 8, marginTop: 2 },
   ghost: {
     flex: 1,
-    height: 40,
-    borderRadius: 10,
+    height: 44,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: theme.colors.cream,
@@ -328,9 +374,9 @@ const styles = StyleSheet.create({
   },
   ghostText: { color: theme.colors.muted, fontSize: 13, fontWeight: "800" },
   primary: {
-    flex: 1.3,
-    height: 40,
-    borderRadius: 10,
+    flex: 1.35,
+    height: 44,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: theme.colors.accent,
