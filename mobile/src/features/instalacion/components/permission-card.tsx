@@ -1,10 +1,20 @@
 import { theme } from "@/lib/theme";
+import { useEffect, useRef } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, {
+  FadeInDown,
+  ZoomIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+} from "react-native-reanimated";
 import type { PermissionGrant, PermissionRow } from "../types";
 import { PermissionGlyph } from "./permission-glyph";
 
 type PermissionCardProps = {
   row: PermissionRow;
+  index: number;
   active?: boolean;
   onPress?: () => void;
 };
@@ -35,36 +45,64 @@ function statusTone(status: PermissionGrant) {
   }
 }
 
-export function PermissionCard({ row, active, onPress }: PermissionCardProps) {
+export function PermissionCard({ row, index, active, onPress }: PermissionCardProps) {
   const tone = statusTone(row.status);
   const interactive = Boolean(onPress) && row.status !== "granted";
+  const scale = useSharedValue(1);
+  const previous = useRef(row.status);
+
+  useEffect(() => {
+    if (previous.current !== row.status && row.status === "granted") {
+      scale.value = withSequence(
+        withSpring(1.04, { damping: 9, stiffness: 280 }),
+        withSpring(1, { damping: 12, stiffness: 180 }),
+      );
+    }
+    previous.current = row.status;
+  }, [row.status, scale]);
+
+  const popStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
 
   return (
-    <Pressable
-      accessibilityRole={interactive ? "button" : "summary"}
-      accessibilityState={{ disabled: !interactive, busy: active }}
-      disabled={!interactive}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
-        row.status === "granted" ? styles.cardGranted : null,
-        active ? styles.cardActive : null,
-        pressed && interactive ? styles.cardPressed : null,
-      ]}
+    <Animated.View
+      entering={FadeInDown.delay(140 + index * 110)
+        .springify()
+        .damping(16)
+        .stiffness(170)}
+      style={popStyle}
     >
-      <PermissionGlyph accent={row.accent} />
-      <View style={styles.copy}>
-        <Text style={styles.title}>{row.title}</Text>
-        <Text style={styles.body}>{row.body}</Text>
-      </View>
-      <View style={[styles.badge, { backgroundColor: tone.bg }]}>
-        {active ? (
-          <ActivityIndicator size="small" color={tone.fg} />
-        ) : (
-          <Text style={[styles.badgeText, { color: tone.fg }]}>{statusLabel(row.status)}</Text>
-        )}
-      </View>
-    </Pressable>
+      <Pressable
+        accessibilityRole={interactive ? "button" : "summary"}
+        accessibilityState={{ disabled: !interactive, busy: active }}
+        disabled={!interactive}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.card,
+          row.status === "granted" ? styles.cardGranted : null,
+          active ? styles.cardActive : null,
+          pressed && interactive ? styles.cardPressed : null,
+        ]}
+      >
+        <PermissionGlyph accent={row.accent} />
+        <View style={styles.copy}>
+          <Text style={styles.title}>{row.title}</Text>
+          <Text style={styles.body}>{row.body}</Text>
+        </View>
+        <Animated.View
+          key={active ? "busy" : row.status}
+          entering={ZoomIn.duration(260).springify().damping(14)}
+          style={[styles.badge, { backgroundColor: tone.bg }]}
+        >
+          {active ? (
+            <ActivityIndicator size="small" color={tone.fg} />
+          ) : (
+            <Text style={[styles.badgeText, { color: tone.fg }]}>{statusLabel(row.status)}</Text>
+          )}
+        </Animated.View>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -88,7 +126,7 @@ const styles = StyleSheet.create({
   },
   cardPressed: {
     opacity: 0.92,
-    transform: [{ scale: 0.995 }],
+    transform: [{ scale: 0.985 }],
   },
   copy: { flex: 1, gap: 3 },
   title: {

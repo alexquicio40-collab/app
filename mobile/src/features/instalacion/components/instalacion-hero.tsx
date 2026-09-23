@@ -1,5 +1,15 @@
 import { theme } from "@/lib/theme";
+import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import Animated, {
+  Easing,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 
 type InstalacionHeroProps = {
   grantedCount: number;
@@ -8,14 +18,49 @@ type InstalacionHeroProps = {
 
 export function InstalacionHero({ grantedCount, total }: InstalacionHeroProps) {
   const progress = total > 0 ? grantedCount / total : 0;
-  const pct = Math.round(progress * 100);
+  const fill = useSharedValue(0);
+  const sonar = useSharedValue(0);
+  const core = useSharedValue(1);
+
+  useEffect(() => {
+    fill.value = withSpring(progress, { damping: 16, stiffness: 140, mass: 0.7 });
+  }, [fill, progress]);
+
+  useEffect(() => {
+    sonar.value = withRepeat(
+      withTiming(1, { duration: 2200, easing: Easing.out(Easing.quad) }),
+      -1,
+      false,
+    );
+    core.value = withRepeat(
+      withTiming(1.18, { duration: 1100, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true,
+    );
+  }, [core, sonar]);
+
+  const fillStyle = useAnimatedStyle(() => ({
+    width: `${Math.max(0, Math.min(1, fill.value)) * 100}%`,
+  }));
+
+  const sonarStyle = useAnimatedStyle(() => ({
+    opacity: 0.45 * (1 - sonar.value),
+    transform: [{ scale: 0.72 + sonar.value * 0.85 }],
+  }));
+
+  const coreStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: core.value }],
+  }));
 
   return (
-    <View style={styles.wrap}>
+    <Animated.View entering={FadeInDown.duration(560).springify().damping(18)} style={styles.wrap}>
       <View style={styles.brandRow}>
-        <View style={styles.mark}>
-          <View style={styles.markRing} />
-          <View style={styles.markCore} />
+        <View style={styles.markWrap}>
+          <Animated.View style={[styles.sonar, sonarStyle]} />
+          <View style={styles.mark}>
+            <View style={styles.markRing} />
+            <Animated.View style={[styles.markCore, coreStyle]} />
+          </View>
         </View>
         <View style={styles.brandCopy}>
           <Text style={styles.brand}>Ubicación</Text>
@@ -33,13 +78,13 @@ export function InstalacionHero({ grantedCount, total }: InstalacionHeroProps) {
 
       <View style={styles.progressBlock}>
         <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${pct}%` }]} />
+          <Animated.View style={[styles.progressFill, fillStyle]} />
         </View>
         <Text style={styles.progressMeta}>
           {grantedCount} de {total} listos
         </Text>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -53,6 +98,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     marginBottom: 8,
+  },
+  markWrap: {
+    width: 46,
+    height: 46,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sonar: {
+    position: "absolute",
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 1.5,
+    borderColor: theme.colors.gold,
   },
   mark: {
     width: 46,
