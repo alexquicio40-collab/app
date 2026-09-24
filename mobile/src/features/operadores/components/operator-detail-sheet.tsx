@@ -116,10 +116,10 @@ function RouteCard({
   onNavigate: () => void;
 }) {
   const estado =
-    route.estado === "en_proceso"
-      ? "En proceso"
-      : route.estado === "en_ruta"
-        ? "En ruta"
+    route.estado === "en_ruta" || route.estado === "en_proceso"
+      ? "En ruta"
+      : route.estado === "llego"
+        ? "Llegó"
         : route.estado;
 
   return (

@@ -2,6 +2,7 @@ import {
   CERT_FILTER_OPTIONS,
   FREQ_FILTER_OPTIONS,
 } from "@/features/locales/lib/format";
+import { PRIORIDADES } from "@/features/locales/lib/prioridad";
 import type { LocalesFilters } from "@/features/locales/types";
 import { theme } from "@/lib/theme";
 import { useState } from "react";
@@ -38,6 +39,7 @@ export function LocalesToolbar({
     filters.distrito,
     filters.certificacion,
     filters.frecuencia,
+    filters.prioridad,
   ].filter(Boolean).length;
 
   return (
@@ -129,6 +131,16 @@ export function LocalesToolbar({
                 label: item.label,
               }))}
               onChange={(frecuencia) => onChange({ frecuencia })}
+            />
+            <View style={styles.divider} />
+            <FilterSelect
+              label="Prioridad"
+              value={filters.prioridad}
+              options={PRIORIDADES.map((item) => ({
+                value: item.value,
+                label: item.label,
+              }))}
+              onChange={(prioridad) => onChange({ prioridad })}
             />
           </View>
         </View>

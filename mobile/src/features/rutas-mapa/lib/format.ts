@@ -1,36 +1,22 @@
+import { asEstado, estadoRecojoLabel } from "@/features/routes/lib/estados-recojo";
 import type { RouteItem } from "@/features/routes/types";
 
+const COLORS: Record<string, string> = {
+  programado: "#1976D2",
+  en_ruta: "#FB8C00",
+  llego: "#00897B",
+  recolectado: "#2E7D32",
+  no_recolectado: "#C62828",
+  reprogramado: "#6A1B9A",
+  cerrado: "#757575",
+};
+
 export function estadoLabel(estado: string) {
-  switch (estado) {
-    case "pendiente":
-      return "Pendiente";
-    case "en_proceso":
-      return "En proceso";
-    case "en_ruta":
-      return "En ruta";
-    case "completada":
-      return "Completada";
-    case "cancelada":
-      return "Cancelada";
-    default:
-      return estado || "—";
-  }
+  return estadoRecojoLabel(estado);
 }
 
 export function estadoColor(estado: string) {
-  switch (estado) {
-    case "pendiente":
-      return "#1976D2";
-    case "en_proceso":
-    case "en_ruta":
-      return "#FB8C00";
-    case "completada":
-      return "#2E7D32";
-    case "cancelada":
-      return "#757575";
-    default:
-      return "#455A64";
-  }
+  return COLORS[asEstado(estado)] ?? "#455A64";
 }
 
 export function formatFechaEs(iso: string) {

@@ -6,8 +6,8 @@ export type LocalesMapPin = {
   nombre: string;
   lat: number;
   lng: number;
-  /** needs = amarillo · none = rojo */
-  tone: "needs" | "none";
+  /** alta = rojo · media = amarillo · baja = verde */
+  tone: "alta" | "media" | "baja";
 };
 
 /**
@@ -41,8 +41,9 @@ export function buildLocalesMapHtml() {
     var info = null;
     var pendingPayload = null;
     var COLORS = {
-      needs: { fill: '#C9A227', stroke: '#FEF6D8' },
-      none: { fill: '#B42318', stroke: '#FCECEC' }
+      alta: { fill: '#E53935', stroke: '#FDECEC' },
+      media: { fill: '#F9A825', stroke: '#FFF8E1' },
+      baja: { fill: '#2E7D32', stroke: '#E8F5E9' }
     };
 
     function emit(payload) {
@@ -57,7 +58,7 @@ export function buildLocalesMapHtml() {
     }
 
     function pinIcon(tone, active) {
-      var c = COLORS[tone] || COLORS.needs;
+      var c = COLORS[tone] || COLORS.media;
       var scale = active ? 1.2 : 1;
       var w = Math.round(32 * scale);
       var h = Math.round(40 * scale);

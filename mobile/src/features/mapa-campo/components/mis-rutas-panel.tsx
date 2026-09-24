@@ -1,7 +1,8 @@
 import { RouteBriefBar } from "@/features/routes/components/route-brief-bar";
 import { routePagoHint, routeRecogeHint } from "@/features/mapa-campo/lib/route-hints";
 import { estadoLabel } from "@/features/routes/lib/format";
-import { normalizeEstado } from "@/features/routes/lib/permissions";
+import { asEstado, isCerrado, isEnCurso, isRecolectado } from "@/features/routes/lib/estados-recojo";
+import { canFinalizeRoute } from "@/features/routes/lib/permissions";
 import type { RouteItem } from "@/features/routes/types";
 import { theme } from "@/lib/theme";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -18,13 +19,11 @@ type MisRutasPanelProps = {
 };
 
 function canResume(route: RouteItem) {
-  const estado = normalizeEstado(route.estado);
-  return estado === "en_proceso" || estado === "en_ruta";
+  return isEnCurso(route.estado);
 }
 
 function isRutaActiva(route: RouteItem) {
-  const estado = normalizeEstado(route.estado);
-  return estado !== "completada" && estado !== "cancelada";
+  return !isRecolectado(route.estado) && !isCerrado(route.estado);
 }
 
 /** Panel inferior del mapa: rutas del día. Un solo botón Iniciar. */
@@ -38,7 +37,7 @@ export function MisRutasPanel({
   onFinalize,
 }: MisRutasPanelProps) {
   const active = routes.filter(isRutaActiva);
-  const pendientes = active.filter((r) => normalizeEstado(r.estado) === "pendiente").length;
+  const pendientes = active.filter((r) => asEstado(r.estado) === "programado").length;
   const enCurso = active.filter(canResume).length;
   const selected = active.find((r) => r.id === selectedId) ?? null;
 
@@ -66,8 +65,8 @@ export function MisRutasPanel({
             >
               {active.map((route) => {
                 const active = route.id === selectedId;
-                const startable = route.estado === "pendiente" || canResume(route);
-                const finishable = canResume(route);
+                const startable = asEstado(route.estado) === "programado" || canResume(route);
+                const finishable = canFinalizeRoute(route);
                 const pickup = routeRecogeHint(route);
                 const pago = routePagoHint(route);
 

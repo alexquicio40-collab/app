@@ -1,4 +1,12 @@
-export type RouteEstado = "pendiente" | "en_proceso" | "en_ruta" | "completada" | "cancelada" | string;
+export type RouteEstado =
+  | "programado"
+  | "en_ruta"
+  | "llego"
+  | "recolectado"
+  | "no_recolectado"
+  | "reprogramado"
+  | "cerrado"
+  | string;
 
 export type RouteMetodoPago = {
   id: number;
@@ -34,6 +42,7 @@ export type RouteItem = {
   bidonPasadoPor: number | null;
   /** Formas de pago del local. */
   metodosPago: RouteMetodoPago[];
+  prioridad: "alta" | "media" | "baja";
 };
 
 export type ConductorOption = {
@@ -51,7 +60,7 @@ export type RoutesFilters = {
 };
 
 export type RoutesCounts = {
-  pendiente: number;
-  enProceso: number;
-  completada: number;
+  programado: number;
+  enCurso: number;
+  recolectado: number;
 };

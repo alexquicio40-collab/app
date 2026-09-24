@@ -11,9 +11,9 @@ export type DashboardSummary = {
     certificados: number;
   };
   rutasHoy: {
-    pendientes: number;
-    enProceso: number;
-    completadas: number;
+    programadas: number;
+    enCurso: number;
+    recolectadas: number;
   };
   actividad: { fecha: string; puntos: number }[];
 };
@@ -61,7 +61,7 @@ export async function getSummary(): Promise<DashboardSummary> {
     `),
     scalar(`
       SELECT COUNT(*) AS n FROM rutas_asignadas
-      WHERE estado IN ('pendiente', 'en_proceso')
+      WHERE estado IN ('programado', 'en_ruta', 'llego', 'pendiente', 'en_proceso')
     `),
     scalar(`
       SELECT COUNT(*) AS n FROM locales
@@ -96,9 +96,9 @@ export async function getSummary(): Promise<DashboardSummary> {
       certificados,
     },
     rutasHoy: {
-      pendientes: byEstado.pendiente ?? 0,
-      enProceso: byEstado.en_proceso ?? 0,
-      completadas: byEstado.completada ?? 0,
+      programadas: (byEstado.programado ?? 0) + (byEstado.pendiente ?? 0),
+      enCurso: (byEstado.en_ruta ?? 0) + (byEstado.llego ?? 0) + (byEstado.en_proceso ?? 0),
+      recolectadas: (byEstado.recolectado ?? 0) + (byEstado.completada ?? 0),
     },
     actividad: actividad.map((row) => ({
       fecha: String(row.fecha),

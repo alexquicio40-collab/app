@@ -57,7 +57,7 @@ export function CertificadoPendienteCard({
       {canUpload ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Subir certificado"
+          accessibilityLabel="Generar certificado"
           onPress={onUpload}
           hitSlop={4}
           style={({ pressed }) => [styles.uploadBtn, pressed ? styles.uploadPressed : null]}

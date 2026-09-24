@@ -1,5 +1,5 @@
 import { getApiBaseUrl } from "@/lib/api";
-import { ROUTE_ESTADOS } from "./permissions";
+import { ESTADOS_RECOJO, estadoRecojoLabel, estadoRecojoTone } from "./estados-recojo";
 import type { RouteEstado } from "../types";
 
 export const LIMA_DISTRITOS = [
@@ -48,42 +48,17 @@ export const LIMA_DISTRITOS = [
   "Villa María del Triunfo",
 ] as const;
 
-export const ESTADO_OPTIONS: { value: string; label: string }[] = ROUTE_ESTADOS.map((item) => ({
+export const ESTADO_OPTIONS: { value: string; label: string }[] = ESTADOS_RECOJO.map((item) => ({
   value: item.value,
   label: item.label,
 }));
 
 export function estadoLabel(estado: RouteEstado) {
-  switch (estado) {
-    case "pendiente":
-      return "Pendiente";
-    case "en_proceso":
-      return "En proceso";
-    case "en_ruta":
-      return "En camino";
-    case "completada":
-      return "Completada";
-    case "cancelada":
-      return "Cancelada";
-    default:
-      return String(estado || "—");
-  }
+  return estadoRecojoLabel(estado);
 }
 
 export function estadoTone(estado: RouteEstado): "warn" | "info" | "ok" | "danger" | "muted" {
-  switch (estado) {
-    case "pendiente":
-      return "warn";
-    case "en_proceso":
-    case "en_ruta":
-      return "info";
-    case "completada":
-      return "ok";
-    case "cancelada":
-      return "danger";
-    default:
-      return "muted";
-  }
+  return estadoRecojoTone(estado);
 }
 
 export function formatDate(value?: string | null) {

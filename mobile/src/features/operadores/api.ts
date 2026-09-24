@@ -73,7 +73,7 @@ function parseRoute(row: UnknownRecord): OperatorRouteDetail {
     id: text(row.id) || String(num(row.id) ?? ""),
     localNombre: text(row.local_nombre, row.nombre) || "Local",
     localDireccion: text(row.local_direccion, row.direccion),
-    estado: text(row.estado).toLowerCase() || "pendiente",
+    estado: text(row.estado).toLowerCase() || "programado",
     latitud: num(row.latitud, row.latitude, row.lat),
     longitud: num(row.longitud, row.longitude, row.lng),
     horario: text(
@@ -109,7 +109,7 @@ export async function fetchOperatorRoutes(operatorId: number): Promise<OperatorR
   const rows = asRows(payload, "rutas");
   return rows
     .map(parseRoute)
-    .filter((item) => item.estado === "en_proceso" || item.estado === "en_ruta");
+    .filter((item) => item.estado === "en_ruta" || item.estado === "llego" || item.estado === "en_proceso");
 }
 
 export async function shareRouteLink(rutaId: string): Promise<string> {

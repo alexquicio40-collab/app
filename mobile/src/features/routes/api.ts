@@ -1,4 +1,6 @@
 import { api, limaDate } from "@/lib/api";
+import { asEstado } from "./lib/estados-recojo";
+import { normalizePrioridad } from "@/features/locales/lib/prioridad";
 import { resolveMediaUrl } from "./lib/format";
 import type { ConductorOption, RouteItem, RouteMetodoPago } from "./types";
 
@@ -94,7 +96,7 @@ function parseRoute(row: UnknownRecord): RouteItem | null {
     ),
     fechaAsignacion: text(row.fecha_asignacion),
     observaciones: text(row.observaciones),
-    estado: text(row.estado) || "pendiente",
+    estado: asEstado(text(row.estado) || "programado"),
     orden: num(row.orden),
     fechaCompletada: text(row.fecha_completada) || null,
     litraje: num(row.cantidad_litraje),
@@ -143,6 +145,7 @@ function parseRoute(row: UnknownRecord): RouteItem | null {
     metodosPago: parseMetodos(
       pick(row.metodos_pago, row.metodosPago, local?.metodos_pago, local?.metodosPago),
     ),
+    prioridad: normalizePrioridad(text(row.prioridad, local?.prioridad)),
   };
 }
 

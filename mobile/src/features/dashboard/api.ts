@@ -10,7 +10,7 @@ const EMPTY: DashboardSummary = {
     rutasPendientes: 0,
     certificados: 0,
   },
-  rutasHoy: { pendientes: 0, enProceso: 0, completadas: 0 },
+  rutasHoy: { programadas: 0, enCurso: 0, recolectadas: 0 },
   actividad: [],
 };
 
@@ -34,9 +34,11 @@ export async function dashboardSummaryRequest(): Promise<DashboardSummary> {
   ]);
 
   const todayRoutes = rutas.rutas ?? [];
-  const pendientes = todayRoutes.filter((item) => item.estado === "pendiente").length;
-  const enProceso = todayRoutes.filter((item) => item.estado === "en_proceso" || item.estado === "en_ruta").length;
-  const completadas = todayRoutes.filter((item) => item.estado === "completada").length;
+  const programadas = todayRoutes.filter((item) => item.estado === "programado" || item.estado === "pendiente").length;
+  const enCurso = todayRoutes.filter((item) =>
+    ["en_ruta", "llego", "en_proceso"].includes(String(item.estado)),
+  ).length;
+  const recolectadas = todayRoutes.filter((item) => item.estado === "recolectado" || item.estado === "completada").length;
 
   return {
     kpis: {
@@ -44,10 +46,12 @@ export async function dashboardSummaryRequest(): Promise<DashboardSummary> {
       enLinea: ubicaciones.ubicaciones?.length ?? 0,
       locales: locales.locales?.length ?? 0,
       rutasHoy: todayRoutes.length,
-      rutasPendientes: todayRoutes.filter((item) => item.estado === "pendiente" || item.estado === "en_proceso").length,
+      rutasPendientes: todayRoutes.filter((item) =>
+        ["programado", "pendiente", "en_ruta", "en_proceso", "llego"].includes(String(item.estado)),
+      ).length,
       certificados: certificados.locales?.length ?? 0,
     },
-    rutasHoy: { pendientes, enProceso, completadas },
+    rutasHoy: { programadas, enCurso, recolectadas },
     actividad: (stats.actividad ?? []).map((item) => ({
       fecha: String(item.fecha),
       puntos: Number(item.puntos ?? 0),

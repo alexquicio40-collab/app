@@ -122,7 +122,7 @@ export function FinalizarRutaSheet({
 
   const applyAsset = (field: "fotoGuia" | "fotoMercaderia", asset: ImagePicker.ImagePickerAsset) => {
     if (asset.fileSize != null && asset.fileSize > MAX_PHOTO_BYTES) {
-      notify("La foto es demasiado grande. Máximo 5 MB");
+      notify("La foto es demasiado grande. Máximo 1 GB");
       return;
     }
     const ext = asset.mimeType?.includes("png") ? "png" : "jpg";

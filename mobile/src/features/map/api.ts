@@ -83,7 +83,7 @@ function parseStop(row: UnknownRecord): LiveStop | null {
 
   if (!Number.isFinite(id) || !Number.isFinite(operatorId)) return null;
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-  if (!["pendiente", "en_proceso", "en_ruta"].includes(estado)) return null;
+  if (!["programado", "en_ruta", "llego", "pendiente", "en_proceso"].includes(estado)) return null;
 
   return {
     id,

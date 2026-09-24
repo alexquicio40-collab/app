@@ -181,7 +181,10 @@ function ListadoPanel({
             onChangeStatus: !isOperador && actionable ? () => openStatus(item.id) : undefined,
             onDelete: !isOperador && actionable ? () => void removeRoute(item) : undefined,
             onStart: isOperador ? () => void flujo.openStart(item) : undefined,
+            onArrive: isOperador ? () => void flujo.arrive(item) : undefined,
             onFinalize: isOperador ? () => void flujo.openFinish(item) : undefined,
+            onSkip: isOperador ? () => void flujo.skipCollection(item) : undefined,
+            onReprogram: isOperador ? () => void flujo.reprogram(item) : undefined,
           }}
         />
       );
@@ -259,12 +262,39 @@ function ListadoPanel({
               }
             : undefined
         }
+        onArrive={
+          isOperador && routes.selected
+            ? () => {
+                const item = routes.selected!;
+                routes.closeRoute();
+                void flujo.arrive(item);
+              }
+            : undefined
+        }
         onFinalize={
           isOperador && routes.selected
             ? () => {
                 const item = routes.selected!;
                 routes.closeRoute();
                 void flujo.openFinish(item);
+              }
+            : undefined
+        }
+        onSkip={
+          isOperador && routes.selected
+            ? () => {
+                const item = routes.selected!;
+                routes.closeRoute();
+                void flujo.skipCollection(item);
+              }
+            : undefined
+        }
+        onReprogram={
+          isOperador && routes.selected
+            ? () => {
+                const item = routes.selected!;
+                routes.closeRoute();
+                void flujo.reprogram(item);
               }
             : undefined
         }

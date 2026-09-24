@@ -147,7 +147,7 @@ export function CertificadoUploadSheet({
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 14) }]}>
           <View style={styles.head}>
             <View style={styles.headCopy}>
-              <Text style={styles.title}>Subir certificado</Text>
+              <Text style={styles.title}>Generar certificado</Text>
               <Text style={styles.subtitle} numberOfLines={1}>
                 {item?.nombre ?? ""}
               </Text>

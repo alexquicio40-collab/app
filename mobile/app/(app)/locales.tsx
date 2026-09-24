@@ -29,10 +29,19 @@ export default function LocalesScreen() {
   const screen = useLocalesScreen();
   const bottomPad = useContentBottomPad(12);
   const [mode, setMode] = useState<LocalesViewMode>("mapa");
+  const [lista, setLista] = useState<"locales" | "certificados">("locales");
+
+  const visibles = useMemo(
+    () =>
+      screen.filtered.filter((item) =>
+        lista === "certificados" ? item.necesitaCertificacion : !item.necesitaCertificacion,
+      ),
+    [screen.filtered, lista],
+  );
 
   const mappedCount = useMemo(
-    () => screen.filtered.filter((item) => item.latitud != null && item.longitud != null).length,
-    [screen.filtered],
+    () => visibles.filter((item) => item.latitud != null && item.longitud != null).length,
+    [visibles],
   );
 
   const onSelectPin = useCallback(
@@ -44,7 +53,7 @@ export default function LocalesScreen() {
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: (typeof screen.filtered)[number] }) => (
+    ({ item }: { item: (typeof visibles)[number] }) => (
       <LocalCard
         local={item}
         canManage={screen.canManage}
@@ -78,6 +87,23 @@ export default function LocalesScreen() {
           ) : null
         }
       />
+
+      <View style={styles.listas}>
+        <Pressable
+          onPress={() => setLista("locales")}
+          style={[styles.listaBtn, lista === "locales" && styles.listaOn]}
+        >
+          <Text style={[styles.listaText, lista === "locales" && styles.listaTextOn]}>Locales</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setLista("certificados")}
+          style={[styles.listaBtn, lista === "certificados" && styles.listaCertOn]}
+        >
+          <Text style={[styles.listaText, lista === "certificados" && styles.listaTextOn]}>
+            Certificados
+          </Text>
+        </Pressable>
+      </View>
 
       <LocalesModeTabs value={mode} onChange={setMode} mapCount={mappedCount} />
 
@@ -117,7 +143,7 @@ export default function LocalesScreen() {
             </View>
           ) : (
             <LocalesMap
-              locales={screen.filtered}
+              locales={visibles}
               selectedId={screen.selected?.id ?? null}
               onSelect={onSelectPin}
             />
@@ -125,7 +151,7 @@ export default function LocalesScreen() {
         </View>
       ) : (
         <FlatList
-          data={screen.filtered}
+          data={visibles}
           keyExtractor={(item) => item.id}
           initialNumToRender={16}
           maxToRenderPerBatch={16}
@@ -219,6 +245,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.bg,
   },
+  listas: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  listaBtn: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    backgroundColor: theme.colors.surface,
+    alignItems: "center",
+  },
+  listaOn: { backgroundColor: theme.colors.accent },
+  listaCertOn: { backgroundColor: "#b45309" },
+  listaText: { color: theme.colors.muted, fontWeight: "700", fontSize: 13 },
+  listaTextOn: { color: "#fff" },
   newBtn: {
     backgroundColor: theme.colors.gold,
     borderRadius: 9,

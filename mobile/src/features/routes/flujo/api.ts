@@ -58,25 +58,44 @@ export async function fetchFinalizacionConfig(userId: string | number): Promise<
   }
 }
 
-export async function startRuta(rutaId: string) {
+function setEstado(rutaId: string, estado: string) {
   return api<{ success?: boolean; message?: string }>(`/api/rutas/${rutaId}`, {
     method: "PUT",
-    body: { estado: "en_proceso" },
+    body: { estado },
   });
 }
 
-function appendFoto(form: FormData, field: string, foto: PendingFoto | null) {
+export function startRuta(rutaId: string) {
+  return setEstado(rutaId, "en_ruta");
+}
+
+export function llegarRuta(rutaId: string) {
+  return setEstado(rutaId, "llego");
+}
+
+export function marcarNoRecolectado(rutaId: string) {
+  return setEstado(rutaId, "no_recolectado");
+}
+
+export function reprogramarRuta(rutaId: string) {
+  return setEstado(rutaId, "reprogramado");
+}
+
+async function appendFoto(form: FormData, field: string, foto: PendingFoto | null) {
   if (!foto) return;
-  form.append(field, {
-    uri: foto.uri,
-    name: foto.name,
-    type: foto.mimeType,
-  } as unknown as Blob);
+  const response = await fetch(foto.uri);
+  if (!response.ok) {
+    throw new Error("No se pudo leer la foto");
+  }
+  const blob = await response.blob();
+  const type = foto.mimeType || blob.type || "image/jpeg";
+  const file = blob.type ? blob : new Blob([await blob.arrayBuffer()], { type });
+  form.append(field, file, foto.name);
 }
 
 export async function finalizarRuta(rutaId: string, input: FinalizarRutaInput) {
   const form = new FormData();
-  form.append("estado", "completada");
+  form.append("estado", "recolectado");
   form.append("cantidad_litraje", String(Math.max(0, Math.floor(input.cantidadLitraje) || 0)));
   form.append(
     "cantidad_baldes_vacios",
@@ -87,8 +106,8 @@ export async function finalizarRuta(rutaId: string, input: FinalizarRutaInput) {
     String(Math.max(0, Math.floor(input.cantidadGalonerasVacias) || 0)),
   );
   form.append("observaciones", input.observaciones.trim());
-  appendFoto(form, "foto_guia", input.fotoGuia);
-  appendFoto(form, "foto_mercaderia", input.fotoMercaderia);
+  await appendFoto(form, "foto_guia", input.fotoGuia);
+  await appendFoto(form, "foto_mercaderia", input.fotoMercaderia);
 
   return apiUpload<{ success?: boolean; message?: string }>(
     `/api/rutas/${rutaId}/finalizar`,

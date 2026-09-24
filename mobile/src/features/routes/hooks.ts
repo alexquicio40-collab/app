@@ -80,7 +80,7 @@ export function useRoutesScreen() {
           fechaDesde,
           fechaHasta,
           conductorId: active.conductorId,
-          estado: active.estado === "en_proceso" ? null : active.estado,
+          estado: active.estado,
         });
 
         const driversPromise = driversLoaded.current

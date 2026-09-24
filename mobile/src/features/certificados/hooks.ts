@@ -2,11 +2,13 @@ import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Linking, Platform } from "react-native";
 import {
+  corregirCodigoCertificado,
   deleteHistorialItem,
   fetchAsesoresFromPendientes,
   fetchHistorial,
   fetchPendientes,
-  uploadCertificado,
+  generarCertificado,
+  generarCertificadoManual,
 } from "./api";
 import {
   countHistorialEsteMes,
@@ -77,6 +79,8 @@ export function useCertificadosScreen() {
   const [error, setError] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
   const [uploadTarget, setUploadTarget] = useState<CertificadoPendiente | null>(null);
+  const [codigoModo, setCodigoModo] = useState<"manual" | "editar" | null>(null);
+  const [codigoTarget, setCodigoTarget] = useState<CertificadoHistorial | null>(null);
   const [detailTarget, setDetailTarget] = useState<CertificadoPendiente | null>(null);
   const [historialDetail, setHistorialDetail] = useState<CertificadoHistorial | null>(null);
   const [viewer, setViewer] = useState<CertificadoHistorial | null>(null);
@@ -202,23 +206,64 @@ export function useCertificadosScreen() {
   }, []);
   const closeHistorialDetail = useCallback(() => setHistorialDetail(null), []);
 
-  const submitUpload = useCallback(
-    async (input: CertUploadInput) => {
-      if (!uploadTarget) return;
+  const guardarCodigo = useCallback(
+    async (value: { codigo: string; localId: string }) => {
+      if (!/^CBC-\d{1,6}-\d{4}$/i.test(value.codigo)) {
+        notify("Código", "Usa el formato CBC-0664-2026");
+        return;
+      }
+      if (codigoModo !== "editar" && !value.localId) {
+        notify("Local", "Indica el ID del local");
+        return;
+      }
       setMutating(true);
       try {
-        await uploadCertificado(uploadTarget.id, input);
-        notify("Listo", "Certificado subido");
-        closeUpload();
+        if (codigoModo === "editar" && codigoTarget) {
+          const result = await corregirCodigoCertificado(codigoTarget.id, value.codigo);
+          notify("Código actualizado", result.codigo || value.codigo);
+        } else {
+          const result = await generarCertificadoManual(value.localId, value.codigo);
+          notify("Certificado manual", result.codigo || value.codigo);
+        }
+        setCodigoModo(null);
+        setCodigoTarget(null);
         await load("refresh");
       } catch (err) {
-        notify("Error", err instanceof Error ? err.message : "No se pudo subir");
-        throw err;
+        notify("Error", err instanceof Error ? err.message : "No se pudo guardar el código");
       } finally {
         setMutating(false);
       }
     },
-    [uploadTarget, closeUpload, load],
+    [codigoModo, codigoTarget, load],
+  );
+
+  const generar = useCallback(
+    async (item: CertificadoPendiente) => {
+      if (!item.ultimaRutaId) {
+        notify("Sin ruta", "Primero tiene que haber un recojo recolectado en este local");
+        return;
+      }
+      setMutating(true);
+      try {
+        const result = await generarCertificado(item.id, item.ultimaRutaId);
+        notify("Certificado listo", result.codigo ? `Código ${result.codigo}` : "Asignado al local");
+        await load("refresh");
+      } catch (err) {
+        notify("Error", err instanceof Error ? err.message : "No se pudo generar");
+      } finally {
+        setMutating(false);
+      }
+    },
+    [load],
+  );
+
+  const submitUpload = useCallback(
+    async (_input: CertUploadInput) => {
+      if (!uploadTarget) return;
+      await generar(uploadTarget);
+      closeUpload();
+    },
+    [uploadTarget, closeUpload, generar],
   );
 
   const removeHistorial = useCallback(
@@ -283,6 +328,22 @@ export function useCertificadosScreen() {
     openUpload,
     closeUpload,
     submitUpload,
+    generar,
+    codigoModo,
+    codigoInicial: codigoTarget?.codigoRegistro ?? "",
+    abrirManual: () => {
+      setCodigoTarget(null);
+      setCodigoModo("manual");
+    },
+    abrirEditarCodigo: (item: CertificadoHistorial) => {
+      setCodigoTarget(item);
+      setCodigoModo("editar");
+    },
+    cerrarCodigo: () => {
+      setCodigoModo(null);
+      setCodigoTarget(null);
+    },
+    guardarCodigo,
     viewer,
     openViewer,
     closeViewer,

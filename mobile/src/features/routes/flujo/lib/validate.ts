@@ -1,6 +1,6 @@
 import type { FinalizacionConfig, FinalizarFieldErrors, FinalizarRutaInput } from "../types";
 
-const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const MAX_PHOTO_BYTES = 1024 * 1024 * 1024;
 
 export function emptyFinalizacionConfig(): FinalizacionConfig {
   return {
@@ -69,10 +69,10 @@ export function validateFinalizarRuta(
   }
 
   if (input.fotoGuia && estimateTooBig(input.fotoGuia.uri)) {
-    errors.fotoGuia = "Máximo 5 MB";
+    errors.fotoGuia = "Máximo 1 GB";
   }
   if (input.fotoMercaderia && estimateTooBig(input.fotoMercaderia.uri)) {
-    errors.fotoMercaderia = "Máximo 5 MB";
+    errors.fotoMercaderia = "Máximo 1 GB";
   }
 
   return {

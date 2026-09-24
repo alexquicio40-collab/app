@@ -15,6 +15,7 @@ type CertificadoHistorialCardProps = {
   onView: () => void;
   onOpenDetail: () => void;
   onDelete?: () => void;
+  onEditCodigo?: () => void;
 };
 
 const DOUBLE_MS = 320;
@@ -25,6 +26,7 @@ export function CertificadoHistorialCard({
   onView,
   onOpenDetail,
   onDelete,
+  onEditCodigo,
 }: CertificadoHistorialCardProps) {
   const image = isImageFile(item.tipoArchivo, item.archivo);
   const pdf = isPdfFile(item.tipoArchivo, item.archivo);
@@ -68,7 +70,7 @@ export function CertificadoHistorialCard({
             {item.localNombre}
           </Text>
           <Text style={styles.meta} numberOfLines={1}>
-            {[formatFechaHora(item.createdAt), item.usuarioNombre.trim() || null]
+            {[item.codigoRegistro.trim() || null, formatFechaHora(item.createdAt), item.usuarioNombre.trim() || null]
               .filter(Boolean)
               .join(" · ")}
           </Text>
@@ -89,6 +91,11 @@ export function CertificadoHistorialCard({
           ) : null}
         </Pressable>
 
+        {onEditCodigo ? (
+          <Pressable onPress={onEditCodigo} style={styles.editCode} accessibilityLabel="Corregir código">
+            <Text style={styles.editCodeText}>CBC</Text>
+          </Pressable>
+        ) : null}
         {canDelete && onDelete ? (
           <IconAction label="Eliminar" onPress={onDelete}>
             <TrashGlyph color={theme.colors.danger} />
@@ -173,6 +180,13 @@ function TrashGlyph({ color }: { color: string }) {
 }
 
 const styles = StyleSheet.create({
+  editCode: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: "#fff7ed",
+  },
+  editCodeText: { color: "#b45309", fontWeight: "800", fontSize: 11 },
   card: {
     marginHorizontal: 10,
     marginBottom: 8,

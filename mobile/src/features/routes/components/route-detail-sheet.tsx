@@ -2,7 +2,13 @@ import { withResolvedMedia } from "@/features/routes/api";
 import { PagarasPanel } from "@/features/routes/components/pagaras-panel";
 import { RecogerasPanel } from "@/features/routes/components/recogeras-panel";
 import { StatusBadge } from "@/features/routes/components/status-badge";
-import { canFinalizeRoute, canStartRoute } from "@/features/routes/lib/permissions";
+import {
+  canArriveRoute,
+  canFinalizeRoute,
+  canReprogramRoute,
+  canSkipCollection,
+  canStartRoute,
+} from "@/features/routes/lib/permissions";
 import { estadoLabel, formatDate, formatDateTime } from "@/features/routes/lib/format";
 import type { RouteItem } from "@/features/routes/types";
 import { theme } from "@/lib/theme";
@@ -25,7 +31,10 @@ type RouteDetailSheetProps = {
   route: RouteItem | null;
   onClose: () => void;
   onStart?: () => void;
+  onArrive?: () => void;
   onFinalize?: () => void;
+  onSkip?: () => void;
+  onReprogram?: () => void;
   onSuggestRoutes?: () => void;
 };
 
@@ -33,7 +42,10 @@ export function RouteDetailSheet({
   route: rawRoute,
   onClose,
   onStart,
+  onArrive,
   onFinalize,
+  onSkip,
+  onReprogram,
   onSuggestRoutes,
 }: RouteDetailSheetProps) {
   const insets = useSafeAreaInsets();
@@ -45,7 +57,10 @@ export function RouteDetailSheet({
 
   const canNavigate = route.localLatitud != null && route.localLongitud != null;
   const showStart = canStartRoute(route) && Boolean(onStart);
+  const showArrive = canArriveRoute(route) && Boolean(onArrive);
   const showFinalize = canFinalizeRoute(route) && Boolean(onFinalize);
+  const showSkip = canSkipCollection(route) && Boolean(onSkip);
+  const showReprogram = canReprogramRoute(route) && Boolean(onReprogram);
   const showSuggest = canNavigate && Boolean(onSuggestRoutes);
   const sheetBottom =
     Platform.OS === "android"
@@ -80,13 +95,16 @@ export function RouteDetailSheet({
             </View>
 
             <View style={styles.actions}>
-              {showStart ? <Action label="Iniciar ruta" onPress={onStart!} primary /> : null}
-              {showFinalize ? <Action label="Finalizar" onPress={onFinalize!} primary /> : null}
+              {showStart ? <Action label="En ruta" onPress={onStart!} primary /> : null}
+              {showArrive ? <Action label="Llegué" onPress={onArrive!} primary /> : null}
+              {showFinalize ? <Action label="Recolectar" onPress={onFinalize!} primary /> : null}
+              {showSkip ? <Action label="No recolectado" onPress={onSkip!} /> : null}
+              {showReprogram ? <Action label="Reprogramar" onPress={onReprogram!} primary /> : null}
               {showSuggest ? (
                 <Action
                   label="Navegar en mapa"
                   onPress={onSuggestRoutes!}
-                  primary={!showStart && !showFinalize}
+                  primary={!showStart && !showArrive && !showFinalize && !showReprogram}
                 />
               ) : null}
               <Action

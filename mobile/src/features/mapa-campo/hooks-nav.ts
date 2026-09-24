@@ -18,6 +18,7 @@ import {
   mockOriginNear,
 } from "@/features/mapa-campo/lib/web-mock-gps";
 import type { CampoMapPayload, CampoNavState } from "@/features/mapa-campo/nav-types";
+import { prioridadMeta } from "@/features/locales/lib/prioridad";
 import { loadVehicleType } from "@/features/routes/flujo/lib/vehicle-store";
 import { fetchSuggestedRoutes, loadNavRestrictions } from "@/features/routes/navegacion/api";
 import {
@@ -62,6 +63,7 @@ function toPayload(
   result: DirectionsResult | null,
   selectedId: string | null,
   traveled: LatLng[],
+  destColor?: string | null,
 ): CampoMapPayload {
   const routes = result ? [result.best, ...result.alternatives.slice(0, 3)] : [];
   const activeSeconds =
@@ -75,6 +77,7 @@ function toPayload(
     position,
     heading,
     dest,
+    destColor: destColor ?? null,
     selectedId,
     traveled,
     routes: routes.map((item) => {
@@ -592,8 +595,9 @@ export function useCampoNav() {
         state.result,
         state.selectedId,
         traveled,
+        state.routeItem ? prioridadMeta(state.routeItem.prioridad).color : null,
       ),
-    [state.active, state.position, state.heading, dest, state.result, state.selectedId, traveled],
+    [state.active, state.position, state.heading, dest, state.result, state.selectedId, traveled, state.routeItem],
   );
 
   /** Web/mock: fuerza un desvío ~120 m para probar el recálculo parcial. */

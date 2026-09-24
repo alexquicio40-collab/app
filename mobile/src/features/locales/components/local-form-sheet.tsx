@@ -14,6 +14,7 @@ import {
   SelectField,
   TextField,
 } from "@/features/routes/assign/components/form-kit";
+import { PRIORIDADES, normalizePrioridad, type PrioridadProveedor } from "@/features/locales/lib/prioridad";
 import { theme } from "@/lib/theme";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -59,6 +60,7 @@ type FormState = {
   bidonRealText: string;
   bidonPasadoText: string;
   metodosPagoIds: number[];
+  prioridad: PrioridadProveedor;
 };
 
 const emptyForm = (): FormState => ({
@@ -83,6 +85,7 @@ const emptyForm = (): FormState => ({
   bidonRealText: "",
   bidonPasadoText: "",
   metodosPagoIds: [],
+  prioridad: "media",
 });
 
 export function LocalFormSheet({
@@ -156,6 +159,7 @@ export function LocalFormSheet({
       bidonRealText: local.bidonReal != null ? String(local.bidonReal) : "",
       bidonPasadoText: local.bidonPasadoPor != null ? String(local.bidonPasadoPor) : "",
       metodosPagoIds: local.metodosPago.map((m) => m.id),
+      prioridad: normalizePrioridad(local.prioridad),
     });
     setShowMap(hasCoords);
     setError(null);
@@ -335,6 +339,7 @@ export function LocalFormSheet({
         : null,
       bidonReal: parseOptionalInt(form.bidonRealText),
       bidonPasadoPor: parseOptionalInt(form.bidonPasadoText),
+      prioridad: form.prioridad,
       metodosPagoIds: form.metodosPagoIds,
       pendingFotos,
       removedFotoIds,
@@ -488,6 +493,29 @@ export function LocalFormSheet({
                 />
               </View>
             </FieldRow>
+
+            <View style={styles.field}>
+              <FieldLabel>Prioridad</FieldLabel>
+              <View style={styles.priorityRow}>
+                {PRIORIDADES.map((item) => {
+                  const on = form.prioridad === item.value;
+                  return (
+                    <Pressable
+                      key={item.value}
+                      onPress={() => patch({ prioridad: item.value })}
+                      style={[
+                        styles.priorityChip,
+                        { borderColor: item.color, backgroundColor: on ? item.color : item.soft },
+                      ]}
+                    >
+                      <Text style={[styles.priorityText, { color: on ? "#fff" : item.color }]}>
+                        {item.value === "alta" ? "Alta" : item.value === "media" ? "Media" : "Baja"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
 
             <View style={styles.field}>
               <FieldLabel>Horario proveedores</FieldLabel>
@@ -650,6 +678,15 @@ const styles = StyleSheet.create({
   closeText: { color: theme.colors.muted, fontSize: 11, fontWeight: "700" },
   body: { gap: 7, paddingBottom: 12 },
   field: { gap: 3 },
+  priorityRow: { flexDirection: "row", gap: 8 },
+  priorityChip: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  priorityText: { fontSize: 13, fontWeight: "800" },
   half: { flex: 1, minWidth: 0, gap: 3 },
   addressRow: { flexDirection: "row", gap: 6, alignItems: "stretch" },
   addressInput: { flex: 1, minWidth: 0 },

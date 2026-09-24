@@ -1,5 +1,6 @@
 import { ActionIconButton, RouteActionBar, TrashIcon } from "@/features/routes/components/route-action-bar";
 import { certLabel, certTone } from "@/features/locales/lib/format";
+import { prioridadMeta } from "@/features/locales/lib/prioridad";
 import type { LocalItem } from "@/features/locales/types";
 import { theme } from "@/lib/theme";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -14,6 +15,7 @@ type LocalCardProps = {
 
 export function LocalCard({ local, canManage, onOpen, onEdit, onDelete }: LocalCardProps) {
   const tone = TONE[certTone(local.necesitaCertificacion)];
+  const prioridad = prioridadMeta(local.prioridad);
 
   return (
     <View style={styles.card}>
@@ -26,6 +28,7 @@ export function LocalCard({ local, canManage, onOpen, onEdit, onDelete }: LocalC
           <Text style={styles.title} numberOfLines={1}>
             {local.nombre}
           </Text>
+          <View style={[styles.dot, { backgroundColor: prioridad.color }]} />
           <View style={[styles.badge, { backgroundColor: tone.bg }]}>
             <Text style={[styles.badgeText, { color: tone.fg }]} numberOfLines={1}>
               {certLabel(local.necesitaCertificacion, local.estadoCertificacion)}
@@ -86,6 +89,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 10,
   },
   title: {
     flex: 1,

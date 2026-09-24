@@ -7,7 +7,7 @@ import {
 } from "@/features/mapa-campo/lib/web-mock-gps";
 import { fetchOperadorRutas } from "@/features/routes/api";
 import { enrichRoutesWithLocales } from "@/features/routes/lib/enrich";
-import { normalizeEstado } from "@/features/routes/lib/permissions";
+import { asEstado, isCerrado, isEnCurso, isRecolectado } from "@/features/routes/lib/estados-recojo";
 import type { RouteItem } from "@/features/routes/types";
 import type { LatLng } from "@/features/routes/navegacion/types";
 import { limaDate } from "@/lib/api";
@@ -24,8 +24,7 @@ function sortByOrden(a: RouteItem, b: RouteItem) {
 
 /** Solo rutas aún por hacer / en curso (no completadas ni canceladas). */
 function isRutaActiva(route: RouteItem) {
-  const estado = normalizeEstado(route.estado);
-  return estado !== "completada" && estado !== "cancelada";
+  return !isRecolectado(route.estado) && !isCerrado(route.estado);
 }
 
 function routesFingerprint(items: RouteItem[]) {
@@ -82,8 +81,8 @@ export function useMapaCampo() {
           setSelectedId((prev) => {
             if (prev && mine.some((item) => item.id === prev)) return prev;
             const active =
-              mine.find((item) => item.estado === "en_proceso" || item.estado === "en_ruta") ??
-              mine.find((item) => item.estado === "pendiente") ??
+              mine.find((item) => isEnCurso(item.estado)) ??
+              mine.find((item) => asEstado(item.estado) === "programado") ??
               mine[0] ??
               null;
             return active?.id ?? null;
@@ -163,10 +162,8 @@ export function useMapaCampo() {
       ? { lat: selected.localLatitud, lng: selected.localLongitud }
       : null;
 
-  const pendientes = routes.filter((item) => item.estado === "pendiente").length;
-  const enCurso = routes.filter(
-    (item) => item.estado === "en_proceso" || item.estado === "en_ruta",
-  ).length;
+  const pendientes = routes.filter((item) => asEstado(item.estado) === "programado").length;
+  const enCurso = routes.filter((item) => isEnCurso(item.estado)).length;
 
   return {
     routes,

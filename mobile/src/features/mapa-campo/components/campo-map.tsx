@@ -15,10 +15,11 @@ type CampoMapProps = {
   /** Fallback idle: destino seleccionado sin sesión de nav. */
   idleOrigin?: LatLng | null;
   idleDest?: LatLng | null;
+  idleDestColor?: string | null;
   onSelectRoute?: (id: string) => void;
 };
 
-export function CampoMap({ payload, idleOrigin, idleDest, onSelectRoute }: CampoMapProps) {
+export function CampoMap({ payload, idleOrigin, idleDest, idleDestColor, onSelectRoute }: CampoMapProps) {
   const html = useMemo(() => buildCampoMapHtml(), []);
   const effective = useMemo((): CampoMapPayload => {
     if (payload && (payload.tracking || payload.routes.length > 0)) return payload;
@@ -28,11 +29,12 @@ export function CampoMap({ payload, idleOrigin, idleDest, onSelectRoute }: Campo
       position: idleOrigin ?? null,
       heading: 0,
       dest: idleDest ?? null,
+      destColor: idleDestColor ?? null,
       selectedId: null,
       routes: [],
       traveled: [],
     };
-  }, [payload, idleOrigin, idleDest]);
+  }, [payload, idleOrigin, idleDest, idleDestColor]);
 
   const webRef = useRef<WebView>(null);
   const frameRef = useRef<{

@@ -1,4 +1,5 @@
 import { limaDate } from "@/lib/api";
+import { asEstado, isEnCurso, isRecolectado } from "./estados-recojo";
 import { LIMA_DISTRITOS, toDayKey } from "./format";
 import type { RouteItem, RoutesCounts, RoutesFilters } from "../types";
 
@@ -53,10 +54,7 @@ export function filterRoutes(routes: RouteItem[], filters: RoutesFilters) {
 
     const matchConductor = !filters.conductorId || route.conductorId === filters.conductorId;
 
-    const matchEstado =
-      !filters.estado ||
-      route.estado === filters.estado ||
-      (filters.estado === "en_proceso" && route.estado === "en_ruta");
+    const matchEstado = !filters.estado || asEstado(route.estado) === filters.estado;
 
     const matchFecha = inDateRange(
       toDayKey(route.fechaAsignacion),
@@ -91,18 +89,17 @@ export function filterRoutes(routes: RouteItem[], filters: RoutesFilters) {
 }
 
 export function countByEstado(routes: RouteItem[]): RoutesCounts {
-  let pendiente = 0;
-  let enProceso = 0;
-  let completada = 0;
+  let programado = 0;
+  let enCurso = 0;
+  let recolectado = 0;
 
   for (const route of routes) {
-    const estado = route.estado.toLowerCase();
-    if (estado === "pendiente") pendiente += 1;
-    else if (estado === "en_proceso" || estado === "en_ruta") enProceso += 1;
-    else if (estado === "completada") completada += 1;
+    if (asEstado(route.estado) === "programado") programado += 1;
+    else if (isEnCurso(route.estado)) enCurso += 1;
+    else if (isRecolectado(route.estado)) recolectado += 1;
   }
 
-  return { pendiente, enProceso, completada };
+  return { programado, enCurso, recolectado };
 }
 
 export function hasActiveFilters(filters: RoutesFilters) {

@@ -8,6 +8,7 @@ import {
   useMapaCampo,
 } from "@/features/mapa-campo";
 import { routePagoHint, routeRecogeHint } from "@/features/mapa-campo/lib/route-hints";
+import { prioridadMeta } from "@/features/locales/lib/prioridad";
 import {
   CompanionsSheet,
   FinalizarRutaSheet,
@@ -68,6 +69,7 @@ export default function MapaScreen() {
             payload={nav.mapPayload}
             idleOrigin={campo.origin}
             idleDest={campo.dest}
+            idleDestColor={campo.selected ? prioridadMeta(campo.selected.prioridad).color : null}
             onSelectRoute={nav.selectAlternative}
           />
         )}
@@ -141,7 +143,7 @@ export default function MapaScreen() {
               onToggle={() => campo.setPanelOpen((v) => !v)}
               onSelect={campo.setSelectedId}
               onStart={(route) => {
-                if (route.estado === "pendiente") {
+                if (route.estado === "programado") {
                   void flujo.openStart(route);
                   return;
                 }

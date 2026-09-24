@@ -8,9 +8,9 @@ export type DashboardSummary = {
     certificados: number;
   };
   rutasHoy: {
-    pendientes: number;
-    enProceso: number;
-    completadas: number;
+    programadas: number;
+    enCurso: number;
+    recolectadas: number;
   };
   actividad: { fecha: string; puntos: number }[];
 };

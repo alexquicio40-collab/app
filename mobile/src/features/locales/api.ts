@@ -1,4 +1,5 @@
 import { api, apiUpload, getApiBaseUrl } from "@/lib/api";
+import { normalizePrioridad } from "./lib/prioridad";
 import type { LocalFormInput, LocalFoto, LocalItem, PendingLocalFoto } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
@@ -122,6 +123,7 @@ export function parseLocal(
     metodosPago: parseMetodos(row.metodos_pago),
     // Fotos: caras de parsear en listados grandes; se hidratan al abrir detalle.
     fotos: includeFotos ? parseFotos(row.fotos, id) : [],
+    prioridad: normalizePrioridad(text(row.prioridad)),
   };
 }
 
@@ -150,6 +152,7 @@ function toBody(input: LocalFormInput) {
     bidon_real: input.bidonReal ?? null,
     bidon_pasado_por: input.bidonPasadoPor ?? null,
     metodos_pago_ids: input.metodosPagoIds ?? [],
+    prioridad: normalizePrioridad(input.prioridad),
   };
 }
 

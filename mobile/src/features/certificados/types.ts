@@ -38,6 +38,7 @@ export type CertificadoHistorial = {
   rutaFecha: string | null;
   rutaFechaCompletada: string | null;
   conductorNombre: string;
+  codigoRegistro: string;
 };
 
 export type PendientesFilters = {

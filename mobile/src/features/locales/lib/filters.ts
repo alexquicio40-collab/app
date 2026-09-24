@@ -1,4 +1,5 @@
 import { LIMA_DISTRITOS } from "@/features/routes/lib/format";
+import { normalizePrioridad } from "./prioridad";
 import type { LocalItem, LocalesCounts, LocalesFilters } from "../types";
 
 export function createDefaultLocalFilters(): LocalesFilters {
@@ -7,6 +8,7 @@ export function createDefaultLocalFilters(): LocalesFilters {
     distrito: null,
     certificacion: null,
     frecuencia: null,
+    prioridad: null,
   };
 }
 
@@ -63,7 +65,10 @@ export function filterLocales(locales: LocalItem[], filters: LocalesFilters) {
         !filters.frecuencia ||
         local.frecuencias.some((f) => f.toLowerCase() === filters.frecuencia!.toLowerCase());
 
-      return matchSearch && matchDistrito && matchCert && matchFreq;
+      const matchPrioridad =
+        !filters.prioridad || normalizePrioridad(local.prioridad) === filters.prioridad;
+
+      return matchSearch && matchDistrito && matchCert && matchFreq && matchPrioridad;
     })
     .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 }
@@ -80,6 +85,10 @@ export function countLocales(locales: LocalItem[]): LocalesCounts {
 
 export function hasActiveLocalFilters(filters: LocalesFilters) {
   return Boolean(
-    filters.search.trim() || filters.distrito || filters.certificacion || filters.frecuencia,
+    filters.search.trim() ||
+      filters.distrito ||
+      filters.certificacion ||
+      filters.frecuencia ||
+      filters.prioridad,
   );
 }

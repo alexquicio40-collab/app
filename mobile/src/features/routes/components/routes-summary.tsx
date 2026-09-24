@@ -12,9 +12,9 @@ export function RoutesSummary({ total, counts }: RoutesSummaryProps) {
     <View style={styles.row}>
       <Text style={styles.total}>{total} ruta{total === 1 ? "" : "s"}</Text>
       <View style={styles.chips}>
-        <Count label="P" value={counts.pendiente} color={theme.colors.warn} bg={theme.colors.warnSoft} />
-        <Count label="R" value={counts.enProceso} color={theme.colors.info} bg={theme.colors.infoSoft} />
-        <Count label="C" value={counts.completada} color={theme.colors.accent} bg={theme.colors.accentSoft} />
+        <Count label="Prog" value={counts.programado} color={theme.colors.warn} bg={theme.colors.warnSoft} />
+        <Count label="Ruta" value={counts.enCurso} color={theme.colors.info} bg={theme.colors.infoSoft} />
+        <Count label="Rec" value={counts.recolectado} color={theme.colors.accent} bg={theme.colors.accentSoft} />
       </View>
     </View>
   );

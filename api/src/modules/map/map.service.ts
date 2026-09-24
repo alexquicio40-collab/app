@@ -74,7 +74,7 @@ export async function getLiveMap(): Promise<MapLive> {
       INNER JOIN usuarios u ON u.id = r.conductor_id
       INNER JOIN locales l ON l.id = r.local_id
       WHERE DATE(r.fecha_asignacion) = CURDATE()
-        AND r.estado IN ('pendiente', 'en_proceso', 'en_ruta')
+        AND r.estado IN ('programado', 'en_ruta', 'llego', 'pendiente', 'en_proceso')
         AND l.latitud IS NOT NULL
         AND l.longitud IS NOT NULL
     `),

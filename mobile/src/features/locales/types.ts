@@ -43,6 +43,7 @@ export type LocalItem = {
   frecuencias: string[];
   metodosPago: { id: number; nombre: string }[];
   fotos: LocalFoto[];
+  prioridad: "alta" | "media" | "baja";
 };
 
 export type LocalFormInput = {
@@ -67,6 +68,7 @@ export type LocalFormInput = {
   bidonReal?: number | null;
   bidonPasadoPor?: number | null;
   metodosPagoIds?: number[];
+  prioridad?: "alta" | "media" | "baja";
   pendingFotos?: PendingLocalFoto[];
   removedFotoIds?: string[];
 };
@@ -76,6 +78,7 @@ export type LocalesFilters = {
   distrito: string | null;
   certificacion: string | null;
   frecuencia: string | null;
+  prioridad: string | null;
 };
 
 export type LocalesCounts = {

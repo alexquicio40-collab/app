@@ -1,4 +1,5 @@
 import type { PlantaRegistro } from "@/features/planta/types";
+import { asEstado } from "@/features/routes/lib/estados-recojo";
 import type { RouteItem } from "@/features/routes/types";
 import { dayKeyFromIso } from "./period";
 import type {
@@ -55,26 +56,30 @@ export function filterPlantaByPeriod(
 
 function conteoRutas(rows: RouteItem[]): RutasConteo {
   const map = {
-    pendiente: 0,
-    en_proceso: 0,
-    en_ruta: 0,
-    completada: 0,
-    cancelada: 0,
+    programado: 0,
+    enRuta: 0,
+    llego: 0,
+    recolectado: 0,
+    noRecolectado: 0,
+    reprogramado: 0,
+    cerrado: 0,
   };
   for (const item of rows) {
-    const estado = String(item.estado || "").toLowerCase();
-    if (estado in map) map[estado as keyof typeof map] += 1;
+    const estado = asEstado(item.estado);
+    if (estado === "programado") map.programado += 1;
+    else if (estado === "en_ruta") map.enRuta += 1;
+    else if (estado === "llego") map.llego += 1;
+    else if (estado === "recolectado") map.recolectado += 1;
+    else if (estado === "no_recolectado") map.noRecolectado += 1;
+    else if (estado === "reprogramado") map.reprogramado += 1;
+    else if (estado === "cerrado") map.cerrado += 1;
   }
   const total = rows.length;
-  const efectivo = total - map.cancelada;
+  const efectivo = total - map.cerrado;
   return {
     total,
-    pendiente: map.pendiente,
-    enProceso: map.en_proceso,
-    enRuta: map.en_ruta,
-    completada: map.completada,
-    cancelada: map.cancelada,
-    cumplimientoPct: efectivo > 0 ? Math.round((map.completada / efectivo) * 1000) / 10 : 0,
+    ...map,
+    cumplimientoPct: efectivo > 0 ? Math.round((map.recolectado / efectivo) * 1000) / 10 : 0,
   };
 }
 
@@ -88,11 +93,13 @@ function porConductor(rows: RouteItem[]): ConductorAgg[] {
         id,
         nombre: item.conductorNombre || "Sin conductor",
         total: 0,
-        pendiente: 0,
-        enProceso: 0,
+        programado: 0,
         enRuta: 0,
-        completada: 0,
-        cancelada: 0,
+        llego: 0,
+        recolectado: 0,
+        noRecolectado: 0,
+        reprogramado: 0,
+        cerrado: 0,
         litros: 0,
         baldes: 0,
         galoneras: 0,
@@ -101,12 +108,14 @@ function porConductor(rows: RouteItem[]): ConductorAgg[] {
     prev.litros += item.litraje ?? 0;
     prev.baldes += item.baldesVacios ?? 0;
     prev.galoneras += item.galonerasVacias ?? 0;
-    const estado = String(item.estado || "").toLowerCase();
-    if (estado === "pendiente") prev.pendiente += 1;
-    else if (estado === "en_proceso") prev.enProceso += 1;
+    const estado = asEstado(item.estado);
+    if (estado === "programado") prev.programado += 1;
     else if (estado === "en_ruta") prev.enRuta += 1;
-    else if (estado === "completada") prev.completada += 1;
-    else if (estado === "cancelada") prev.cancelada += 1;
+    else if (estado === "llego") prev.llego += 1;
+    else if (estado === "recolectado") prev.recolectado += 1;
+    else if (estado === "no_recolectado") prev.noRecolectado += 1;
+    else if (estado === "reprogramado") prev.reprogramado += 1;
+    else if (estado === "cerrado") prev.cerrado += 1;
     map.set(id, prev);
   }
   return [...map.values()].sort((a, b) => b.total - a.total);
@@ -122,15 +131,15 @@ function porLocal(rows: RouteItem[]): LocalAgg[] {
         id,
         nombre: item.localNombre || "Sin local",
         total: 0,
-        completada: 0,
-        pendiente: 0,
-        cancelada: 0,
+        recolectado: 0,
+        programado: 0,
+        cerrado: 0,
       } satisfies LocalAgg);
     prev.total += 1;
-    const estado = String(item.estado || "").toLowerCase();
-    if (estado === "completada") prev.completada += 1;
-    else if (estado === "pendiente") prev.pendiente += 1;
-    else if (estado === "cancelada") prev.cancelada += 1;
+    const estado = asEstado(item.estado);
+    if (estado === "recolectado") prev.recolectado += 1;
+    else if (estado === "programado") prev.programado += 1;
+    else if (estado === "cerrado") prev.cerrado += 1;
     map.set(id, prev);
   }
   return [...map.values()].sort((a, b) => b.total - a.total).slice(0, 20);

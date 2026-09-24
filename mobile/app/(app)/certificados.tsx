@@ -1,3 +1,4 @@
+import { CertificadoCodigoSheet } from "@/features/certificados/components/certificado-codigo-sheet";
 import { CertificadoHistorialCard } from "@/features/certificados/components/certificado-historial-card";
 import { CertificadoHistorialDetailSheet } from "@/features/certificados/components/certificado-historial-detail-sheet";
 import { CertificadoPendienteCard } from "@/features/certificados/components/certificado-pendiente-card";
@@ -35,7 +36,7 @@ export default function CertificadosScreen() {
         item={item}
         canUpload={screen.canUpload}
         onOpenDetail={() => screen.openDetail(item)}
-        onUpload={() => screen.openUpload(item)}
+        onUpload={() => void screen.generar(item)}
       />
     ),
     [screen],
@@ -48,6 +49,7 @@ export default function CertificadosScreen() {
         canDelete={screen.canDeleteHistorial}
         onView={() => screen.openViewer(item)}
         onOpenDetail={() => screen.openHistorialDetail(item)}
+        onEditCodigo={() => screen.abrirEditarCodigo(item)}
         onDelete={
           screen.canDeleteHistorial ? () => void screen.removeHistorial(item) : undefined
         }
@@ -58,7 +60,17 @@ export default function CertificadosScreen() {
 
   return (
     <View style={styles.safe}>
-      <ScreenHeader title="Certificados" compact />
+      <ScreenHeader
+        title="Certificados"
+        compact
+        trailing={
+          screen.canUpload ? (
+            <Pressable onPress={screen.abrirManual} style={styles.manualBtn}>
+              <Text style={styles.manualText}>Manual</Text>
+            </Pressable>
+          ) : null
+        }
+      />
 
       <CertificadosStats
         pendientes={screen.stats.pendientes}
@@ -173,6 +185,17 @@ export default function CertificadosScreen() {
         onClose={screen.closeHistorialDetail}
       />
 
+      <CertificadoCodigoSheet
+        visible={screen.codigoModo != null}
+        title={screen.codigoModo === "editar" ? "Corregir código" : "Certificado manual"}
+        hint="Si el automático salió mal, escribe el código CBC-0664-2026."
+        codigoInicial={screen.codigoInicial}
+        pedirLocal={screen.codigoModo === "manual"}
+        saving={screen.mutating}
+        onClose={screen.cerrarCodigo}
+        onSubmit={(value) => void screen.guardarCodigo(value)}
+      />
+
       <CertificadoViewerSheet
         item={screen.viewer}
         canDelete={screen.canDeleteHistorial}
@@ -211,6 +234,13 @@ function Empty({
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bg },
+  manualBtn: {
+    backgroundColor: "#b45309",
+    borderRadius: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  manualText: { color: "#fff", fontWeight: "800", fontSize: 12 },
   list: { paddingTop: 8, flexGrow: 1 },
   center: {
     flex: 1,

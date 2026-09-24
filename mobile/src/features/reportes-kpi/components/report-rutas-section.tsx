@@ -8,7 +8,7 @@ type ReportRutasSectionProps = {
 };
 
 export function ReportRutasSection({ rutas }: ReportRutasSectionProps) {
-  const enRuta = rutas.enProceso + rutas.enRuta;
+  const enCurso = rutas.enRuta + rutas.llego;
   const tone =
     rutas.cumplimientoPct >= 80 ? "good" : rutas.cumplimientoPct >= 50 ? "mid" : "bad";
   const barColor =
@@ -24,10 +24,10 @@ export function ReportRutasSection({ rutas }: ReportRutasSectionProps) {
 
       <View style={styles.grid}>
         <Stat label="Total" value={formatQty(rutas.total)} tone="ink" edge="tr" />
-        <Stat label="Completadas" value={formatQty(rutas.completada)} tone="accent" edge="tr" />
-        <Stat label="Pendientes" value={formatQty(rutas.pendiente)} tone="warn" edge="t" />
-        <Stat label="En ruta" value={formatQty(enRuta)} tone="info" edge="r" />
-        <Stat label="Canceladas" value={formatQty(rutas.cancelada)} tone="danger" edge="r" />
+        <Stat label="Recolectadas" value={formatQty(rutas.recolectado)} tone="accent" edge="tr" />
+        <Stat label="Programadas" value={formatQty(rutas.programado)} tone="warn" edge="t" />
+        <Stat label="En ruta" value={formatQty(enCurso)} tone="info" edge="r" />
+        <Stat label="Cerradas" value={formatQty(rutas.cerrado)} tone="danger" edge="r" />
         <Stat label="Cumplim." value={formatPct(rutas.cumplimientoPct)} tone="gold" edge="none" />
       </View>
 
@@ -49,7 +49,7 @@ export function ReportRutasSection({ rutas }: ReportRutasSectionProps) {
             ]}
           />
         </View>
-        <Text style={styles.hint}>Completadas vs. asignadas (sin contar canceladas)</Text>
+        <Text style={styles.hint}>Recolectadas vs. asignadas (sin contar cerradas)</Text>
       </View>
     </View>
   );

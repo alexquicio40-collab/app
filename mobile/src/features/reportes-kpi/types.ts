@@ -15,11 +15,13 @@ export type EnvasesTotales = {
 
 export type RutasConteo = {
   total: number;
-  pendiente: number;
-  enProceso: number;
+  programado: number;
   enRuta: number;
-  completada: number;
-  cancelada: number;
+  llego: number;
+  recolectado: number;
+  noRecolectado: number;
+  reprogramado: number;
+  cerrado: number;
   cumplimientoPct: number;
 };
 
@@ -27,11 +29,13 @@ export type ConductorAgg = {
   id: string;
   nombre: string;
   total: number;
-  pendiente: number;
-  enProceso: number;
+  programado: number;
   enRuta: number;
-  completada: number;
-  cancelada: number;
+  llego: number;
+  recolectado: number;
+  noRecolectado: number;
+  reprogramado: number;
+  cerrado: number;
   litros: number;
   baldes: number;
   galoneras: number;
@@ -41,9 +45,9 @@ export type LocalAgg = {
   id: string;
   nombre: string;
   total: number;
-  completada: number;
-  pendiente: number;
-  cancelada: number;
+  recolectado: number;
+  programado: number;
+  cerrado: number;
 };
 
 export type PlantaAsesorAgg = {

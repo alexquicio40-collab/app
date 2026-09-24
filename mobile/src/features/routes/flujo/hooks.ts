@@ -2,7 +2,14 @@ import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useState } from "react";
 import { Alert, Platform } from "react-native";
 import type { RouteItem } from "../types";
-import { fetchFinalizacionConfig, finalizarRuta, startRuta } from "./api";
+import {
+  fetchFinalizacionConfig,
+  finalizarRuta,
+  llegarRuta,
+  marcarNoRecolectado,
+  reprogramarRuta,
+  startRuta,
+} from "./api";
 import { emptyFinalizacionConfig } from "./lib/validate";
 import { loadVehicleType, saveVehicleType } from "./lib/vehicle-store";
 import type {
@@ -59,6 +66,23 @@ export function useRutaFlujo(onChanged?: () => void) {
       setCompanionsOpen(true);
     },
     [startRoute],
+  );
+
+  const runEstado = useCallback(
+    async (route: RouteItem, action: (id: string) => Promise<unknown>, okTitle: string, okMessage: string) => {
+      setMutating(true);
+      try {
+        await action(route.id);
+        notify(okTitle, okMessage);
+        onChanged?.();
+      } catch (err) {
+        notify("Error", err instanceof Error ? err.message : "No se pudo actualizar el estado");
+        throw err;
+      } finally {
+        setMutating(false);
+      }
+    },
+    [onChanged],
   );
 
   const confirmStart = useCallback(
@@ -137,6 +161,11 @@ export function useRutaFlujo(onChanged?: () => void) {
     closeStart,
     confirmVehicle,
     confirmStart,
+    arrive: (route: RouteItem) => runEstado(route, llegarRuta, "Llegó", "Quedó registrada la llegada"),
+    skipCollection: (route: RouteItem) =>
+      runEstado(route, marcarNoRecolectado, "No recolectado", "La visita quedó sin recojo"),
+    reprogram: (route: RouteItem) =>
+      runEstado(route, reprogramarRuta, "Reprogramado", "El recojo quedó reprogramado"),
     backToVehicle: () => {
       setCompanionsOpen(false);
       setVehicleOpen(true);

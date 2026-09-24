@@ -11,7 +11,7 @@ const EMPTY: DashboardSummary = {
     rutasPendientes: 0,
     certificados: 0,
   },
-  rutasHoy: { pendientes: 0, enProceso: 0, completadas: 0 },
+  rutasHoy: { programadas: 0, enCurso: 0, recolectadas: 0 },
   actividad: [],
 };
 

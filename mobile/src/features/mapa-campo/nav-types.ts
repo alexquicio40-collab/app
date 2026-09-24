@@ -17,6 +17,7 @@ export type CampoMapPayload = {
   position: LatLng | null;
   heading: number;
   dest: LatLng | null;
+  destColor?: string | null;
   selectedId: string | null;
   routes: NavMapRoute[];
   /** Tramo ya recorrido (no se recalcula). */

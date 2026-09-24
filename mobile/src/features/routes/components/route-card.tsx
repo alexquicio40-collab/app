@@ -1,10 +1,13 @@
 import { ActionIconButton, RouteActionBar, TrashIcon } from "@/features/routes/components/route-action-bar";
 import { StatusBadge } from "@/features/routes/components/status-badge";
 import {
+  canArriveRoute,
   canChangeStatus,
   canDeleteRoute,
   canEditRoute,
   canFinalizeRoute,
+  canReprogramRoute,
+  canSkipCollection,
   canStartRoute,
   isActionableRoute,
 } from "@/features/routes/lib/permissions";
@@ -19,7 +22,10 @@ export type RouteCardActions = {
   onChangeStatus?: () => void;
   onDelete?: () => void;
   onStart?: () => void;
+  onArrive?: () => void;
   onFinalize?: () => void;
+  onSkip?: () => void;
+  onReprogram?: () => void;
 };
 
 type RouteCardProps = {
@@ -33,11 +39,15 @@ export function RouteCard({ route, actions }: RouteCardProps) {
   const showStatus = actionable && canChangeStatus(route) && Boolean(actions.onChangeStatus);
   const showDelete = actionable && canDeleteRoute(route) && Boolean(actions.onDelete);
   const showStart = canStartRoute(route) && Boolean(actions.onStart);
+  const showArrive = canArriveRoute(route) && Boolean(actions.onArrive);
   const showFinalize = canFinalizeRoute(route) && Boolean(actions.onFinalize);
-  const hasActions = showEdit || showStatus || showDelete || showStart || showFinalize;
+  const showSkip = canSkipCollection(route) && Boolean(actions.onSkip);
+  const showReprogram = canReprogramRoute(route) && Boolean(actions.onReprogram);
+  const hasActions =
+    showEdit || showStatus || showDelete || showStart || showArrive || showFinalize || showSkip || showReprogram;
 
   const hasQty =
-    route.estado === "completada" && (route.litraje || route.baldesVacios || route.galonerasVacias);
+    route.estado === "recolectado" && (route.litraje || route.baldesVacios || route.galonerasVacias);
 
   return (
     <View style={styles.card}>
@@ -84,7 +94,7 @@ export function RouteCard({ route, actions }: RouteCardProps) {
           route.cantidadBidonesAzules ||
           route.cantidadBidonesBlancos ||
           route.metodosPago.length > 0) &&
-        route.estado !== "completada" ? (
+        route.estado !== "recolectado" ? (
           <Text style={styles.pickup} numberOfLines={1}>
             {[
               route.tipoEnvase || null,
@@ -104,15 +114,19 @@ export function RouteCard({ route, actions }: RouteCardProps) {
       {hasActions ? (
         <RouteActionBar>
           {showStart ? (
-            <ActionIconButton label="Iniciar" glyph="▶" tone="accent" onPress={actions.onStart!} />
+            <ActionIconButton label="En ruta" glyph="▶" tone="accent" onPress={actions.onStart!} />
+          ) : null}
+          {showArrive ? (
+            <ActionIconButton label="Llegué" glyph="◎" tone="info" onPress={actions.onArrive!} />
           ) : null}
           {showFinalize ? (
-            <ActionIconButton
-              label="Finalizar"
-              glyph="✓"
-              tone="info"
-              onPress={actions.onFinalize!}
-            />
+            <ActionIconButton label="Recolectar" glyph="✓" tone="info" onPress={actions.onFinalize!} />
+          ) : null}
+          {showSkip ? (
+            <ActionIconButton label="No recojo" glyph="✕" tone="danger" onPress={actions.onSkip!} />
+          ) : null}
+          {showReprogram ? (
+            <ActionIconButton label="Reprogramar" glyph="↻" tone="accent" onPress={actions.onReprogram!} />
           ) : null}
           {showEdit ? (
             <ActionIconButton label="Editar" glyph="✎" tone="accent" onPress={actions.onEdit!} />

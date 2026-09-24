@@ -111,6 +111,7 @@ export function parseHistorial(row: UnknownRecord): CertificadoHistorial | null 
     rutaFecha: text(row.ruta_fecha) || null,
     rutaFechaCompletada: text(row.ruta_fecha_completada) || null,
     conductorNombre: text(row.conductor_nombre),
+    codigoRegistro: text(row.codigo_registro),
   };
 }
 
@@ -157,6 +158,16 @@ export async function fetchHistorial(
     .filter((item): item is CertificadoHistorial => Boolean(item));
 }
 
+export async function generarCertificado(localId: string, rutaId: string | null) {
+  return api<{ success?: boolean; codigo?: string; archivo?: string; message?: string }>(
+    "/api/certificados/generar",
+    {
+      method: "POST",
+      body: { local_id: localId, ruta_id: rutaId },
+    },
+  );
+}
+
 export async function uploadCertificado(localId: string, input: CertUploadInput) {
   const form = new FormData();
   await appendFile(form, "certificado", input.file);
@@ -167,6 +178,20 @@ export async function uploadCertificado(localId: string, input: CertUploadInput)
     form.append("ruta_asignada_id", input.rutaAsignadaId);
   }
   return apiUpload<unknown>(`/api/certificados/${localId}/upload`, form, { method: "POST" });
+}
+
+export async function generarCertificadoManual(localId: string, codigo: string, rutaId?: string | null) {
+  return api<{ success?: boolean; codigo?: string; message?: string }>("/api/certificados/manual", {
+    method: "POST",
+    body: { local_id: localId, ruta_id: rutaId || null, codigo },
+  });
+}
+
+export async function corregirCodigoCertificado(id: string, codigo: string) {
+  return api<{ success?: boolean; codigo?: string; message?: string }>(
+    `/api/certificados/historial/${id}/codigo`,
+    { method: "PUT", body: { codigo } },
+  );
 }
 
 export async function deleteHistorialItem(id: string) {

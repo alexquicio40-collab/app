@@ -3,13 +3,13 @@ import { theme } from "@/lib/theme";
 import { StyleSheet, Text, View } from "react-native";
 
 const PARTS = [
-  { key: "completadas", label: "Hechas", color: theme.colors.accent },
-  { key: "enProceso", label: "En curso", color: theme.colors.info },
-  { key: "pendientes", label: "Pendientes", color: theme.colors.warn },
+  { key: "recolectadas", label: "Recolectadas", color: theme.colors.accent },
+  { key: "enCurso", label: "En curso", color: theme.colors.info },
+  { key: "programadas", label: "Programadas", color: theme.colors.warn },
 ] as const;
 
 export function RoutesWidget({ rutasHoy }: { rutasHoy: DashboardSummary["rutasHoy"] }) {
-  const total = rutasHoy.pendientes + rutasHoy.enProceso + rutasHoy.completadas;
+  const total = rutasHoy.programadas + rutasHoy.enCurso + rutasHoy.recolectadas;
 
   return (
     <View style={styles.card}>

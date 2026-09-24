@@ -149,8 +149,9 @@ export function buildCampoMapHtml() {
       });
     }
 
-    function ensureDestMarker(dest) {
-      var key = dest ? dest.lat + ',' + dest.lng : '';
+    function ensureDestMarker(dest, color) {
+      var fill = color || '#E53935';
+      var key = dest ? dest.lat + ',' + dest.lng + ':' + fill : '';
       if (!dest) {
         if (destMarker) { destMarker.setMap(null); destMarker = null; }
         lastDestKey = '';
@@ -163,7 +164,7 @@ export function buildCampoMapHtml() {
         position: dest, map: map, title: 'Destino', zIndex: 45,
         icon: {
           path: google.maps.SymbolPath.CIRCLE, scale: 8,
-          fillColor: '#B42318', fillOpacity: 1, strokeColor: '#FFFFFF', strokeWeight: 2,
+          fillColor: fill, fillOpacity: 1, strokeColor: '#FFFFFF', strokeWeight: 2,
         },
       });
     }
@@ -293,7 +294,7 @@ export function buildCampoMapHtml() {
       var routes = payload.routes || [];
 
       var routeBounds = drawRoutes(routes, selectedId, payload.traveled || []);
-      ensureDestMarker(dest);
+      ensureDestMarker(dest, payload.destColor);
       setMe(position, heading, tracking);
 
       if (!tracking && routeBounds) {

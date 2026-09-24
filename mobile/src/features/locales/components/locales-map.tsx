@@ -3,7 +3,7 @@ import {
   localesMapUpdateScript,
   type LocalesMapPin,
 } from "@/features/locales/lib/locales-map-html";
-import { pinTone } from "@/features/locales/lib/format";
+import { normalizePrioridad } from "@/features/locales/lib/prioridad";
 import type { LocalItem } from "@/features/locales/types";
 import { theme } from "@/lib/theme";
 import { useEffect, useMemo, useRef } from "react";
@@ -24,7 +24,7 @@ function toPins(locales: LocalItem[]): LocalesMapPin[] {
       nombre: item.nombre,
       lat: item.latitud!,
       lng: item.longitud!,
-      tone: pinTone(item.necesitaCertificacion),
+      tone: normalizePrioridad(item.prioridad),
     }));
 }
 
