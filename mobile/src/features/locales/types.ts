@@ -20,6 +20,7 @@ export type LocalItem = {
   id: string;
   nombre: string;
   direccion: string;
+  direccionCert: string;
   latitud: number | null;
   longitud: number | null;
   horarioEntrada: string;
@@ -49,6 +50,7 @@ export type LocalItem = {
 export type LocalFormInput = {
   nombre: string;
   direccion: string;
+  direccionCert: string;
   latitud: number | null;
   longitud: number | null;
   horarioEntrada?: string;

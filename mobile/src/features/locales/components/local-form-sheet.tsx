@@ -41,6 +41,7 @@ type LocalFormSheetProps = {
 type FormState = {
   nombre: string;
   direccion: string;
+  direccionCert: string;
   lat: number | null;
   lng: number | null;
   horarioEntrada: string;
@@ -66,6 +67,7 @@ type FormState = {
 const emptyForm = (): FormState => ({
   nombre: "",
   direccion: "",
+  direccionCert: "",
   lat: null,
   lng: null,
   horarioEntrada: "",
@@ -140,6 +142,7 @@ export function LocalFormSheet({
       ...emptyForm(),
       nombre: local.nombre,
       direccion: local.direccion,
+      direccionCert: local.direccionCert,
       lat: local.latitud,
       lng: local.longitud,
       horarioEntrada: local.horarioEntrada,
@@ -317,6 +320,7 @@ export function LocalFormSheet({
     await onSave({
       nombre,
       direccion,
+      direccionCert: form.direccionCert.trim(),
       latitud: form.lat,
       longitud: form.lng,
       horarioEntrada: form.horarioEntrada.trim(),
@@ -431,6 +435,15 @@ export function LocalFormSheet({
                 </Pressable>
               </View>
               {geoStatus ? <Text style={styles.geoStatus}>{geoStatus}</Text> : null}
+            </View>
+
+            <View style={styles.field}>
+              <FieldLabel>Dirección cert.</FieldLabel>
+              <TextField
+                value={form.direccionCert}
+                onChangeText={(direccionCert) => patch({ direccionCert })}
+                placeholder="Solo se usa en el certificado"
+              />
             </View>
 
             <View style={styles.mapBlock}>

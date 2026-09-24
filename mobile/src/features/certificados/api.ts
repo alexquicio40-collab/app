@@ -158,12 +158,51 @@ export async function fetchHistorial(
     .filter((item): item is CertificadoHistorial => Boolean(item));
 }
 
-export async function generarCertificado(localId: string, rutaId: string | null) {
+export type CertificadoTexto = {
+  codigo: string;
+  fechaEmision: string;
+  fechaRetiro: string;
+  numeroGuia: string;
+  litros: string;
+  cliente: string;
+  localNombre: string;
+  localDireccion: string;
+  fechaProsa: string;
+};
+
+export async function fetchBorradorCertificado(localId: string, rutaId: string | null) {
+  const payload = await api<{ borrador?: Record<string, unknown> }>(
+    "/api/certificados/borrador",
+    { method: "POST", body: { local_id: localId, ruta_id: rutaId } },
+  );
+  const row = payload.borrador;
+  if (!row) return null;
+  const prosa = String(row.fechaProsa ?? "");
+  return {
+    codigo: String(row.codigo ?? ""),
+    fechaEmision: String(row.fechaEmision ?? ""),
+    fechaRetiro: String(row.fechaRetiro ?? ""),
+    numeroGuia: String(row.numeroGuia ?? ""),
+    litros: String(row.litros ?? ""),
+    cliente: String(row.cliente ?? ""),
+    localNombre: String(row.localNombre ?? ""),
+    localDireccion: String(row.localDireccion ?? ""),
+    fechaProsa: prosa.startsWith("El presente certificado")
+      ? prosa
+      : `El presente certificado es por todo el retiro del día ${prosa}.`,
+  };
+}
+
+export async function generarCertificado(
+  localId: string,
+  rutaId: string | null,
+  texto?: CertificadoTexto,
+) {
   return api<{ success?: boolean; codigo?: string; archivo?: string; message?: string }>(
     "/api/certificados/generar",
     {
       method: "POST",
-      body: { local_id: localId, ruta_id: rutaId },
+      body: { local_id: localId, ruta_id: rutaId, texto },
     },
   );
 }

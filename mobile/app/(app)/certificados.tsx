@@ -1,4 +1,5 @@
 import { CertificadoCodigoSheet } from "@/features/certificados/components/certificado-codigo-sheet";
+import { CertificadoTextoSheet } from "@/features/certificados/components/certificado-texto-sheet";
 import { CertificadoHistorialCard } from "@/features/certificados/components/certificado-historial-card";
 import { CertificadoHistorialDetailSheet } from "@/features/certificados/components/certificado-historial-detail-sheet";
 import { CertificadoPendienteCard } from "@/features/certificados/components/certificado-pendiente-card";
@@ -183,6 +184,13 @@ export default function CertificadosScreen() {
       <CertificadoHistorialDetailSheet
         item={screen.historialDetail}
         onClose={screen.closeHistorialDetail}
+      />
+
+      <CertificadoTextoSheet
+        value={screen.borrador}
+        saving={screen.mutating}
+        onClose={screen.cerrarBorrador}
+        onProcess={(texto) => void screen.procesarBorrador(texto)}
       />
 
       <CertificadoCodigoSheet

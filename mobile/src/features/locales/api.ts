@@ -99,6 +99,7 @@ export function parseLocal(
     id,
     nombre: text(row.nombre) || `Local ${id}`,
     direccion: text(row.direccion),
+    direccionCert: text(row.direccion_cert),
     latitud: num(row.latitud, row.lat),
     longitud: num(row.longitud, row.lng),
     horarioEntrada: text(row.horario_entrada_proveedores),
@@ -131,6 +132,7 @@ function toBody(input: LocalFormInput) {
   return {
     nombre: input.nombre,
     direccion: input.direccion,
+    direccion_cert: input.direccionCert || null,
     latitud: input.latitud,
     longitud: input.longitud,
     horario_entrada_proveedores: input.horarioEntrada || null,

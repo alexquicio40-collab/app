@@ -6,9 +6,11 @@ import {
   deleteHistorialItem,
   fetchAsesoresFromPendientes,
   fetchHistorial,
+  fetchBorradorCertificado,
   fetchPendientes,
   generarCertificado,
   generarCertificadoManual,
+  type CertificadoTexto,
 } from "./api";
 import {
   countHistorialEsteMes,
@@ -81,6 +83,8 @@ export function useCertificadosScreen() {
   const [uploadTarget, setUploadTarget] = useState<CertificadoPendiente | null>(null);
   const [codigoModo, setCodigoModo] = useState<"manual" | "editar" | null>(null);
   const [codigoTarget, setCodigoTarget] = useState<CertificadoHistorial | null>(null);
+  const [borrador, setBorrador] = useState<CertificadoTexto | null>(null);
+  const [borradorRuta, setBorradorRuta] = useState<{ localId: string; rutaId: string } | null>(null);
   const [detailTarget, setDetailTarget] = useState<CertificadoPendiente | null>(null);
   const [historialDetail, setHistorialDetail] = useState<CertificadoHistorial | null>(null);
   const [viewer, setViewer] = useState<CertificadoHistorial | null>(null);
@@ -245,7 +249,34 @@ export function useCertificadosScreen() {
       }
       setMutating(true);
       try {
-        const result = await generarCertificado(item.id, item.ultimaRutaId);
+        const draft = await fetchBorradorCertificado(item.id, item.ultimaRutaId);
+        if (!draft) throw new Error("No se pudo preparar el certificado");
+        setBorradorRuta({ localId: item.id, rutaId: item.ultimaRutaId });
+        setBorrador(draft);
+      } catch (err) {
+        notify("Error", err instanceof Error ? err.message : "No se pudo preparar");
+      } finally {
+        setMutating(false);
+      }
+    },
+    [],
+  );
+
+  const procesarBorrador = useCallback(
+    async (texto: CertificadoTexto) => {
+      if (!borradorRuta) return;
+      setMutating(true);
+      try {
+        const fechaProsa = texto.fechaProsa
+          .replace(/^El presente certificado es por todo el retiro del día\s*/i, "")
+          .replace(/\.$/, "")
+          .trim();
+        const result = await generarCertificado(borradorRuta.localId, borradorRuta.rutaId, {
+          ...texto,
+          fechaProsa,
+        });
+        setBorrador(null);
+        setBorradorRuta(null);
         notify("Certificado listo", result.codigo ? `Código ${result.codigo}` : "Asignado al local");
         await load("refresh");
       } catch (err) {
@@ -254,7 +285,7 @@ export function useCertificadosScreen() {
         setMutating(false);
       }
     },
-    [load],
+    [borradorRuta, load],
   );
 
   const submitUpload = useCallback(
@@ -329,6 +360,12 @@ export function useCertificadosScreen() {
     closeUpload,
     submitUpload,
     generar,
+    borrador,
+    cerrarBorrador: () => {
+      setBorrador(null);
+      setBorradorRuta(null);
+    },
+    procesarBorrador,
     codigoModo,
     codigoInicial: codigoTarget?.codigoRegistro ?? "",
     abrirManual: () => {

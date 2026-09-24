@@ -110,6 +110,7 @@ export function LocalDetailSheet({
 
             <Section title="Ubicación">
               <Pair label="Dirección" value={local.direccion || "—"} />
+              <Pair label="Dirección cert." value={local.direccionCert || "—"} />
               <Pair label="Referencia" value={local.referencia || "—"} />
               <Pair
                 label="Coords"
