@@ -1,0 +1,17 @@
+def nativeProjects = [
+  "app",
+  "react-native-reanimated",
+  "react-native-screens",
+  "react-native-worklets",
+  "react-native-gesture-handler",
+  "expo-modules-core"
+] as Set
+
+gradle.beforeProject { p ->
+  if (!nativeProjects.contains(p.name)) return
+  ["com.android.library", "com.android.application"].each { id ->
+    p.pluginManager.withPlugin(id) {
+      p.android.externalNativeBuild.cmake.version = "3.30.5"
+    }
+  }
+}

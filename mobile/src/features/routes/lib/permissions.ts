@@ -1,6 +1,7 @@
 import type { RouteItem } from "../types";
 import {
   asEstado,
+  isAbierto,
   isRecolectado,
   normalizeEstado,
   statusTargetsForEstado,
@@ -35,7 +36,7 @@ export function canArriveRoute(route: RouteItem) {
 }
 
 export function canFinalizeRoute(route: RouteItem) {
-  return asEstado(route.estado) === "llego";
+  return isAbierto(route.estado);
 }
 
 export function canSkipCollection(route: RouteItem) {

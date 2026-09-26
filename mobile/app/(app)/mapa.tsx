@@ -18,12 +18,15 @@ import {
 import { theme } from "@/lib/theme";
 import { ScreenHeader } from "@/ui/screen-header";
 import { useContentBottomPad } from "@/ui/use-content-bottom-pad";
+import { RutaDetalleSheet } from "@/features/mapa-campo/components/ruta-detalle-sheet";
+import type { RouteItem } from "@/features/routes/types";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
 
 /**
  * Mapa de campo del operador (Flutter MapaScreen).
  * Navegación IN-APP estilo Waze — no abre Google Maps ni Waze.
- * En web sin GPS se simula la ubicación cerca del local.
+ * Sin ruta iniciada se pinta la ubicación real. Con la ruta en curso sigue la navegación.
  */
 export default function MapaScreen() {
   const campo = useMapaCampo();
@@ -33,6 +36,23 @@ export default function MapaScreen() {
     void campo.reload();
   });
   const bottomPad = useContentBottomPad(8);
+  const [detail, setDetail] = useState<RouteItem | null>(null);
+
+  useEffect(() => {
+    setDetail((prev) => {
+      if (!prev) return null;
+      return campo.routes.find((item) => item.id === prev.id) ?? null;
+    });
+  }, [campo.routes]);
+
+  const startRoute = (route: RouteItem) => {
+    setDetail(null);
+    if (route.estado === "programado") {
+      void flujo.openStart(route);
+      return;
+    }
+    void nav.start(route, { originHint: campo.origin });
+  };
 
   return (
     <View style={styles.safe}>
@@ -67,7 +87,7 @@ export default function MapaScreen() {
         ) : (
           <CampoMap
             payload={nav.mapPayload}
-            idleOrigin={campo.origin}
+            idleOrigin={nav.active ? null : campo.origin}
             idleDest={campo.dest}
             idleDestColor={campo.selected ? prioridadMeta(campo.selected.prioridad).color : null}
             onSelectRoute={nav.selectAlternative}
@@ -142,18 +162,24 @@ export default function MapaScreen() {
               expanded={campo.panelOpen}
               onToggle={() => campo.setPanelOpen((v) => !v)}
               onSelect={campo.setSelectedId}
-              onStart={(route) => {
-                if (route.estado === "programado") {
-                  void flujo.openStart(route);
-                  return;
-                }
-                void nav.start(route, { originHint: campo.origin });
+              onOpen={(route) => {
+                campo.setSelectedId(route.id);
+                setDetail(route);
               }}
-              onFinalize={(route) => void flujo.openFinish(route)}
             />
           )}
         </View>
       </View>
+
+      <RutaDetalleSheet
+        route={detail}
+        onClose={() => setDetail(null)}
+        onStart={startRoute}
+        onComplete={(route) => {
+          setDetail(null);
+          void flujo.openFinish(route);
+        }}
+      />
 
       <VehicleTypeSheet
         open={flujo.vehicleOpen}
@@ -206,6 +232,7 @@ export default function MapaScreen() {
         route={flujo.finishRoute}
         config={flujo.finishConfig}
         saving={flujo.mutating}
+        upload={flujo.upload}
         onClose={flujo.closeFinish}
         onSubmit={flujo.confirmFinish}
       />

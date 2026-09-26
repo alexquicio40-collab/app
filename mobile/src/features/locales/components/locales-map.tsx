@@ -3,6 +3,7 @@ import {
   localesMapUpdateScript,
   type LocalesMapPin,
 } from "@/features/locales/lib/locales-map-html";
+import { useMyLocation } from "@/features/map/lib/use-my-location";
 import { normalizePrioridad } from "@/features/locales/lib/prioridad";
 import type { LocalItem } from "@/features/locales/types";
 import { theme } from "@/lib/theme";
@@ -29,9 +30,10 @@ function toPins(locales: LocalItem[]): LocalesMapPin[] {
 }
 
 export function LocalesMap({ locales, selectedId, onSelect }: LocalesMapProps) {
+  const me = useMyLocation();
   const html = useMemo(() => buildLocalesMapHtml(), []);
   const pins = useMemo(() => toPins(locales), [locales]);
-  const payload = useMemo(() => ({ pins, selectedId }), [pins, selectedId]);
+  const payload = useMemo(() => ({ pins, selectedId, me }), [pins, selectedId, me]);
   const web = useRef<WebView>(null);
   const frame = useRef<{ contentWindow: { postMessage: (data: unknown, origin: string) => void } | null } | null>(
     null,

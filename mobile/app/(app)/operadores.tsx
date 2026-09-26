@@ -13,7 +13,7 @@ import { theme } from "@/lib/theme";
 import { HeaderAction, IconCash } from "@/ui/header-action";
 import { ScreenHeader } from "@/ui/screen-header";
 import { useContentBottomPad } from "@/ui/use-content-bottom-pad";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Platform, StyleSheet, View } from "react-native";
 
 export default function OperadoresScreen() {
@@ -24,6 +24,26 @@ export default function OperadoresScreen() {
   const [satelliteOn, setSatelliteOn] = useState(false);
   const [locating, setLocating] = useState(false);
   const [located, setLocated] = useState(false);
+
+  useEffect(() => {
+    let cancel = false;
+    const paint = async () => {
+      try {
+        const coords = await getAdminCoords();
+        if (cancel) return;
+        live.current?.showMyLocation(coords, false);
+        setLocated(true);
+      } catch {
+        // Sin GPS el mapa de la flota sigue igual.
+      }
+    };
+    void paint();
+    const timer = setInterval(() => void paint(), 20000);
+    return () => {
+      cancel = true;
+      clearInterval(timer);
+    };
+  }, []);
 
   const locateMe = useCallback(async () => {
     if (locating) return;

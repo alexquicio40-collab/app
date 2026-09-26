@@ -1,4 +1,5 @@
 import { getGoogleMapsKey } from "@/features/map/lib/google-map";
+import { myLocationDotJs } from "@/features/map/lib/my-location-dot";
 import { LIMA } from "@/features/map/constants";
 
 /**
@@ -30,6 +31,9 @@ export function buildRutasMapaHtml() {
     var polyline = null;
     var selectedId = null;
     var pendingPayload = null;
+    var lastFitKey = '';
+    var fittedWithMe = false;
+    ${myLocationDotJs()}
 
     function emit(payload) {
       try {
@@ -61,19 +65,21 @@ export function buildRutasMapaHtml() {
       };
     }
 
-    function fitAll(pins) {
-      if (!pins.length) {
+    function fitAll(pins, me) {
+      var points = pins.slice();
+      if (me) points.push(me);
+      if (!points.length) {
         map.setCenter({ lat: ${LIMA.lat}, lng: ${LIMA.lng} });
         map.setZoom(11);
         return;
       }
-      if (pins.length === 1) {
-        map.setCenter({ lat: pins[0].lat, lng: pins[0].lng });
+      if (points.length === 1) {
+        map.setCenter({ lat: points[0].lat, lng: points[0].lng });
         map.setZoom(14);
         return;
       }
       var bounds = new google.maps.LatLngBounds();
-      pins.forEach(function (p) { bounds.extend({ lat: p.lat, lng: p.lng }); });
+      points.forEach(function (p) { bounds.extend({ lat: p.lat, lng: p.lng }); });
       map.fitBounds(bounds, 56);
     }
 
@@ -133,7 +139,14 @@ export function buildRutasMapaHtml() {
         });
       }
 
-      fitAll(pins);
+      var mePos = paintMyLocation(payload.me);
+      var includeMe = false;
+      if (mePos && !fittedWithMe) { fittedWithMe = true; includeMe = true; }
+      var fitKey = pins.map(function (p) { return p.id; }).join('|') + '#' + (selectedId || '');
+      if (fitKey !== lastFitKey || includeMe) {
+        lastFitKey = fitKey;
+        fitAll(pins, mePos);
+      }
     }
 
     function boot() {

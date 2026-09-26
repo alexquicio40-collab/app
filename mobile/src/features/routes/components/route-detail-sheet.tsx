@@ -1,5 +1,6 @@
 import { withResolvedMedia } from "@/features/routes/api";
 import { PagarasPanel } from "@/features/routes/components/pagaras-panel";
+import { PreciosPanel } from "@/features/routes/components/precios-panel";
 import { RecogerasPanel } from "@/features/routes/components/recogeras-panel";
 import { StatusBadge } from "@/features/routes/components/status-badge";
 import {
@@ -119,10 +120,17 @@ export function RouteDetailSheet({
               showsVerticalScrollIndicator={false}
             >
               <RecogerasPanel route={route} />
+              <PreciosPanel precios={route} />
               <PagarasPanel metodos={route.metodosPago} />
 
               <Section title="Información">
                 <Pair left="Operador" leftValue={route.conductorNombre} right="Fecha" rightValue={formatDate(route.fechaAsignacion)} />
+                <Pair
+                  left="Asignó"
+                  leftValue={route.creadoPorNombre || "—"}
+                  right="Editó"
+                  rightValue={route.editadoPorNombre || "—"}
+                />
                 <Pair left="Estado" leftValue={estadoLabel(route.estado)} right="Orden" rightValue={route.orden != null ? String(route.orden) : "—"} />
                 {route.fechaCompletada ? (
                   <Field label="Completada" value={formatDateTime(route.fechaCompletada)} />

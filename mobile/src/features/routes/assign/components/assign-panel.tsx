@@ -88,6 +88,7 @@ export function AssignPanel({
             value={conductorId}
             placeholder="Operador…"
             options={conductores.map((item) => ({ value: item.id, label: item.nombre }))}
+            searchable
             onChange={setConductorId}
           />
           <SelectField

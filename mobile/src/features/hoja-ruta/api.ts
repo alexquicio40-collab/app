@@ -1,5 +1,6 @@
 import { fetchLocalesLite } from "@/features/locales/api";
 import { api } from "@/lib/api";
+import { dia } from "@/lib/fecha-lima";
 import type {
   CreateHojaRutaInput,
   HistorialFilters,
@@ -114,7 +115,7 @@ function parsePayloadData(raw: unknown): HojaRutaPayloadData | null {
     chofer: text(data.chofer),
     operadorAcompanante: text(data.operadorAcompanante, data.operador_acompanante),
     placa: text(data.placa),
-    fecha: text(data.fecha) || new Date().toISOString(),
+    fecha: dia(text(data.fecha)),
     caja: num(data.caja),
     filas,
     gastos,

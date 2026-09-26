@@ -1,7 +1,8 @@
 import { inicialNombre } from "@/features/rutas-mapa/lib/format";
 import type { ConductorOption } from "@/features/routes/types";
 import { theme } from "@/lib/theme";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 type ConductoresBarProps = {
   conductores: ConductorOption[];
@@ -20,15 +21,39 @@ export function ConductoresBar({
   selectedId,
   onSelect,
 }: ConductoresBarProps) {
-  const withRoutes = conductores
-    .filter((item) => (countByConductor.get(item.id) ?? 0) > 0)
-    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-  const withoutRoutes = conductores
-    .filter((item) => (countByConductor.get(item.id) ?? 0) === 0)
-    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const visible = useMemo(() => {
+    const rows = q
+      ? conductores.filter((item) => item.nombre.toLowerCase().includes(q))
+      : conductores;
+    const withRoutes = rows
+      .filter((item) => (countByConductor.get(item.id) ?? 0) > 0)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+    const withoutRoutes = rows
+      .filter((item) => (countByConductor.get(item.id) ?? 0) === 0)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+    return { withRoutes, withoutRoutes };
+  }, [conductores, countByConductor, q]);
 
   return (
     <View style={styles.wrap}>
+      <View style={styles.searchBox}>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Buscar operador…"
+          placeholderTextColor={theme.colors.muted}
+          style={styles.search}
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+        {query ? (
+          <Pressable onPress={() => setQuery("")} hitSlop={8} style={styles.clear}>
+            <Text style={styles.clearGlyph}>×</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -43,7 +68,7 @@ export function ConductoresBar({
           onPress={() => onSelect(null)}
         />
 
-        {withRoutes.map((item) => (
+        {visible.withRoutes.map((item) => (
           <Chip
             key={item.id}
             label={item.nombre}
@@ -55,9 +80,11 @@ export function ConductoresBar({
           />
         ))}
 
-        {withRoutes.length && withoutRoutes.length ? <View style={styles.divider} /> : null}
+        {visible.withRoutes.length && visible.withoutRoutes.length ? (
+          <View style={styles.divider} />
+        ) : null}
 
-        {withoutRoutes.map((item) => (
+        {visible.withoutRoutes.map((item) => (
           <Chip
             key={item.id}
             label={item.nombre}
@@ -120,6 +147,38 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.line,
+  },
+  searchBox: {
+    marginHorizontal: 10,
+    marginTop: 6,
+    height: 30,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.surface,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 8,
+    paddingRight: 2,
+  },
+  search: {
+    flex: 1,
+    paddingVertical: 0,
+    color: theme.colors.ink,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  clear: {
+    width: 26,
+    height: 26,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clearGlyph: {
+    color: theme.colors.accent,
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 15,
   },
   row: {
     paddingHorizontal: 10,

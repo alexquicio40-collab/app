@@ -2,13 +2,13 @@ import { ESTADO_OPTIONS } from "@/features/routes/lib/format";
 import type { ConductorOption, RoutesFilters } from "@/features/routes/types";
 import { limaDate } from "@/lib/api";
 import { theme } from "@/lib/theme";
+import { SearchableOptionSheet } from "@/ui/searchable-option-sheet";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { createElement, useMemo, useState } from "react";
 import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -61,6 +61,7 @@ export function RoutesToolbar({ filters, distritos, conductores, onChange }: Rou
           label="Operador"
           value={filters.conductorId}
           options={conductores.map((item) => ({ value: item.id, label: item.nombre }))}
+          placeholder="Buscar operador…"
           onChange={(conductorId) => onChange({ conductorId })}
         />
         <View style={styles.divider} />
@@ -118,11 +119,13 @@ function FilterSelect({
   label,
   value,
   options,
+  placeholder,
   onChange,
 }: {
   label: string;
   value: string | null;
   options: { value: string; label: string }[];
+  placeholder?: string;
   onChange: (value: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -139,36 +142,15 @@ function FilterSelect({
         onPress={() => setOpen(true)}
         onClear={() => onChange(null)}
       />
-
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <View style={styles.backdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
-          <View style={styles.sheet}>
-            <Text style={styles.sheetTitle}>{label}</Text>
-            <ScrollView style={styles.sheetList}>
-              <OptionRow
-                label="Todos"
-                active={!value}
-                onPress={() => {
-                  onChange(null);
-                  setOpen(false);
-                }}
-              />
-              {options.map((item) => (
-                <OptionRow
-                  key={item.value}
-                  label={item.label}
-                  active={value === item.value}
-                  onPress={() => {
-                    onChange(item.value);
-                    setOpen(false);
-                  }}
-                />
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <SearchableOptionSheet
+        visible={open}
+        title={label}
+        options={options}
+        value={value}
+        placeholder={placeholder}
+        onSelect={onChange}
+        onClose={() => setOpen(false)}
+      />
     </>
   );
 }
@@ -319,22 +301,6 @@ function WebDateInput({
   );
 }
 
-function OptionRow({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={[styles.option, active ? styles.optionOn : null]}>
-      <Text style={[styles.optionText, active ? styles.optionTextOn : null]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 /** dd/mm */
 function formatDayMonth(isoDay: string) {
   const parts = isoDay.split("-");
@@ -465,14 +431,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(8,61,48,0.45)",
     justifyContent: "flex-end",
   },
-  sheet: {
-    maxHeight: "70%",
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    paddingTop: 14,
-    paddingBottom: 24,
-  },
   rangeSheet: {
     backgroundColor: theme.colors.surface,
     borderTopLeftRadius: 18,
@@ -486,26 +444,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     color: theme.colors.ink,
     fontSize: 15,
-    fontWeight: "800",
-  },
-  sheetList: {
-    paddingHorizontal: 8,
-  },
-  option: {
-    paddingHorizontal: 10,
-    paddingVertical: 11,
-    borderRadius: 10,
-  },
-  optionOn: {
-    backgroundColor: theme.colors.accentSoft,
-  },
-  optionText: {
-    color: theme.colors.ink,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  optionTextOn: {
-    color: theme.colors.accent,
     fontWeight: "800",
   },
   rangeRow: {

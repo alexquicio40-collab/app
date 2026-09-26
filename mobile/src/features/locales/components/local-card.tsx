@@ -1,5 +1,6 @@
 import { ActionIconButton, RouteActionBar, TrashIcon } from "@/features/routes/components/route-action-bar";
 import { certLabel, certTone } from "@/features/locales/lib/format";
+import { canSeePrecios, formatPrecios } from "@/features/locales/lib/precios";
 import { prioridadMeta } from "@/features/locales/lib/prioridad";
 import type { LocalItem } from "@/features/locales/types";
 import { theme } from "@/lib/theme";
@@ -53,6 +54,13 @@ export function LocalCard({ local, canManage, onOpen, onEdit, onDelete }: LocalC
             .filter(Boolean)
             .join(" · ") || "Sin datos extra"}
         </Text>
+
+        {canSeePrecios(local, canManage) ? (
+          <Text style={styles.price} numberOfLines={1}>
+            {formatPrecios(local)}
+            {canManage && !local.operadoresVenPrecio ? " · oculto" : ""}
+          </Text>
+        ) : null}
       </Pressable>
 
       {canManage ? (
@@ -120,5 +128,10 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     fontSize: 10,
     fontWeight: "600",
+  },
+  price: {
+    color: theme.colors.ink,
+    fontSize: 10,
+    fontWeight: "800",
   },
 });

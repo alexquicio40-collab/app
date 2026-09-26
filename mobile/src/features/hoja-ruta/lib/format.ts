@@ -1,3 +1,5 @@
+import { enLima } from "@/lib/fecha-lima";
+
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
 export function todayIso() {
@@ -28,7 +30,7 @@ export function formatFechaPdf(iso: string) {
 
 export function formatFechaHora(iso: string | null) {
   if (!iso?.trim()) return "—";
-  const raw = iso.trim().replace(" ", "T");
+  const raw = enLima(iso).replace(" ", "T");
   const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
   if (!m) return iso.slice(0, 16);
   const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];

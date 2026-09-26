@@ -21,6 +21,8 @@ export type LocalItem = {
   nombre: string;
   direccion: string;
   direccionCert: string;
+  direccionFiscal: string;
+  direccionComercial: string;
   latitud: number | null;
   longitud: number | null;
   horarioEntrada: string;
@@ -41,6 +43,10 @@ export type LocalItem = {
   cantidadBidonesBlancos: number | null;
   bidonReal: number | null;
   bidonPasadoPor: number | null;
+  precioLitro: number | null;
+  precioBalde: number | null;
+  precioGalonera: number | null;
+  operadoresVenPrecio: boolean;
   frecuencias: string[];
   metodosPago: { id: number; nombre: string }[];
   fotos: LocalFoto[];
@@ -51,6 +57,8 @@ export type LocalFormInput = {
   nombre: string;
   direccion: string;
   direccionCert: string;
+  direccionFiscal?: string;
+  direccionComercial?: string;
   latitud: number | null;
   longitud: number | null;
   horarioEntrada?: string;
@@ -69,6 +77,10 @@ export type LocalFormInput = {
   cantidadBidonesBlancos?: number | null;
   bidonReal?: number | null;
   bidonPasadoPor?: number | null;
+  precioLitro?: number | null;
+  precioBalde?: number | null;
+  precioGalonera?: number | null;
+  operadoresVenPrecio?: boolean;
   metodosPagoIds?: number[];
   prioridad?: "alta" | "media" | "baja";
   pendingFotos?: PendingLocalFoto[];

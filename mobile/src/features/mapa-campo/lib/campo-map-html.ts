@@ -37,6 +37,7 @@ export function buildCampoMapHtml() {
     var lastSelectedId = null;
     var lastDestKey = '';
     var lastTraveledKey = '';
+    var lastIdleFit = '';
     var followEnabled = true;
     var anim = null;
     var displayPos = null;
@@ -137,16 +138,29 @@ export function buildCampoMapHtml() {
       return overlay;
     }
 
-    function ensureMeMarker() {
-      if (meMarker) return;
-      meMarker = new google.maps.Marker({
-        map: map, title: 'Yo', zIndex: 60,
-        icon: {
+    function meIcon(tracking) {
+      if (tracking) {
+        return {
           path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
           scale: 7, fillColor: '#0B5340', fillOpacity: 1,
           strokeColor: '#FFFFFF', strokeWeight: 2, rotation: 0,
-        },
+        };
+      }
+      return {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 8, fillColor: '#1A73E8', fillOpacity: 1,
+        strokeColor: '#FFFFFF', strokeWeight: 3,
+      };
+    }
+
+    function ensureMeMarker(tracking) {
+      var kind = tracking ? 'arrow' : 'dot';
+      if (meMarker && meMarker.__kind === kind) return;
+      if (meMarker) { meMarker.setMap(null); meMarker = null; }
+      meMarker = new google.maps.Marker({
+        map: map, title: 'Mi ubicación', zIndex: 60, icon: meIcon(tracking),
       });
+      meMarker.__kind = kind;
     }
 
     function ensureDestMarker(dest, color) {
@@ -260,7 +274,7 @@ export function buildCampoMapHtml() {
         targetPos = null;
         return;
       }
-      ensureMeMarker();
+      ensureMeMarker(!!tracking);
       followEnabled = !!tracking;
       targetPos = { lat: Number(position.lat), lng: Number(position.lng) };
       targetHeading = Number(heading || 0);
@@ -310,7 +324,11 @@ export function buildCampoMapHtml() {
         var has = false;
         if (dest) { idle.extend(dest); has = true; }
         if (position) { idle.extend(position); has = true; }
-        if (has) map.fitBounds(idle, 64);
+        var idleKey = (dest ? dest.lat + ',' + dest.lng : '') + (position ? ':me' : '');
+        if (has && idleKey !== lastIdleFit) {
+          lastIdleFit = idleKey;
+          map.fitBounds(idle, 64);
+        }
       }
     }
 

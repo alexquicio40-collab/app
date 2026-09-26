@@ -8,7 +8,7 @@ import { WebView } from "react-native-webview";
 
 export type LiveMapHandle = {
   sendCmd: (action: "traffic" | "satellite") => void;
-  showMyLocation: (coords: AdminCoords) => void;
+  showMyLocation: (coords: AdminCoords, pan?: boolean) => void;
 };
 
 type LiveMapProps = {
@@ -41,6 +41,7 @@ type LocatePayload = {
   lat: number;
   lng: number;
   accuracy: number;
+  pan?: boolean;
 };
 
 function toPayload(operators: LiveOperator[], stops: LiveStop[], selectedId: number | null): LivePayload {
@@ -70,9 +71,7 @@ export const LiveMap = forwardRef<LiveMapHandle, LiveMapProps>(function LiveMap(
 ) {
   const html = useMemo(() => buildGoogleMapHtml(), []);
   const payload = useMemo(() => toPayload(operators, stops, selectedId), [operators, stops, selectedId]);
-  const frame = useRef<{ contentWindow: { postMessage: (data: unknown, origin: string) => void } | null } | null>(
-    null,
-  );
+  const frame = useRef<HTMLIFrameElement>(null);
   const web = useRef<WebView>(null);
 
   const post = (data: unknown) => {
@@ -82,7 +81,7 @@ export const LiveMap = forwardRef<LiveMapHandle, LiveMapProps>(function LiveMap(
     }
 
     if (data && typeof data === "object" && "type" in data) {
-      const msg = data as { type: string; action?: string; lat?: number; lng?: number; accuracy?: number };
+      const msg = data as { type: string; action?: string; lat?: number; lng?: number; accuracy?: number; pan?: boolean };
 
       if (msg.type === "cmd") {
         web.current?.injectJavaScript(
@@ -93,7 +92,7 @@ export const LiveMap = forwardRef<LiveMapHandle, LiveMapProps>(function LiveMap(
 
       if (msg.type === "locate") {
         web.current?.injectJavaScript(
-          `window.showMyLocation && window.showMyLocation(${msg.lat}, ${msg.lng}, ${msg.accuracy}); true;`,
+          `window.showMyLocation && window.showMyLocation(${msg.lat}, ${msg.lng}, ${msg.accuracy}, ${msg.pan !== false}); true;`,
         );
         return;
       }
@@ -104,12 +103,13 @@ export const LiveMap = forwardRef<LiveMapHandle, LiveMapProps>(function LiveMap(
 
   useImperativeHandle(ref, () => ({
     sendCmd: (action) => post({ type: "cmd", action }),
-    showMyLocation: (coords) => {
+    showMyLocation: (coords, pan = true) => {
       const msg: LocatePayload = {
         type: "locate",
         lat: coords.lat,
         lng: coords.lng,
         accuracy: coords.accuracy,
+        pan,
       };
       post(msg);
     },

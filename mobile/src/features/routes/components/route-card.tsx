@@ -69,6 +69,14 @@ export function RouteCard({ route, actions }: RouteCardProps) {
           {route.orden != null ? ` · #${route.orden}` : ""}
         </Text>
 
+        {route.creadoPorNombre || route.editadoPorNombre ? (
+          <Text style={styles.assign} numberOfLines={1}>
+            {route.creadoPorNombre ? `Asignó ${route.creadoPorNombre}` : ""}
+            {route.creadoPorNombre && route.editadoPorNombre ? " · " : ""}
+            {route.editadoPorNombre ? `Editó ${route.editadoPorNombre}` : ""}
+          </Text>
+        ) : null}
+
         {route.localDireccion ? (
           <Text style={styles.address} numberOfLines={1}>
             {route.localDireccion}
@@ -183,6 +191,11 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     fontSize: 10,
     fontWeight: "600",
+  },
+  assign: {
+    color: theme.colors.ink,
+    fontSize: 10,
+    fontWeight: "700",
   },
   address: {
     color: theme.colors.muted,

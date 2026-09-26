@@ -14,6 +14,12 @@ export type PendingFoto = {
   uri: string;
   name: string;
   mimeType: string;
+  bytes: number | null;
+};
+
+export type UploadProgress = {
+  loaded: number;
+  total: number;
 };
 
 export type FinalizarRutaInput = {

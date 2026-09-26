@@ -50,24 +50,32 @@ function parseTab(value: string | string[] | undefined): RoutesTabKey | null {
 
 export default function RutasScreen() {
   const params = useLocalSearchParams<{ tab?: string }>();
-  const [tab, setTab] = useState<RoutesTabKey>(() => parseTab(params.tab) ?? "listado");
   const routes = useRoutesScreen();
-  const assign = useAssignWorkspace({ enabled: tab !== "listado" });
+  const [tab, setTab] = useState<RoutesTabKey>(() =>
+    routes.isOperador ? "listado" : (parseTab(params.tab) ?? "listado"),
+  );
+  const assign = useAssignWorkspace({ enabled: !routes.isOperador && tab !== "listado" });
   const bottomPad = useContentBottomPad(12);
 
   useEffect(() => {
+    if (routes.isOperador) {
+      setTab("listado");
+      return;
+    }
     const next = parseTab(params.tab);
     if (next) setTab(next);
-  }, [params.tab]);
+  }, [params.tab, routes.isOperador]);
 
   return (
     <View style={styles.safe}>
       <ScreenHeader title="Rutas" compact />
-      <RoutesTabs value={tab} onChange={setTab} />
+      {routes.isOperador ? null : <RoutesTabs value={tab} onChange={setTab} />}
 
-      {tab === "listado" ? <ListadoPanel routes={routes} bottomPad={bottomPad} /> : null}
+      {tab === "listado" || routes.isOperador ? (
+        <ListadoPanel routes={routes} bottomPad={bottomPad} />
+      ) : null}
 
-      {tab === "asignacion" ? (
+      {!routes.isOperador && tab === "asignacion" ? (
         assign.loading && !assign.booted ? (
           <Boot />
         ) : (
@@ -85,7 +93,7 @@ export default function RutasScreen() {
         )
       ) : null}
 
-      {tab === "programacion" ? (
+      {!routes.isOperador && tab === "programacion" ? (
         assign.loading && !assign.booted ? (
           <Boot />
         ) : (
@@ -105,7 +113,7 @@ export default function RutasScreen() {
         )
       ) : null}
 
-      {tab === "orden" ? (
+      {!routes.isOperador && tab === "orden" ? (
         <OrderPanel
           conductores={routes.conductores}
           bottomPad={bottomPad}
@@ -116,7 +124,7 @@ export default function RutasScreen() {
         />
       ) : null}
 
-      {tab === "restriccion" ? (
+      {!routes.isOperador && tab === "restriccion" ? (
         assign.loading && !assign.booted ? (
           <Boot />
         ) : (
@@ -361,6 +369,7 @@ function ListadoPanel({
         route={flujo.finishRoute}
         config={flujo.finishConfig}
         saving={flujo.mutating}
+        upload={flujo.upload}
         onClose={flujo.closeFinish}
         onSubmit={flujo.confirmFinish}
       />

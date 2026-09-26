@@ -1,9 +1,11 @@
 import { LocalEnvaseFields } from "@/features/locales/components/local-envase-fields";
+import { LocalPreciosFields } from "@/features/locales/components/local-precios-fields";
 import { LocalFotosField } from "@/features/locales/components/local-fotos-field";
 import { LocalPickerMap } from "@/features/locales/components/local-picker-map";
 import type { MetodoPagoOption } from "@/features/locales/api";
 import { geocodeAddress, reverseGeocode } from "@/features/locales/lib/geocode";
 import { isBidonEnvase } from "@/features/locales/lib/format";
+import { moneyText, parseMoney } from "@/features/locales/lib/precios";
 import { consultarRuc, isValidRuc, sanitizeRucInput } from "@/features/locales/lib/ruc";
 import type { LocalFormInput, LocalItem, PendingLocalFoto } from "@/features/locales/types";
 import {
@@ -42,6 +44,8 @@ type FormState = {
   nombre: string;
   direccion: string;
   direccionCert: string;
+  direccionFiscal: string;
+  direccionComercial: string;
   lat: number | null;
   lng: number | null;
   horarioEntrada: string;
@@ -60,6 +64,10 @@ type FormState = {
   qtyBlancos: string;
   bidonRealText: string;
   bidonPasadoText: string;
+  precioLitroText: string;
+  precioBaldeText: string;
+  precioGaloneraText: string;
+  operadoresVenPrecio: boolean;
   metodosPagoIds: number[];
   prioridad: PrioridadProveedor;
 };
@@ -68,6 +76,8 @@ const emptyForm = (): FormState => ({
   nombre: "",
   direccion: "",
   direccionCert: "",
+  direccionFiscal: "",
+  direccionComercial: "",
   lat: null,
   lng: null,
   horarioEntrada: "",
@@ -86,6 +96,10 @@ const emptyForm = (): FormState => ({
   qtyBlancos: "",
   bidonRealText: "",
   bidonPasadoText: "",
+  precioLitroText: "",
+  precioBaldeText: "",
+  precioGaloneraText: "",
+  operadoresVenPrecio: false,
   metodosPagoIds: [],
   prioridad: "media",
 });
@@ -143,6 +157,8 @@ export function LocalFormSheet({
       nombre: local.nombre,
       direccion: local.direccion,
       direccionCert: local.direccionCert,
+      direccionFiscal: local.direccionFiscal,
+      direccionComercial: local.direccionComercial,
       lat: local.latitud,
       lng: local.longitud,
       horarioEntrada: local.horarioEntrada,
@@ -161,6 +177,10 @@ export function LocalFormSheet({
       qtyBlancos: local.cantidadBidonesBlancos != null ? String(local.cantidadBidonesBlancos) : "",
       bidonRealText: local.bidonReal != null ? String(local.bidonReal) : "",
       bidonPasadoText: local.bidonPasadoPor != null ? String(local.bidonPasadoPor) : "",
+      precioLitroText: moneyText(local.precioLitro),
+      precioBaldeText: moneyText(local.precioBalde),
+      precioGaloneraText: moneyText(local.precioGalonera),
+      operadoresVenPrecio: local.operadoresVenPrecio,
       metodosPagoIds: local.metodosPago.map((m) => m.id),
       prioridad: normalizePrioridad(local.prioridad),
     });
@@ -230,6 +250,7 @@ export function LocalFormSheet({
           razonSocial: data.razonSocial,
         };
         if (fillDireccion) next.direccion = data.direccion;
+        if (!current.direccionFiscal.trim() && data.direccion) next.direccionFiscal = data.direccion;
 
         patch(next);
 
@@ -321,6 +342,8 @@ export function LocalFormSheet({
       nombre,
       direccion,
       direccionCert: form.direccionCert.trim(),
+      direccionFiscal: form.direccionFiscal.trim(),
+      direccionComercial: form.direccionComercial.trim(),
       latitud: form.lat,
       longitud: form.lng,
       horarioEntrada: form.horarioEntrada.trim(),
@@ -343,6 +366,10 @@ export function LocalFormSheet({
         : null,
       bidonReal: parseOptionalInt(form.bidonRealText),
       bidonPasadoPor: parseOptionalInt(form.bidonPasadoText),
+      precioLitro: parseMoney(form.precioLitroText),
+      precioBalde: parseMoney(form.precioBaldeText),
+      precioGalonera: parseMoney(form.precioGaloneraText),
+      operadoresVenPrecio: form.operadoresVenPrecio,
       prioridad: form.prioridad,
       metodosPagoIds: form.metodosPagoIds,
       pendingFotos,
@@ -411,7 +438,7 @@ export function LocalFormSheet({
             {rucError ? <Text style={styles.rucError}>{rucError}</Text> : null}
 
             <View style={styles.field}>
-              <FieldLabel>Dirección *</FieldLabel>
+              <FieldLabel>Ubicación mapa *</FieldLabel>
               <View style={styles.addressRow}>
                 <View style={styles.addressInput}>
                   <TextField
@@ -436,6 +463,25 @@ export function LocalFormSheet({
               </View>
               {geoStatus ? <Text style={styles.geoStatus}>{geoStatus}</Text> : null}
             </View>
+
+            <FieldRow>
+              <View style={styles.half}>
+                <FieldLabel>Dirección fiscal</FieldLabel>
+                <TextField
+                  value={form.direccionFiscal}
+                  onChangeText={(direccionFiscal) => patch({ direccionFiscal })}
+                  placeholder="RUC / SUNAT"
+                />
+              </View>
+              <View style={styles.half}>
+                <FieldLabel>Dirección comercial</FieldLabel>
+                <TextField
+                  value={form.direccionComercial}
+                  onChangeText={(direccionComercial) => patch({ direccionComercial })}
+                  placeholder="Local comercial"
+                />
+              </View>
+            </FieldRow>
 
             <View style={styles.field}>
               <FieldLabel>Dirección cert.</FieldLabel>
@@ -547,6 +593,16 @@ export function LocalFormSheet({
                 qtyBlancos: form.qtyBlancos,
                 bidonRealText: form.bidonRealText,
                 bidonPasadoText: form.bidonPasadoText,
+              }}
+              onChange={patch}
+            />
+
+            <LocalPreciosFields
+              value={{
+                precioLitroText: form.precioLitroText,
+                precioBaldeText: form.precioBaldeText,
+                precioGaloneraText: form.precioGaloneraText,
+                operadoresVenPrecio: form.operadoresVenPrecio,
               }}
               onChange={patch}
             />

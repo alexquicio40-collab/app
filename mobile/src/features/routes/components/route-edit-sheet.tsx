@@ -7,6 +7,7 @@ import {
   TextField,
 } from "@/features/routes/assign/components/form-kit";
 import type { LocalOption } from "@/features/routes/assign/types";
+import { toDayKey } from "@/features/routes/lib/format";
 import type { ConductorOption, RouteItem } from "@/features/routes/types";
 import { theme } from "@/lib/theme";
 import { useEffect, useState } from "react";
@@ -48,7 +49,7 @@ export function RouteEditSheet({
     if (!route) return;
     setConductorId(route.conductorId || null);
     setLocalId(route.localId || null);
-    setFecha(route.fechaAsignacion.slice(0, 10));
+    setFecha(toDayKey(route.fechaAsignacion));
     setObs(route.observaciones || "");
     setError(null);
   }, [route]);
@@ -94,6 +95,7 @@ export function RouteEditSheet({
               value={conductorId}
               placeholder="Operador…"
               options={conductores.map((item) => ({ value: item.id, label: item.nombre }))}
+              searchable
               onChange={setConductorId}
             />
             <SelectField

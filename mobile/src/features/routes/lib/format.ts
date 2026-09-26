@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from "@/lib/api";
+import { enLima } from "@/lib/fecha-lima";
 import { ESTADOS_RECOJO, estadoRecojoLabel, estadoRecojoTone } from "./estados-recojo";
 import type { RouteEstado } from "../types";
 
@@ -63,8 +64,12 @@ export function estadoTone(estado: RouteEstado): "warn" | "info" | "ok" | "dange
 
 export function formatDate(value?: string | null) {
   if (!value) return "—";
+  // fecha_asignacion es un día de calendario (YYYY-MM-DD o medianoche UTC).
+  // new Date("2026-09-25") es 00:00 UTC y en Lima se ve como el 24.
+  const calendar = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value).trim());
+  if (calendar) return `${calendar[3]}/${calendar[2]}/${calendar[1]}`;
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+  if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString("es-PE", {
     day: "2-digit",
     month: "2-digit",
@@ -75,8 +80,15 @@ export function formatDate(value?: string | null) {
 
 export function formatDateTime(value?: string | null) {
   if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+  const raw = enLima(String(value).trim());
+  const wall = /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/.exec(raw);
+  const midnightUtc = /T00:00:00(?:\.0+)?Z$/i.test(raw);
+  if (!wall || midnightUtc) return formatDate(raw);
+  if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+    return `${wall[3]}/${wall[2]}/${wall[1]} ${wall[4]}:${wall[5]}`;
+  }
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return formatDate(raw);
   return date.toLocaleString("es-PE", {
     day: "2-digit",
     month: "2-digit",

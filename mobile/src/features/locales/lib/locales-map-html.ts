@@ -1,4 +1,5 @@
 import { getGoogleMapsKey } from "@/features/map/lib/google-map";
+import { myLocationDotJs } from "@/features/map/lib/my-location-dot";
 import { LIMA } from "@/features/map/constants";
 
 export type LocalesMapPin = {
@@ -40,6 +41,10 @@ export function buildLocalesMapHtml() {
     var selectedId = null;
     var info = null;
     var pendingPayload = null;
+    var didFit = false;
+    var fittedWithMe = false;
+    var lastPinKey = '';
+    ${myLocationDotJs()}
     var COLORS = {
       alta: { fill: '#E53935', stroke: '#FDECEC' },
       media: { fill: '#F9A825', stroke: '#FFF8E1' },
@@ -74,20 +79,22 @@ export function buildLocalesMapHtml() {
       };
     }
 
-    function fitAll(pins) {
-      if (!pins.length) {
+    function fitAll(pins, me) {
+      var points = pins.slice();
+      if (me) points.push(me);
+      if (!points.length) {
         map.setCenter({ lat: ${LIMA.lat}, lng: ${LIMA.lng} });
         map.setZoom(11);
         return;
       }
-      if (pins.length === 1) {
-        map.setCenter({ lat: pins[0].lat, lng: pins[0].lng });
+      if (points.length === 1) {
+        map.setCenter({ lat: points[0].lat, lng: points[0].lng });
         map.setZoom(15);
         return;
       }
       var bounds = new google.maps.LatLngBounds();
-      for (var i = 0; i < pins.length; i++) {
-        bounds.extend({ lat: pins[i].lat, lng: pins[i].lng });
+      for (var i = 0; i < points.length; i++) {
+        bounds.extend({ lat: points[i].lat, lng: points[i].lng });
       }
       map.fitBounds(bounds, 48);
     }
@@ -147,6 +154,11 @@ export function buildLocalesMapHtml() {
 
       var prev = selectedId;
       selectedId = nextId;
+      var mePos = paintMyLocation(payload.me);
+      var includeMe = false;
+      if (mePos && !fittedWithMe) { fittedWithMe = true; includeMe = true; }
+      var pinKey = pins.map(function (p) { return p.id; }).join('|');
+      if (pinKey !== lastPinKey) { lastPinKey = pinKey; didFit = false; }
 
       if (selectedId && markers[selectedId]) {
         showInfo(markers[selectedId].__pin);
@@ -154,7 +166,10 @@ export function buildLocalesMapHtml() {
         if (map.getZoom() < 14) map.setZoom(15);
       } else {
         if (info) info.close();
-        if (!prev) fitAll(pins);
+        if (!selectedId && (prev || !didFit || includeMe)) {
+          didFit = true;
+          fitAll(pins, mePos);
+        }
       }
     };
 

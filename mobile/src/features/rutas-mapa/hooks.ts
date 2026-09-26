@@ -3,6 +3,7 @@ import { fetchConductores, fetchRoutes } from "@/features/routes/api";
 import type { ConductorOption, RouteItem } from "@/features/routes/types";
 import { buildConductorColorMap } from "./lib/colors";
 import { hasCoords, sortByOrden } from "./lib/format";
+import { useMyLocation } from "@/features/map/lib/use-my-location";
 import type { RutasMapaPayload } from "./types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -14,6 +15,7 @@ function toIsoDate(d: Date) {
 }
 
 export function useRutasMapaScreen() {
+  const me = useMyLocation();
   const [fecha, setFecha] = useState(limaDate);
   const [conductores, setConductores] = useState<ConductorOption[]>([]);
   const [rutas, setRutas] = useState<RouteItem[]>([]);
@@ -91,8 +93,9 @@ export function useRutasMapaScreen() {
         ? colorByConductor.get(selectedConductorId) ?? "#1976D2"
         : null,
       selectedId: selectedRutaId,
+      me,
     };
-  }, [filtered, selectedConductorId, selectedRutaId, colorByConductor]);
+  }, [filtered, selectedConductorId, selectedRutaId, colorByConductor, me]);
 
   const setFechaDate = useCallback((date: Date) => {
     setFecha(toIsoDate(date));

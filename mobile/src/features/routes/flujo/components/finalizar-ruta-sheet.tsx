@@ -8,6 +8,7 @@ import type {
   FinalizarFieldErrors,
   FinalizarRutaInput,
   PendingFoto,
+  UploadProgress,
 } from "@/features/routes/flujo/types";
 import type { RouteItem } from "@/features/routes/types";
 import { FieldLabel, TextField } from "@/features/routes/assign/components/form-kit";
@@ -15,6 +16,7 @@ import { theme } from "@/lib/theme";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Modal,
@@ -32,6 +34,7 @@ type FinalizarRutaSheetProps = {
   route: RouteItem | null;
   config: FinalizacionConfig;
   saving?: boolean;
+  upload?: UploadProgress | null;
   onClose: () => void;
   onSubmit: (input: FinalizarRutaInput) => Promise<void>;
 };
@@ -61,6 +64,7 @@ export function FinalizarRutaSheet({
   route,
   config,
   saving = false,
+  upload = null,
   onClose,
   onSubmit,
 }: FinalizarRutaSheetProps) {
@@ -131,6 +135,7 @@ export function FinalizarRutaSheet({
       uri: asset.uri,
       name: asset.fileName?.trim() || `${field}_${Date.now()}.${ext}`,
       mimeType: asset.mimeType || "image/jpeg",
+      bytes: asset.fileSize ?? null,
     };
     setForm((prev) => ({ ...prev, [field]: foto }));
     setErrors((prev) => ({ ...prev, [field]: undefined }));
@@ -160,13 +165,8 @@ export function FinalizarRutaSheet({
               <Text style={styles.title} numberOfLines={2}>
                 {route.localNombre}
               </Text>
-              {route.localDireccion ? (
-                <Text style={styles.address} numberOfLines={2}>
-                  {route.localDireccion}
-                </Text>
-              ) : null}
-              <Text style={styles.meta} numberOfLines={1}>
-                {route.localDireccion || "Sin dirección"}
+              <Text style={styles.address} numberOfLines={2}>
+                {route.localDireccion.trim() || "Sin dirección"}
               </Text>
             </View>
             <Pressable onPress={onClose} style={styles.close} disabled={saving}>
@@ -285,14 +285,73 @@ export function FinalizarRutaSheet({
               disabled={saving}
               style={[styles.submit, saving ? styles.submitDisabled : null]}
             >
-              <Text style={styles.submitText}>
-                {saving ? "Finalizando…" : "Finalizar ruta"}
-              </Text>
+              <Text style={styles.submitText}>Finalizar ruta</Text>
             </Pressable>
           </ScrollView>
         </View>
+        {saving ? (
+          <UploadCard
+            localNombre={route.localNombre}
+            fotos={[
+              form.fotoGuia ? { label: "Guía", bytes: form.fotoGuia.bytes } : null,
+              form.fotoMercaderia ? { label: "Mercadería", bytes: form.fotoMercaderia.bytes } : null,
+            ].filter((item): item is FotoLine => Boolean(item))}
+            upload={upload}
+          />
+        ) : null}
       </View>
     </Modal>
+  );
+}
+
+type FotoLine = { label: string; bytes: number | null };
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${Math.max(0, Math.round(bytes))} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function UploadCard({
+  localNombre,
+  fotos,
+  upload,
+}: {
+  localNombre: string;
+  fotos: FotoLine[];
+  upload: UploadProgress | null;
+}) {
+  const known = fotos.reduce((sum, foto) => sum + (foto.bytes ?? 0), 0);
+  const total = upload && upload.total > 0 ? upload.total : known;
+  const loaded = Math.min(upload?.loaded ?? 0, total || upload?.loaded || 0);
+  const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+
+  return (
+    <View style={styles.loading} accessibilityRole="progressbar">
+      <View style={styles.loadingCard}>
+        <View style={styles.loadingHead}>
+          <ActivityIndicator color={theme.colors.accent} />
+          <View style={styles.loadingCopy}>
+            <Text style={styles.loadingTitle}>Finalizando ruta</Text>
+            <Text style={styles.loadingName} numberOfLines={1}>
+              {localNombre}
+            </Text>
+          </View>
+        </View>
+        {fotos.map((foto) => (
+          <View key={foto.label} style={styles.loadingRow}>
+            <Text style={styles.loadingLabel}>{foto.label}</Text>
+            <Text style={styles.loadingSize}>{foto.bytes != null ? formatBytes(foto.bytes) : "—"}</Text>
+          </View>
+        ))}
+        <View style={styles.track}>
+          <View style={[styles.fill, { width: `${pct}%` }]} />
+        </View>
+        <Text style={styles.loadingMeta}>
+          {total > 0 ? `${formatBytes(loaded)} / ${formatBytes(total)} · ${pct}%` : "Enviando…"}
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -386,7 +445,6 @@ const styles = StyleSheet.create({
   },
   title: { color: theme.colors.ink, fontSize: 16, fontWeight: "900" },
   address: { color: theme.colors.muted, fontSize: 12, fontWeight: "600", lineHeight: 16 },
-  meta: { color: theme.colors.muted, fontSize: 12, fontWeight: "600" },
   close: {
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -454,4 +512,40 @@ const styles = StyleSheet.create({
   },
   submitDisabled: { opacity: 0.65 },
   submitText: { color: "#fff", fontSize: 14, fontWeight: "900" },
+  loading: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 20,
+    backgroundColor: "rgba(8,20,16,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  loadingCard: {
+    width: "100%",
+    maxWidth: 300,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 8,
+  },
+  loadingHead: { flexDirection: "row", alignItems: "center", gap: 10 },
+  loadingCopy: { flex: 1, minWidth: 0 },
+  loadingTitle: { color: theme.colors.ink, fontSize: 15, fontWeight: "900" },
+  loadingName: { color: theme.colors.accent, fontSize: 12, fontWeight: "700" },
+  loadingRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  loadingLabel: { color: theme.colors.muted, fontSize: 12, fontWeight: "700" },
+  loadingSize: { color: theme.colors.ink, fontSize: 12, fontWeight: "800" },
+  track: {
+    height: 6,
+    borderRadius: 99,
+    backgroundColor: theme.colors.cream,
+    overflow: "hidden",
+  },
+  fill: { height: "100%", borderRadius: 99, backgroundColor: theme.colors.accent },
+  loadingMeta: { color: theme.colors.ink, fontSize: 12, fontWeight: "800", textAlign: "right" },
 });

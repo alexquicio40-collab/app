@@ -108,6 +108,7 @@ export function OrderPanel({ conductores, bottomPad = 120, onSaveOrder }: OrderP
             value={conductorId}
             placeholder="Operador…"
             options={conductores.map((item) => ({ value: item.id, label: item.nombre }))}
+            searchable
             onChange={setConductorId}
           />
           <View style={styles.half}>

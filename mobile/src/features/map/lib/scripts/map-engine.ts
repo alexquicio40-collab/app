@@ -340,7 +340,7 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
       };
     }
 
-    window.showMyLocation = function (lat, lng, accuracy) {
+    window.showMyLocation = function (lat, lng, accuracy, pan) {
       if (!map) return;
       var pos = { lat: Number(lat), lng: Number(lng) };
       if (!isFinite(pos.lat) || !isFinite(pos.lng)) return;
@@ -378,8 +378,10 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
         myMarker.setPosition(pos);
       }
 
-      map.panTo(pos);
-      if (map.getZoom() < 15) map.setZoom(16);
+      if (pan !== false) {
+        map.panTo(pos);
+        if (map.getZoom() < 15) map.setZoom(16);
+      }
     };
 
     // ——— Operadores / animación ———
@@ -591,7 +593,7 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
         if (event.data.type === "live") window.updateLiveMap(event.data);
         if (event.data.type === "cmd") window.runMapCmd(event.data.action);
         if (event.data.type === "locate") {
-          window.showMyLocation(event.data.lat, event.data.lng, event.data.accuracy);
+          window.showMyLocation(event.data.lat, event.data.lng, event.data.accuracy, event.data.pan);
         }
       });
 

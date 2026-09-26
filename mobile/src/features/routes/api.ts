@@ -1,5 +1,6 @@
 import { api, limaDate } from "@/lib/api";
 import { asEstado } from "./lib/estados-recojo";
+import { toDayKey } from "./lib/format";
 import { normalizePrioridad } from "@/features/locales/lib/prioridad";
 import { resolveMediaUrl } from "./lib/format";
 import type { ConductorOption, RouteItem, RouteMetodoPago } from "./types";
@@ -77,6 +78,8 @@ function parseRoute(row: UnknownRecord): RouteItem | null {
     id,
     conductorId: text(row.conductor_id, row.usuario_id),
     conductorNombre: text(row.conductor_nombre) || "Sin operador",
+    creadoPorNombre: text(row.creado_por_nombre, row.creadoPorNombre),
+    editadoPorNombre: text(row.editado_por_nombre, row.editadoPorNombre),
     localId: text(row.local_id, local?.id),
     localNombre: text(row.local_nombre, row.nombre, local?.nombre) || "Sin nombre",
     localDireccion: text(row.local_direccion, row.direccion, local?.direccion),
@@ -94,7 +97,7 @@ function parseRoute(row: UnknownRecord): RouteItem | null {
       local?.longitud,
       local?.lng,
     ),
-    fechaAsignacion: text(row.fecha_asignacion),
+    fechaAsignacion: toDayKey(text(row.fecha_asignacion)),
     observaciones: text(row.observaciones),
     estado: asEstado(text(row.estado) || "programado"),
     orden: num(row.orden),
@@ -116,6 +119,14 @@ function parseRoute(row: UnknownRecord): RouteItem | null {
       row.local_encargado_telefono,
       local?.telefono_encargado,
     ),
+    horarioEntrada: text(
+      row.horario_entrada_proveedores,
+      row.horario_entrada,
+      local?.horario_entrada_proveedores,
+    ),
+    asesorBioClim: text(row.asesor_bio_clim, row.asesor_nombre, local?.asesor_bio_clim),
+    telefonoAsesor: text(row.telefono_asesor, local?.telefono_asesor),
+    referencia: text(row.referencia, local?.referencia),
     tipoEnvase: text(
       row.tipo_envase,
       row.tipoEnvase,
@@ -142,6 +153,21 @@ function parseRoute(row: UnknownRecord): RouteItem | null {
       row.bidonPasadoPor,
       local?.bidon_pasado_por,
     ),
+    precioLitro: num(row.precio_litro, row.precioLitro, local?.precio_litro, local?.precioLitro),
+    precioBalde: num(row.precio_balde, row.precioBalde, local?.precio_balde, local?.precioBalde),
+    precioGalonera: num(
+      row.precio_galonera,
+      row.precioGalonera,
+      local?.precio_galonera,
+      local?.precioGalonera,
+    ),
+    operadoresVenPrecio:
+      row.operadores_ven_precio === 1 ||
+      row.operadores_ven_precio === true ||
+      row.operadoresVenPrecio === 1 ||
+      row.operadoresVenPrecio === true ||
+      local?.operadores_ven_precio === 1 ||
+      local?.operadoresVenPrecio === true,
     metodosPago: parseMetodos(
       pick(row.metodos_pago, row.metodosPago, local?.metodos_pago, local?.metodosPago),
     ),
@@ -165,7 +191,10 @@ function daysBetween(desde: string, hasta: string) {
   const out: string[] = [];
   const cursor = new Date(start);
   while (cursor <= end && out.length < 31) {
-    out.push(cursor.toISOString().slice(0, 10));
+    const y = cursor.getFullYear();
+    const m = String(cursor.getMonth() + 1).padStart(2, "0");
+    const d = String(cursor.getDate()).padStart(2, "0");
+    out.push(`${y}-${m}-${d}`);
     cursor.setDate(cursor.getDate() + 1);
   }
   return out.length ? out : [desde];
@@ -276,12 +305,15 @@ export async function updateRoute(id: string, input: UpdateRouteInput) {
   const body: Record<string, unknown> = {};
   if (input.conductorId != null) body.conductor_id = Number(input.conductorId);
   if (input.localId != null) body.local_id = Number(input.localId);
-  if (input.fechaAsignacion != null) body.fecha_asignacion = input.fechaAsignacion;
+  if (input.fechaAsignacion != null) {
+    body.fecha_asignacion = toDayKey(input.fechaAsignacion) || input.fechaAsignacion.slice(0, 10);
+  }
   if (input.observaciones != null) body.observaciones = input.observaciones;
   if (input.estado != null) body.estado = input.estado;
   if (input.orden !== undefined) body.orden = input.orden;
 
-  return api<{ success?: boolean; message?: string }>(`/api/rutas/${id}`, {
+  const query = input.estado ? `?estado=${encodeURIComponent(input.estado)}` : "";
+  return api<{ success?: boolean; message?: string }>(`/api/rutas/${id}${query}`, {
     method: "PUT",
     body,
   });

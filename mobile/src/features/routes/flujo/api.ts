@@ -59,7 +59,8 @@ export async function fetchFinalizacionConfig(userId: string | number): Promise<
 }
 
 function setEstado(rutaId: string, estado: string) {
-  return api<{ success?: boolean; message?: string }>(`/api/rutas/${rutaId}`, {
+  const query = `estado=${encodeURIComponent(estado)}`;
+  return api<{ success?: boolean; message?: string }>(`/api/rutas/${rutaId}?${query}`, {
     method: "PUT",
     body: { estado },
   });
@@ -83,17 +84,25 @@ export function reprogramarRuta(rutaId: string) {
 
 async function appendFoto(form: FormData, field: string, foto: PendingFoto | null) {
   if (!foto) return;
-  const response = await fetch(foto.uri);
-  if (!response.ok) {
-    throw new Error("No se pudo leer la foto");
+  if (foto.uri.startsWith("blob:") || foto.uri.startsWith("data:")) {
+    const response = await fetch(foto.uri);
+    if (!response.ok) throw new Error("No se pudo leer la foto");
+    const blob = await response.blob();
+    form.append(field, blob, foto.name);
+    return;
   }
-  const blob = await response.blob();
-  const type = foto.mimeType || blob.type || "image/jpeg";
-  const file = blob.type ? blob : new Blob([await blob.arrayBuffer()], { type });
-  form.append(field, file, foto.name);
+  form.append(field, {
+    uri: foto.uri,
+    name: foto.name,
+    type: foto.mimeType || "image/jpeg",
+  } as unknown as Blob);
 }
 
-export async function finalizarRuta(rutaId: string, input: FinalizarRutaInput) {
+export async function finalizarRuta(
+  rutaId: string,
+  input: FinalizarRutaInput,
+  onProgress?: (loaded: number, total: number) => void,
+) {
   const form = new FormData();
   form.append("estado", "recolectado");
   form.append("cantidad_litraje", String(Math.max(0, Math.floor(input.cantidadLitraje) || 0)));
@@ -109,8 +118,7 @@ export async function finalizarRuta(rutaId: string, input: FinalizarRutaInput) {
   await appendFoto(form, "foto_guia", input.fotoGuia);
   await appendFoto(form, "foto_mercaderia", input.fotoMercaderia);
 
-  return apiUpload<{ success?: boolean; message?: string }>(
-    `/api/rutas/${rutaId}/finalizar`,
-    form,
-  );
+  return apiUpload<{ success?: boolean; message?: string }>(`/api/rutas/${rutaId}/finalizar`, form, {
+    onProgress,
+  });
 }

@@ -90,6 +90,11 @@ export function isAbierto(estado: string | null | undefined) {
   return code !== "recolectado" && code !== "cerrado";
 }
 
+/** Completar no exige Llegó: cualquier visita que no esté cerrada. */
+export function puedeFinalizar(estado: string | null | undefined) {
+  return asEstado(estado) !== "cerrado";
+}
+
 /** Destinos vía PUT. Recolectado entra solo por finalizar. */
 export function statusTargetsForEstado(estado: string | null | undefined) {
   const next = TRANSICIONES[asEstado(estado)] ?? [];

@@ -17,4 +17,5 @@ export type RutasMapaPayload = {
   path: { lat: number; lng: number }[] | null;
   pathColor: string | null;
   selectedId: string | null;
+  me: { lat: number; lng: number; accuracy?: number } | null;
 };

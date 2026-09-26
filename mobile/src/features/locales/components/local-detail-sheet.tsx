@@ -1,4 +1,5 @@
 import { certLabel, formatEnvaseSummary, mapsDirectionsUrl } from "@/features/locales/lib/format";
+import { canSeePrecios, formatPrecios } from "@/features/locales/lib/precios";
 import type { LocalItem } from "@/features/locales/types";
 import { theme } from "@/lib/theme";
 import { useContentBottomPad } from "@/ui/use-content-bottom-pad";
@@ -109,7 +110,9 @@ export function LocalDetailSheet({
             </Section>
 
             <Section title="Ubicación">
-              <Pair label="Dirección" value={local.direccion || "—"} />
+              <Pair label="Ubicación mapa" value={local.direccion || "—"} />
+              {local.direccionFiscal ? <Pair label="Fiscal" value={local.direccionFiscal} /> : null}
+              {local.direccionComercial ? <Pair label="Comercial" value={local.direccionComercial} /> : null}
               <Pair label="Dirección cert." value={local.direccionCert || "—"} />
               <Pair label="Referencia" value={local.referencia || "—"} />
               <Pair
@@ -136,6 +139,12 @@ export function LocalDetailSheet({
 
             <Section title="Operación">
               <Pair label="Envases" value={formatEnvaseSummary(local)} />
+              {canSeePrecios(local, canManage) ? (
+                <Pair
+                  label={local.operadoresVenPrecio ? "Precios · visible operador" : "Precios · oculto operador"}
+                  value={formatPrecios(local)}
+                />
+              ) : null}
               <Pair
                 label="Frecuencias"
                 value={local.frecuencias.length ? local.frecuencias.join(", ") : "—"}

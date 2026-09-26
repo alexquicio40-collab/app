@@ -53,7 +53,7 @@ export async function createRoute(input: AssignRouteInput) {
     body: {
       conductor_id: Number(input.conductorId),
       local_id: Number(input.localId),
-      fecha_asignacion: input.fechaAsignacion,
+      fecha_asignacion: input.fechaAsignacion.trim().slice(0, 10),
       observaciones: input.observaciones,
     },
   });

@@ -208,7 +208,7 @@ export function useHojaRutaScreen() {
         chofer: user.name,
         operadorAcompanante: acompanante.trim(),
         placa,
-        fecha: new Date(`${fecha}T12:00:00`).toISOString(),
+        fecha,
         caja: cajaNum,
         filas: filas.map(toFilaData),
         gastos: gastos.map(toGastoData),

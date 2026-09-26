@@ -1,3 +1,4 @@
+import { fechaHoraInput } from "@/lib/fecha-lima";
 import type { PlantaFilters, PlantaRegistro } from "../types";
 
 export function createDefaultPlantaFilters(): PlantaFilters {
@@ -117,6 +118,5 @@ export function joinIngreso(date: string, time: string) {
 }
 
 export function nowIsoLocal() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
+  return fechaHoraInput();
 }

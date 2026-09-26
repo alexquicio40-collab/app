@@ -1,3 +1,4 @@
+import { enLima } from "@/lib/fecha-lima";
 import type { HistorialFilters, PendientesFilters } from "../types";
 
 const MESES = [
@@ -21,7 +22,7 @@ function pad2(n: number) {
 
 export function parseDate(iso: string | null): Date | null {
   if (!iso?.trim()) return null;
-  const raw = iso.trim().replace(" ", "T");
+  const raw = enLima(iso).replace(" ", "T");
   const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/);
   if (m) {
     const d = new Date(

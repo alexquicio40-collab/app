@@ -1,3 +1,4 @@
+import { hoy } from "./fecha-lima";
 import { getAccessToken } from "./secure-store";
 
 type RequestOptions = Omit<RequestInit, "body"> & {
@@ -51,24 +52,59 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   return parseApiResponse<T>(response);
 }
 
-/** Multipart sin forzar Content-Type (el boundary lo pone fetch). */
+/**
+ * Multipart por XMLHttpRequest.
+ * El fetch de Expo no acepta `{ uri, name, type }` y en Android lanza
+ * "Unsupported FormDataPart". La red nativa sí sube el archivo desde el teléfono.
+ */
 export async function apiUpload<T>(
   path: string,
   formData: FormData,
-  options: { skipAuth?: boolean; method?: "POST" | "PUT" } = {},
+  options: {
+    skipAuth?: boolean;
+    method?: "POST" | "PUT";
+    onProgress?: (loaded: number, total: number) => void;
+  } = {},
 ): Promise<T> {
   const userId = options.skipAuth ? null : await getAccessToken();
-
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await sendMultipart(`${BASE_URL}${path}`, formData, {
     method: options.method ?? "POST",
-    credentials: "include",
-    headers: {
-      ...(userId ? { "X-User-Id": userId } : {}),
-    },
-    body: formData,
+    userId,
+    onProgress: options.onProgress,
   });
-
   return parseApiResponse<T>(response);
+}
+
+function sendMultipart(
+  url: string,
+  formData: FormData,
+  options: {
+    method: string;
+    userId: string | null;
+    onProgress?: (loaded: number, total: number) => void;
+  },
+) {
+  return new Promise<Response>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method, url);
+    xhr.withCredentials = true;
+    xhr.responseType = "text";
+    if (options.userId) xhr.setRequestHeader("X-User-Id", options.userId);
+    xhr.upload.onprogress = (event) => {
+      options.onProgress?.(event.loaded, event.lengthComputable ? event.total : 0);
+    };
+    xhr.onload = () => {
+      const status = xhr.status;
+      if (status < 200 || status > 599) {
+        reject(new Error("No se pudo enviar el archivo"));
+        return;
+      }
+      resolve(new Response(xhr.responseText || "", { status }));
+    };
+    xhr.onerror = () => reject(new Error("No se pudo enviar el archivo"));
+    xhr.ontimeout = () => reject(new Error("Se agotó el tiempo de carga"));
+    xhr.send(formData);
+  });
 }
 
 async function parseApiResponse<T>(response: Response): Promise<T> {
@@ -90,5 +126,5 @@ async function parseApiResponse<T>(response: Response): Promise<T> {
 }
 
 export function limaDate() {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Lima" });
+  return hoy();
 }

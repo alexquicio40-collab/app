@@ -17,6 +17,8 @@ export type RouteItem = {
   id: string;
   conductorId: string;
   conductorNombre: string;
+  creadoPorNombre: string;
+  editadoPorNombre: string;
   localId: string;
   localNombre: string;
   localDireccion: string;
@@ -34,12 +36,20 @@ export type RouteItem = {
   fotoMercaderia: string | null;
   encargadoNombre: string;
   encargadoTelefono: string;
+  horarioEntrada: string;
+  asesorBioClim: string;
+  telefonoAsesor: string;
+  referencia: string;
   /** Datos del local: qué recogerá el operador. */
   tipoEnvase: string;
   cantidadEnvases: number | null;
   cantidadBidonesAzules: number | null;
   cantidadBidonesBlancos: number | null;
   bidonPasadoPor: number | null;
+  precioLitro: number | null;
+  precioBalde: number | null;
+  precioGalonera: number | null;
+  operadoresVenPrecio: boolean;
   /** Formas de pago del local. */
   metodosPago: RouteMetodoPago[];
   prioridad: "alta" | "media" | "baja";

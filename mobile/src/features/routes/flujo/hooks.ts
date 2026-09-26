@@ -16,6 +16,7 @@ import type {
   FinalizacionConfig,
   FinalizarRutaInput,
   StartRutaPayload,
+  UploadProgress,
   VehicleType,
 } from "./types";
 
@@ -39,6 +40,7 @@ export function useRutaFlujo(onChanged?: () => void) {
   const [finishOpen, setFinishOpen] = useState(false);
 
   const [mutating, setMutating] = useState(false);
+  const [upload, setUpload] = useState<UploadProgress | null>(null);
 
   const openStart = useCallback(async (route: RouteItem) => {
     setStartRoute(route);
@@ -132,9 +134,16 @@ export function useRutaFlujo(onChanged?: () => void) {
   const confirmFinish = useCallback(
     async (input: FinalizarRutaInput) => {
       if (!finishRoute) return;
+      const photos = [input.fotoGuia, input.fotoMercaderia].reduce(
+        (sum, foto) => sum + (foto?.bytes ?? 0),
+        0,
+      );
       setMutating(true);
+      setUpload({ loaded: 0, total: photos });
       try {
-        await finalizarRuta(finishRoute.id, input);
+        await finalizarRuta(finishRoute.id, input, (loaded, total) => {
+          setUpload({ loaded, total: total > 0 ? total : photos });
+        });
         notify("Listo", "Ruta finalizada correctamente");
         closeFinish();
         onChanged?.();
@@ -143,6 +152,7 @@ export function useRutaFlujo(onChanged?: () => void) {
         throw err;
       } finally {
         setMutating(false);
+        setUpload(null);
       }
     },
     [finishRoute, closeFinish, onChanged],
@@ -151,6 +161,7 @@ export function useRutaFlujo(onChanged?: () => void) {
   return {
     isOperador,
     mutating,
+    upload,
     // start
     startRoute,
     vehicleOpen,

@@ -1,4 +1,5 @@
 import { api, apiUpload, getApiBaseUrl } from "@/lib/api";
+import { fechaHora } from "@/lib/fecha-lima";
 import type { AsesorOption, PendingFoto, PlantaFormInput, PlantaRegistro } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
@@ -27,6 +28,14 @@ function text(...values: unknown[]) {
   return "";
 }
 
+function temporal(...values: unknown[]) {
+  const raw = text(...values);
+  if (!raw || raw.startsWith("0000-00-00") || raw.startsWith("undefined") || raw === "Invalid Date") {
+    return null;
+  }
+  return raw;
+}
+
 function num(...values: unknown[]) {
   for (const value of values) {
     if (value == null || value === "") continue;
@@ -50,7 +59,7 @@ export function parsePlantaRegistro(row: UnknownRecord): PlantaRegistro | null {
     id,
     nombreProveedor: text(row.nombre_proveedor) || "Sin proveedor",
     asesorComercial: text(row.asesor_comercial),
-    ingresoMercaderia: text(row.ingreso_mercaderia) || null,
+    ingresoMercaderia: temporal(row.ingreso_mercaderia),
     guiaRetiro: text(row.guia_retiro),
     cantidadLitraje: num(row.cantidad_litraje),
     cantidadBaldesVacios: num(row.cantidad_baldes_vacios),
@@ -58,8 +67,8 @@ export function parsePlantaRegistro(row: UnknownRecord): PlantaRegistro | null {
     notas: text(row.notas),
     fotoMercaderia: resolveMedia(text(row.foto_mercaderia) || null),
     fotoGuiaRetiro: resolveMedia(text(row.foto_guia_retiro) || null),
-    createdAt: text(row.created_at) || null,
-    updatedAt: text(row.updated_at) || null,
+    createdAt: temporal(row.created_at),
+    updatedAt: temporal(row.updated_at),
   };
 }
 
@@ -81,7 +90,7 @@ async function buildFormData(input: PlantaFormInput) {
   const form = new FormData();
   form.append("nombre_proveedor", input.nombreProveedor.trim());
   form.append("asesor_comercial", input.asesorComercial.trim());
-  form.append("ingreso_mercaderia", input.ingresoMercaderia.trim());
+  form.append("ingreso_mercaderia", fechaHora(input.ingresoMercaderia));
   form.append("guia_retiro", input.guiaRetiro.trim());
   form.append("cantidad_litraje", String(input.cantidadLitraje || 0));
   form.append("cantidad_baldes_vacios", String(input.cantidadBaldesVacios || 0));

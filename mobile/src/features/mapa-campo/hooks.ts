@@ -1,10 +1,7 @@
 import { fetchLocales } from "@/features/locales/api";
 import { ROUTES_POLL_MS } from "@/features/map/constants";
 import { connectLiveSocket } from "@/features/map/socket";
-import {
-  isWebMockGpsEnabled,
-  MOCK_GPS_LIMA,
-} from "@/features/mapa-campo/lib/web-mock-gps";
+import { getAdminCoords } from "@/features/map/lib/admin-location";
 import { fetchOperadorRutas } from "@/features/routes/api";
 import { enrichRoutesWithLocales } from "@/features/routes/lib/enrich";
 import { asEstado, isCerrado, isEnCurso, isRecolectado } from "@/features/routes/lib/estados-recojo";
@@ -12,7 +9,6 @@ import type { RouteItem } from "@/features/routes/types";
 import type { LatLng } from "@/features/routes/navegacion/types";
 import { limaDate } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
-import * as Location from "expo-location";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function sortByOrden(a: RouteItem, b: RouteItem) {
@@ -103,19 +99,10 @@ export function useMapaCampo() {
 
   const refreshOrigin = useCallback(async () => {
     try {
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (!perm.granted) throw new Error("perm");
-      const pos = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      setOrigin({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      const pos = await getAdminCoords();
+      setOrigin({ lat: pos.lat, lng: pos.lng });
     } catch {
-      if (!isWebMockGpsEnabled()) return;
-      // Idle: anclar cerca de la ruta seleccionada / primera con coords
-      setOrigin((prev) => {
-        if (prev) return prev;
-        return MOCK_GPS_LIMA;
-      });
+      // Sin GPS no se pinta un punto falso.
     }
   }, []);
 
