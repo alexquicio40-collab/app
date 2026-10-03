@@ -39,6 +39,7 @@ export function buildCampoMapHtml() {
     var lastTraveledKey = '';
     var lastIdleFit = '';
     var followEnabled = true;
+    var trackingActive = false;
     var anim = null;
     var displayPos = null;
     var targetPos = null;
@@ -54,6 +55,31 @@ export function buildCampoMapHtml() {
         }
         if (window.parent && window.parent !== window) window.parent.postMessage(msg, '*');
       } catch (e) {}
+    }
+
+    function emitFollow() {
+      post({ type: 'follow', on: !!followEnabled });
+    }
+
+    function focusCar(snap) {
+      var pos = displayPos || targetPos;
+      if (!map || !pos) return;
+      if (snap) {
+        map.setCenter(pos);
+        if (map.getZoom() < 17) map.setZoom(18);
+        return;
+      }
+      map.panTo(pos);
+    }
+
+    function setFollow(on, snap) {
+      followEnabled = !!on;
+      emitFollow();
+      if (followEnabled) focusCar(!!snap);
+    }
+
+    function recenterMe() {
+      setFollow(true, true);
     }
 
     function routesKey(routes, selectedId, traveled) {
@@ -271,10 +297,15 @@ export function buildCampoMapHtml() {
         if (meMarker) { meMarker.setMap(null); meMarker = null; }
         displayPos = null;
         targetPos = null;
+        trackingActive = false;
         return;
       }
       ensureMeMarker(!!tracking);
-      followEnabled = !!tracking;
+      if (tracking && !trackingActive) {
+        followEnabled = true;
+        emitFollow();
+      }
+      trackingActive = !!tracking;
       targetPos = { lat: Number(position.lat), lng: Number(position.lng) };
       targetHeading = Number(heading || 0);
       if (!displayPos) {
@@ -332,6 +363,7 @@ export function buildCampoMapHtml() {
     }
 
     window.updateCampoMap = function (payload) { draw(payload); };
+    window.recenterMe = recenterMe;
 
     window.initCampoMap = function () {
       map = new google.maps.Map(document.getElementById('map'), {
@@ -346,9 +378,9 @@ export function buildCampoMapHtml() {
         ],
       });
       google.maps.event.addListener(map, 'dragstart', function () {
-        // el usuario mueve el mapa: no pelear con el follow un momento
+        if (!followEnabled) return;
         followEnabled = false;
-        setTimeout(function () { followEnabled = true; }, 4000);
+        emitFollow();
       });
       ready = true;
       if (pending) { draw(pending); pending = null; }
@@ -359,7 +391,9 @@ export function buildCampoMapHtml() {
       if (typeof data === 'string') {
         try { data = JSON.parse(data); } catch (e) { return; }
       }
-      if (data && (data.type === 'campo' || data.type === 'nav')) window.updateCampoMap(data);
+      if (!data || !data.type) return;
+      if (data.type === 'recenter') { recenterMe(); return; }
+      if (data.type === 'campo' || data.type === 'nav') window.updateCampoMap(data);
     });
   </script>
   <script src="https://maps.googleapis.com/maps/api/js?key=${key}&v=weekly&callback=initCampoMap" async></script>
@@ -369,4 +403,8 @@ export function buildCampoMapHtml() {
 
 export function campoMapUpdateScript(payload: unknown) {
   return `window.updateCampoMap && window.updateCampoMap(${JSON.stringify(payload)}); true;`;
+}
+
+export function campoMapRecenterScript() {
+  return `window.recenterMe && window.recenterMe(); true;`;
 }

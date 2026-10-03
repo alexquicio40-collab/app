@@ -120,6 +120,8 @@ export default function MapaScreen() {
             idleDest={campo.dest}
             idleDestColor={campo.selected ? prioridadMeta(campo.selected.prioridad).color : null}
             onSelectRoute={nav.selectAlternative}
+            showRecenter={nav.active && !nav.arrived}
+            locateBottom={bottomPad + 58}
           />
         )}
 

@@ -1,11 +1,12 @@
 import {
   ARRIVAL_METERS,
   advanceAlongPath,
+  bearingDeg,
   haversineMeters,
+  isOffDrawnRoute,
   OFF_ROUTE_METERS,
   offsetPerpendicular,
   pathLengthMeters,
-  RECALC_COOLDOWN_MS,
   SNAP_METERS,
   shouldAcceptMove,
   slicePathBehind,
@@ -140,6 +141,10 @@ export function useCampoNav() {
   const watchRef = useRef<{ remove: () => void } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastRecalcRef = useRef(0);
+  const recalcBusyRef = useRef(false);
+  const pendingRecalcRef = useRef<LatLng | null>(null);
+  const restrictRef = useRef<Awaited<ReturnType<typeof loadNavRestrictions>>>([]);
+  const restrictReadyRef = useRef(false);
   const selectedRef = useRef<SuggestedRoute | null>(null);
   const destRef = useRef<LatLng | null>(null);
   const vehicleRef = useRef<VehicleTypeNav | null>(null);
@@ -147,6 +152,7 @@ export function useCampoNav() {
   const mockPosRef = useRef<LatLng | null>(null);
   const mockingRef = useRef(false);
   const lastPosRef = useRef<LatLng | null>(null);
+  const lastRawRef = useRef<LatLng | null>(null);
   const lastPosAtRef = useRef(0);
   const lastOnRouteRef = useRef<LatLng | null>(null);
   /** Recorrido atrás (congelado al recalcular). */
@@ -172,8 +178,14 @@ export function useCampoNav() {
     mockingRef.current = false;
     mockPosRef.current = null;
     lastPosRef.current = null;
+    lastRawRef.current = null;
     lastPosAtRef.current = 0;
     lastOnRouteRef.current = null;
+    lastRecalcRef.current = 0;
+    recalcBusyRef.current = false;
+    pendingRecalcRef.current = null;
+    restrictRef.current = [];
+    restrictReadyRef.current = false;
     traveledRef.current = [];
     traveledBaseRef.current = [];
     setTraveled([]);
@@ -234,13 +246,22 @@ export function useCampoNav() {
   );
 
   const calculate = useCallback(
-    async (origin: LatLng, dest: LatLng, vehicleType: VehicleTypeNav | null) => {
-      const restrictions = await loadNavRestrictions();
+    async (
+      origin: LatLng,
+      dest: LatLng,
+      vehicleType: VehicleTypeNav | null,
+      opts?: { quick?: boolean },
+    ) => {
+      if (!restrictReadyRef.current) {
+        restrictRef.current = await loadNavRestrictions();
+        restrictReadyRef.current = true;
+      }
       return fetchSuggestedRoutes({
         origin,
         destination: dest,
         vehicleType,
-        restrictions,
+        restrictions: restrictRef.current,
+        alternatives: !opts?.quick,
       });
     },
     [],
@@ -253,6 +274,7 @@ export function useCampoNav() {
         longitude: number;
         heading?: number | null;
         accuracy?: number | null;
+        speed?: number | null;
       },
       opts?: { force?: boolean },
     ) => {
@@ -270,20 +292,30 @@ export function useCampoNav() {
         Number.isFinite(coords.heading) && (coords.heading ?? -1) >= 0
           ? Number(coords.heading)
           : null;
+      const lastRaw = lastRawRef.current;
+      const movedMeters = lastRaw ? haversineMeters(lastRaw, raw) : 0;
+      const moveHeading =
+        gpsHeading ?? (lastRaw && movedMeters >= 2 ? bearingDeg(lastRaw, raw) : null);
 
       let position = raw;
-      let heading = gpsHeading ?? 0;
+      let heading = moveHeading ?? 0;
       let remaining = 0;
       let offRoute = false;
       const canSnap = accuracy == null || accuracy <= 25;
 
       if (path.length >= 2) {
         const snap = snapToPolyline(raw, path);
-        offRoute = snap.dist > OFF_ROUTE_METERS;
         remaining = snap.remainingMeters;
-        if (canSnap && snap.dist <= SNAP_METERS) {
+        offRoute = isOffDrawnRoute({
+          snapDist: snap.dist,
+          routeHeading: snap.heading,
+          moveHeading,
+          movedMeters,
+          speedMps: coords.speed,
+        });
+        if (!offRoute && canSnap && snap.dist <= SNAP_METERS) {
           position = snap.point;
-          heading = gpsHeading ?? snap.heading;
+          heading = moveHeading ?? snap.heading;
           lastOnRouteRef.current = position;
           const progress = slicePathBehind(path, snap);
           const base = traveledBaseRef.current;
@@ -301,10 +333,11 @@ export function useCampoNav() {
           traveledRef.current = behind;
           setTraveled(behind);
         } else {
-          heading = gpsHeading ?? snap.heading;
+          heading = moveHeading ?? snap.heading;
         }
       }
 
+      lastRawRef.current = raw;
       lastPosRef.current = position;
       lastPosAtRef.current = now;
 
@@ -320,29 +353,47 @@ export function useCampoNav() {
         return;
       }
 
-      if (path.length >= 2 && offRoute && dest && now - lastRecalcRef.current > RECALC_COOLDOWN_MS) {
-        lastRecalcRef.current = now;
-        // Fija recorrido hasta el último punto válido en la ruta antigua
-        if (traveledRef.current.length < 2) {
-          const anchor = lastOnRouteRef.current ?? path[0]!;
-          const seed = path[0] && path[0] !== anchor ? [path[0], anchor] : [anchor];
-          traveledRef.current = seed;
-          setTraveled(seed);
+      if (path.length >= 2 && offRoute && dest) {
+        if (recalcBusyRef.current) {
+          pendingRecalcRef.current = raw;
+        } else {
+          lastRecalcRef.current = now;
+          recalcBusyRef.current = true;
+          pendingRecalcRef.current = null;
+          if (traveledRef.current.length < 2) {
+            const anchor = lastOnRouteRef.current ?? path[0]!;
+            const seed = path[0] && path[0] !== anchor ? [path[0], anchor] : [anchor];
+            traveledRef.current = seed;
+            setTraveled(seed);
+          }
+          setState((prev) => ({ ...prev, recalculating: true, position, heading }));
+          void calculate(raw, dest, vehicleRef.current, { quick: true })
+            .then((directions) => {
+              if (!activeRef.current) return;
+              const latest = lastRawRef.current ?? lastPosRef.current ?? raw;
+              applyDirections(directions, latest, heading, { keepTraveled: true });
+            })
+            .catch(() => {
+              if (!activeRef.current) return;
+              setState((prev) => ({ ...prev, recalculating: false }));
+            })
+            .finally(() => {
+              recalcBusyRef.current = false;
+              const next = pendingRecalcRef.current;
+              pendingRecalcRef.current = null;
+              if (!next || !activeRef.current) return;
+              void onPosition(
+                {
+                  latitude: next.lat,
+                  longitude: next.lng,
+                  heading,
+                  accuracy,
+                  speed: coords.speed,
+                },
+                { force: true },
+              );
+            });
         }
-        setState((prev) => ({ ...prev, recalculating: true, position, heading }));
-        try {
-          const directions = await calculate(raw, dest, vehicleRef.current);
-          if (!activeRef.current) return;
-          applyDirections(directions, raw, heading, { keepTraveled: true });
-        } catch {
-          setState((prev) => ({
-            ...prev,
-            recalculating: false,
-            position,
-            heading,
-          }));
-        }
-        return;
       }
 
       if (path.length >= 2) {
@@ -418,6 +469,7 @@ export function useCampoNav() {
           longitude: fix.lng,
           heading: fix.heading,
           accuracy: fix.accuracy,
+          speed: fix.speed,
         });
       });
       watchRef.current = handle;
@@ -451,6 +503,13 @@ export function useCampoNav() {
       destRef.current = dest;
       activeRef.current = true;
       lastRecalcRef.current = 0;
+      recalcBusyRef.current = false;
+      pendingRecalcRef.current = null;
+      lastRawRef.current = null;
+      void loadNavRestrictions().then((rows) => {
+        restrictRef.current = rows;
+        restrictReadyRef.current = true;
+      });
       mockingRef.current = false;
       mockPosRef.current = null;
       setMockingGps(false);
@@ -587,6 +646,8 @@ export function useCampoNav() {
     const next = offsetPerpendicular(from, snap.heading, 120);
     mockPosRef.current = next;
     lastRecalcRef.current = 0;
+    recalcBusyRef.current = false;
+    pendingRecalcRef.current = null;
     void onPosition(
       {
         latitude: next.lat,

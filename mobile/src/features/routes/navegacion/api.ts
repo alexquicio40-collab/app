@@ -145,6 +145,8 @@ type FetchOptions = {
   destination: LatLng;
   vehicleType?: VehicleTypeNav | null;
   restrictions?: RestrictionBox[];
+  /** Recálculo en vivo: una sola ruta, más rápido. */
+  alternatives?: boolean;
 };
 
 /** Carga Google Maps JS en web (DirectionsService evita CORS del REST). */
@@ -195,6 +197,7 @@ type JsLeg = {
 async function fetchDirectionsViaMapsJs(
   origin: LatLng,
   destination: LatLng,
+  alternatives = true,
 ): Promise<Array<GoogleRoute & { _path?: LatLng[] }>> {
   await loadGoogleMapsJs();
   const maps = (window as unknown as { google: { maps: any } }).google.maps;
@@ -206,7 +209,7 @@ async function fetchDirectionsViaMapsJs(
         origin: { lat: origin.lat, lng: origin.lng },
         destination: { lat: destination.lat, lng: destination.lng },
         travelMode: maps.TravelMode.DRIVING,
-        provideRouteAlternatives: true,
+        provideRouteAlternatives: alternatives,
         region: "PE",
         drivingOptions: {
           departureTime: new Date(),
@@ -350,8 +353,10 @@ export async function fetchSuggestedRoutes(options: FetchOptions): Promise<Direc
     options.vehicleType ?? null,
   );
 
+  const wantAlts = options.alternatives !== false;
+
   if (Platform.OS === "web") {
-    const routes = (await fetchDirectionsViaMapsJs(origin, destination)) as Array<
+    const routes = (await fetchDirectionsViaMapsJs(origin, destination, wantAlts)) as Array<
       GoogleRoute & { _path?: LatLng[] }
     >;
     return scoreAndPickJs(routes, boxes, options.vehicleType ?? null);
@@ -363,7 +368,8 @@ export async function fetchSuggestedRoutes(options: FetchOptions): Promise<Direc
     `?origin=${encodeURIComponent(`${origin.lat},${origin.lng}`)}` +
     `&destination=${encodeURIComponent(`${destination.lat},${destination.lng}`)}` +
     `&key=${encodeURIComponent(key)}` +
-    `&region=pe&alternatives=true&departure_time=now&traffic_model=best_guess`;
+    `&region=pe&alternatives=${wantAlts ? "true" : "false"}` +
+    `&departure_time=now&traffic_model=best_guess`;
 
   const response = await fetch(url);
   const data = (await response.json()) as GoogleDirectionsResponse;

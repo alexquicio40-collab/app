@@ -46,15 +46,23 @@ function projectOnSegment(p: LatLng, a: LatLng, b: LatLng) {
   return { point, t, dist: haversineMeters(p, point) };
 }
 
-function segmentHeading(a: LatLng, b: LatLng) {
+export function bearingDeg(from: LatLng, to: LatLng) {
   const y =
-    Math.sin(((b.lng - a.lng) * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180);
+    Math.sin(((to.lng - from.lng) * Math.PI) / 180) * Math.cos((to.lat * Math.PI) / 180);
   const x =
-    Math.cos((a.lat * Math.PI) / 180) * Math.sin((b.lat * Math.PI) / 180) -
-    Math.sin((a.lat * Math.PI) / 180) *
-      Math.cos((b.lat * Math.PI) / 180) *
-      Math.cos(((b.lng - a.lng) * Math.PI) / 180);
+    Math.cos((from.lat * Math.PI) / 180) * Math.sin((to.lat * Math.PI) / 180) -
+    Math.sin((from.lat * Math.PI) / 180) *
+      Math.cos((to.lat * Math.PI) / 180) *
+      Math.cos(((to.lng - from.lng) * Math.PI) / 180);
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+export function headingDeltaDeg(a: number, b: number) {
+  return Math.abs(((a - b + 540) % 360) - 180);
+}
+
+function segmentHeading(a: LatLng, b: LatLng) {
+  return bearingDeg(a, b);
 }
 
 /** Distancia mínima del punto a la polyline (metros). */
@@ -256,8 +264,28 @@ export function shouldAcceptMove(
   return dist <= maxDist;
 }
 
-export const OFF_ROUTE_METERS = 55;
-/** Micro-ajuste a la calle: solo ruido GPS, no un salto de cuadra. */
-export const SNAP_METERS = 12;
-export const RECALC_COOLDOWN_MS = 18_000;
+/** Fuera de la polyline dibujada (ruido GPS típico < 8 m). */
+export const OFF_ROUTE_METERS = 8;
+/** Giro / calle distinta: el rumbo ya no coincide con el trazo. */
+export const OFF_ROUTE_HEADING_DEG = 35;
+export const OFF_ROUTE_MIN_MOVE_M = 2.5;
+/** Micro-ajuste a la calle: solo ruido GPS. */
+export const SNAP_METERS = 8;
+/** Sin espera: el recálculo sale en el mismo tick del desvío. */
+export const RECALC_COOLDOWN_MS = 0;
 export const ARRIVAL_METERS = 35;
+
+export function isOffDrawnRoute(input: {
+  snapDist: number;
+  routeHeading: number;
+  moveHeading: number | null;
+  movedMeters: number;
+  speedMps?: number | null;
+}) {
+  if (input.snapDist > OFF_ROUTE_METERS) return true;
+  const moving =
+    input.movedMeters >= OFF_ROUTE_MIN_MOVE_M ||
+    (input.speedMps != null && input.speedMps >= 1);
+  if (!moving || input.moveHeading == null) return false;
+  return headingDeltaDeg(input.moveHeading, input.routeHeading) >= OFF_ROUTE_HEADING_DEG;
+}
