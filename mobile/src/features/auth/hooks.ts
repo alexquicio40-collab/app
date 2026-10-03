@@ -1,4 +1,6 @@
+import { useLicenciaGate } from "@/features/sesiones/licencia-gate";
 import { ApiError } from "@/lib/api";
+import { hayInternet } from "@/lib/red";
 import {
   clearRememberedUsername,
   getRememberedUsername,
@@ -22,19 +24,20 @@ function fieldErrorsFromZod(error: { issues: { path: PropertyKey[]; message: str
 
 export function useLoginForm() {
   const { signIn } = useAuth();
+  const licencia = useLicenciaGate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [rememberUser, setRememberUser] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       const saved = await getRememberedUsername();
-      if (!cancelled && saved) {
+      if (cancelled) return;
+      if (saved) {
         setUsername(saved);
         setRememberUser(true);
       }
@@ -53,6 +56,11 @@ export function useLoginForm() {
       return;
     }
 
+    if (!(await hayInternet())) {
+      setFormError("Necesitas internet para ingresar.");
+      return;
+    }
+
     setErrors({});
     setLoading(true);
     try {
@@ -65,6 +73,9 @@ export function useLoginForm() {
       await signIn(result);
     } catch (error) {
       if (error instanceof ApiError) {
+        if (error.code === "DEVICE_BLOCKED") {
+          await licencia.bloquear();
+        }
         setFormError(error.message);
       } else {
         setFormError("No se pudo conectar con el servidor.");

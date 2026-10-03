@@ -38,7 +38,7 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
     var COLORS = { line: "#0B5340", route: "#C9A227" };
     var ROUTE_PALETTE = ["#0B5340", "#C9A227", "#1D4ED8", "#B42318", "#7C3AED", "#0E7490", "#C2410C", "#15803D"];
     var MOVE_EPS = 0.00000003;
-    var ANIM_MS = 900;
+    var ANIM_MS = 1800;
 
     function bearing(from, to) {
       var dLng = (to.lng - from.lng) * Math.PI / 180;
@@ -344,7 +344,7 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
       if (!map) return;
       var pos = { lat: Number(lat), lng: Number(lng) };
       if (!isFinite(pos.lat) || !isFinite(pos.lng)) return;
-      var radius = Math.max(20, Number(accuracy) || 40);
+      var radius = Math.max(8, Number(accuracy) || 12);
 
       if (!myCircle) {
         myCircle = new google.maps.Circle({

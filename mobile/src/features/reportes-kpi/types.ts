@@ -5,6 +5,12 @@ export type ReportFilters = {
   fechaDesde: string; // YYYY-MM-DD
   fechaHasta: string;
   conductorId: string | null;
+  asignadorId: string | null;
+};
+
+export type AsignadorOption = {
+  id: string;
+  nombre: string;
 };
 
 export type EnvasesTotales = {
@@ -36,6 +42,28 @@ export type ConductorAgg = {
   noRecolectado: number;
   reprogramado: number;
   cerrado: number;
+  litros: number;
+  baldes: number;
+  galoneras: number;
+};
+
+export type AsignadorAgg = {
+  id: string;
+  nombre: string;
+  asignadas: number;
+  recolectadas: number;
+  litros: number;
+  baldes: number;
+  galoneras: number;
+};
+
+export type RutaAsignadaItem = {
+  id: string;
+  fecha: string;
+  asignador: string;
+  conductor: string;
+  local: string;
+  estado: string;
   litros: number;
   baldes: number;
   galoneras: number;
@@ -84,6 +112,8 @@ export type ReportSnapshot = {
   envasesTotal: EnvasesTotales;
   rutas: RutasConteo;
   porConductor: ConductorAgg[];
+  porAsignador: AsignadorAgg[];
+  rutasAsignadas: RutaAsignadaItem[];
   porLocal: LocalAgg[];
   plantaPorAsesor: PlantaAsesorAgg[];
   plantaPorProveedor: PlantaProveedorAgg[];

@@ -1,3 +1,6 @@
+import { fetchLocales as fetchLocalesFull } from "@/features/locales/api";
+import type { LocalItem } from "@/features/locales/types";
+import { localesDelUsuario, rutaDelUsuario } from "@/lib/scope-user";
 import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Platform } from "react-native";
@@ -20,8 +23,6 @@ import {
 } from "./lib/filters";
 import { enrichRoutesWithLocales } from "./lib/enrich";
 import type { ConductorOption, RouteItem, RoutesFilters } from "./types";
-import { fetchLocales as fetchLocalesFull } from "@/features/locales/api";
-import type { LocalItem } from "@/features/locales/types";
 
 function notify(title: string, message: string) {
   if (Platform.OS === "web") window.alert(`${title}: ${message}`);
@@ -42,7 +43,7 @@ async function confirmDelete(routeName: string) {
 
 export function useRoutesScreen() {
   const { user } = useAuth();
-  const isOperador = (user?.rol ?? "").toLowerCase() === "operador";
+  const isOperador = (user?.rol ?? "").toLowerCase() === "operador" || (user?.rol ?? "").toLowerCase() === "conductor";
   const userId = user?.id != null ? String(user.id) : null;
 
   const [routes, setRoutes] = useState<RouteItem[]>([]);
@@ -102,9 +103,9 @@ export function useRoutesScreen() {
           localesFullRef.current = localesFull;
           localesFullLoaded.current = true;
         }
-
-        const scoped =
-          isOperador && userId ? rutas.filter((item) => item.conductorId === userId) : rutas;
+        const mine = localesDelUsuario(localesFullRef.current, user);
+        const localIds = new Set(mine.map((item) => item.id));
+        const scoped = rutas.filter((item) => rutaDelUsuario(item, user, localIds));
         setRoutes(enrichRoutesWithLocales(scoped, localesFullRef.current));
 
         if (drivers) {
@@ -121,7 +122,7 @@ export function useRoutesScreen() {
         }
       }
     },
-    [filters, isOperador, userId],
+    [filters, isOperador, userId, user],
   );
 
   useEffect(() => {

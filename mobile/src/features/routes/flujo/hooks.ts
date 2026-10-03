@@ -4,12 +4,14 @@ import { Alert, Platform } from "react-native";
 import type { RouteItem } from "../types";
 import {
   fetchFinalizacionConfig,
+  cerrarRuta,
   finalizarRuta,
   llegarRuta,
   marcarNoRecolectado,
   reprogramarRuta,
   startRuta,
 } from "./api";
+import { enqueueRecojo, isNetworkError } from "@/features/recojo-offline/queue";
 import { emptyFinalizacionConfig } from "./lib/validate";
 import { loadVehicleType, saveVehicleType } from "./lib/vehicle-store";
 import type {
@@ -27,7 +29,9 @@ function notify(title: string, message: string) {
 
 export function useRutaFlujo(onChanged?: () => void) {
   const { user } = useAuth();
-  const isOperador = (user?.rol ?? "").toLowerCase() === "operador";
+  const isOperador =
+    (user?.rol ?? "").toLowerCase() === "operador" ||
+    (user?.rol ?? "").toLowerCase() === "conductor";
 
   const [startRoute, setStartRoute] = useState<RouteItem | null>(null);
   const [vehicleOpen, setVehicleOpen] = useState(false);
@@ -134,7 +138,7 @@ export function useRutaFlujo(onChanged?: () => void) {
   const confirmFinish = useCallback(
     async (input: FinalizarRutaInput) => {
       if (!finishRoute) return;
-      const photos = [input.fotoGuia, input.fotoMercaderia].reduce(
+      const photos = [input.fotoGuia, input.fotoMercaderia, input.fotoPago].reduce(
         (sum, foto) => sum + (foto?.bytes ?? 0),
         0,
       );
@@ -148,6 +152,17 @@ export function useRutaFlujo(onChanged?: () => void) {
         closeFinish();
         onChanged?.();
       } catch (err) {
+        if (isNetworkError(err)) {
+          await enqueueRecojo({
+            rutaId: finishRoute.id,
+            localNombre: finishRoute.localNombre,
+            input,
+          });
+          notify("Sin señal", "El recojo quedó en el teléfono. Se enviará al volver la red.");
+          closeFinish();
+          onChanged?.();
+          return;
+        }
         notify("Error", err instanceof Error ? err.message : "No se pudo finalizar");
         throw err;
       } finally {
@@ -177,6 +192,7 @@ export function useRutaFlujo(onChanged?: () => void) {
       runEstado(route, marcarNoRecolectado, "No recolectado", "La visita quedó sin recojo"),
     reprogram: (route: RouteItem) =>
       runEstado(route, reprogramarRuta, "Reprogramado", "El recojo quedó reprogramado"),
+    closeRoute: (route: RouteItem) => runEstado(route, cerrarRuta, "Cerrado", "La ruta quedó cerrada"),
     backToVehicle: () => {
       setCompanionsOpen(false);
       setVehicleOpen(true);

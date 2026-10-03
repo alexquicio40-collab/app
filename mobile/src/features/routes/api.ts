@@ -78,6 +78,7 @@ function parseRoute(row: UnknownRecord): RouteItem | null {
     id,
     conductorId: text(row.conductor_id, row.usuario_id),
     conductorNombre: text(row.conductor_nombre) || "Sin operador",
+    creadoPorId: text(row.creado_por_id, row.creadoPorId),
     creadoPorNombre: text(row.creado_por_nombre, row.creadoPorNombre),
     editadoPorNombre: text(row.editado_por_nombre, row.editadoPorNombre),
     localId: text(row.local_id, local?.id),
@@ -107,6 +108,7 @@ function parseRoute(row: UnknownRecord): RouteItem | null {
     galonerasVacias: num(row.cantidad_galoneras_vacias),
     fotoGuia: text(row.foto_guia) || null,
     fotoMercaderia: text(row.foto_mercaderia) || null,
+    fotoPago: text(row.foto_pago) || null,
     encargadoNombre: text(
       row.encargado_tienda,
       row.encargado_nombre,
@@ -207,10 +209,45 @@ async function fetchRoutesOnce(query: FetchRoutesQuery = {}): Promise<RouteItem[
     .filter((item): item is RouteItem => Boolean(item));
 }
 
-/**
- * Rutas del operador con JOIN de local (envases + métodos de pago).
- * Paridad Flutter `getRutasOperador` → `/api/conductores/:id/rutas`.
- */
+/** Rutas del operador entre dos días (inclusive). Un día usa una sola petición. */
+export async function fetchOperadorRutasRango(operadorId: string, desde: string, hasta: string) {
+  const start = desde <= hasta ? desde : hasta;
+  const end = desde <= hasta ? hasta : desde;
+  if (start === end) return fetchOperadorRutas(operadorId, start);
+
+  const map = new Map<string, RouteItem>();
+  const days = daysBetween(start, end);
+  for (let index = 0; index < days.length; index += 7) {
+    const slice = days.slice(index, index + 7);
+    const batches = await Promise.all(
+      slice.map((fecha) => fetchOperadorRutas(operadorId, fecha).catch(() => [] as RouteItem[])),
+    );
+    for (const batch of batches) {
+      for (const item of batch) map.set(item.id, item);
+    }
+  }
+  return [...map.values()];
+}
+
+/** Rutas de todos los conductores en un rango, en tandas de una semana. */
+export async function fetchRoutesSpan(desde: string, hasta: string) {
+  const start = desde <= hasta ? desde : hasta;
+  const end = desde <= hasta ? hasta : desde;
+  const map = new Map<string, RouteItem>();
+  const days = daysBetween(start, end);
+  for (let index = 0; index < days.length; index += 7) {
+    const slice = days.slice(index, index + 7);
+    const batches = await Promise.all(
+      slice.map((fecha) => fetchRoutesOnce({ fecha }).catch(() => [] as RouteItem[])),
+    );
+    for (const batch of batches) {
+      for (const item of batch) map.set(item.id, item);
+    }
+  }
+  return [...map.values()];
+}
+
+/** Paridad Flutter `getRutasOperador` → `/api/conductores/:id/rutas`. */
 export async function fetchOperadorRutas(operadorId: string, fecha?: string | null) {
   const qs = fecha ? `?fecha=${encodeURIComponent(fecha)}` : "";
   const payload = await api<unknown>(`/api/conductores/${operadorId}/rutas${qs}`);
@@ -273,6 +310,7 @@ export function withResolvedMedia(route: RouteItem): RouteItem {
     ...route,
     fotoGuia: resolveMediaUrl(route.fotoGuia),
     fotoMercaderia: resolveMediaUrl(route.fotoMercaderia),
+    fotoPago: resolveMediaUrl(route.fotoPago),
   };
 }
 
@@ -283,9 +321,16 @@ export async function fetchConductores(): Promise<ConductorOption[]> {
   for (const row of asRows(payload, "conductores")) {
     const id = text(row.id, row.usuario_id, row.conductor_id);
     if (!id || map.has(id)) continue;
+    const activo =
+      row.activo == null ||
+      row.activo === 1 ||
+      row.activo === true ||
+      row.activo === "1" ||
+      row.activo === "true";
     map.set(id, {
       id,
       nombre: text(row.nombre, row.conductor_nombre, row.usuario) || `Operador ${id}`,
+      activo,
     });
   }
 

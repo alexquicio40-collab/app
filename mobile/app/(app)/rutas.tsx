@@ -18,7 +18,8 @@ import {
   VehicleTypeSheet,
 } from "@/features/routes/flujo";
 import { useRoutesScreen } from "@/features/routes/hooks";
-import { isActionableRoute } from "@/features/routes/lib/permissions";
+import { canCloseRoute, isActionableRoute } from "@/features/routes/lib/permissions";
+import { isNoRecolectado } from "@/features/routes/lib/estados-recojo";
 import { theme } from "@/lib/theme";
 import { ScreenHeader } from "@/ui/screen-header";
 import { useContentBottomPad } from "@/ui/use-content-bottom-pad";
@@ -105,6 +106,7 @@ export default function RutasScreen() {
             bottomPad={bottomPad}
             onSave={assign.saveSchedule}
             onGenerate={assign.generateRoutes}
+            canGenerate={assign.canGenerate}
             onDelete={assign.removeSchedule}
             onReload={async () => {
               await Promise.all([assign.reload(), routes.reload()]);
@@ -187,7 +189,11 @@ function ListadoPanel({
             onOpen: () => openRoute(item.id),
             onEdit: !isOperador && actionable ? () => void openEdit(item.id) : undefined,
             onChangeStatus: !isOperador && actionable ? () => openStatus(item.id) : undefined,
-            onDelete: !isOperador && actionable ? () => void removeRoute(item) : undefined,
+            onDelete:
+              isNoRecolectado(item.estado) || (!isOperador && actionable)
+                ? () => void removeRoute(item)
+                : undefined,
+            onCloseRoute: canCloseRoute(item) ? () => void flujo.closeRoute(item) : undefined,
             onStart: isOperador ? () => void flujo.openStart(item) : undefined,
             onArrive: isOperador ? () => void flujo.arrive(item) : undefined,
             onFinalize: isOperador ? () => void flujo.openFinish(item) : undefined,

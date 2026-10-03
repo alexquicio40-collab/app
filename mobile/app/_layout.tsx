@@ -1,6 +1,10 @@
+import { GpsFondoHost } from "@/features/gps-fondo/host";
 import { InstalacionProvider, useInstalacionGate } from "@/features/instalacion";
+import { RecojoSyncHost } from "@/features/recojo-offline/host";
+import { LicenciaProvider, useLicenciaGate } from "@/features/sesiones/licencia-gate";
 import { theme } from "@/lib/theme";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
+import { BrandLogo } from "@/ui/brand-logo";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
@@ -16,9 +20,13 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
+        <GpsFondoHost />
+        <RecojoSyncHost />
         <InstalacionProvider>
-          <StatusBar style="light" />
-          <RootNavigator />
+          <LicenciaProvider>
+            <StatusBar style="light" />
+            <RootNavigator />
+          </LicenciaProvider>
         </InstalacionProvider>
       </AuthProvider>
     </SafeAreaProvider>
@@ -28,23 +36,29 @@ export default function RootLayout() {
 function RootNavigator() {
   const auth = useAuth();
   const setup = useInstalacionGate();
+  const licencia = useLicenciaGate();
 
-  if (auth.status === "loading" || !setup.ready) {
+  if (auth.status === "loading" || !setup.ready || !licencia.ready) {
     return (
       <View style={styles.boot}>
+        <BrandLogo height={88} />
         <ActivityIndicator color={theme.colors.accent} />
       </View>
     );
   }
 
   const showInstall = !setup.completed;
-  const showApp = setup.completed && auth.status === "authenticated";
-  const showAuth = setup.completed && !showApp;
+  const showLicencia = setup.completed && !licencia.autorizado && auth.status !== "authenticated";
+  const showApp = setup.completed && licencia.autorizado && auth.status === "authenticated";
+  const showAuth = setup.completed && licencia.autorizado && !showApp;
 
   return (
     <Stack screenOptions={ROOT_STACK}>
       <Stack.Protected guard={showInstall}>
         <Stack.Screen name="instalacion" />
+      </Stack.Protected>
+      <Stack.Protected guard={showLicencia}>
+        <Stack.Screen name="licencia" />
       </Stack.Protected>
       <Stack.Protected guard={showAuth}>
         <Stack.Screen name="(auth)" />
@@ -61,6 +75,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 18,
     backgroundColor: theme.colors.bg,
   },
 });

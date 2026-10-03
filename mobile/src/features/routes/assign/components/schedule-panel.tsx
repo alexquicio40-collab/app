@@ -39,6 +39,7 @@ type SchedulePanelProps = {
   onGenerate: (desde: string, hasta: string) => Promise<{ creadas?: number }>;
   onDelete: (id: number) => Promise<void>;
   onReload: () => Promise<void>;
+  canGenerate?: boolean;
 };
 
 function defaultRange() {
@@ -58,6 +59,7 @@ export function SchedulePanel({
   onGenerate,
   onDelete,
   onReload,
+  canGenerate = true,
 }: SchedulePanelProps) {
   const range0 = useMemo(() => defaultRange(), []);
   const [formOpen, setFormOpen] = useState(false);
@@ -133,11 +135,20 @@ export function SchedulePanel({
         },
         editId,
       );
-      const gen = await onGenerate(desde, hasta);
+      let creadas: number | null = null;
+      if (canGenerate) {
+        const gen = await onGenerate(desde, hasta);
+        creadas = gen.creadas ?? 0;
+      }
       await onReload();
       reset();
       setFormOpen(false);
-      notify("Listo", `Programación guardada. Se generaron ${gen.creadas ?? 0} asignaciones.`);
+      notify(
+        "Listo",
+        creadas != null
+          ? `Programación guardada. Se generaron ${creadas} asignaciones.`
+          : "Programación guardada.",
+      );
     } catch (err) {
       notify("Error", err instanceof Error ? err.message : "No se pudo guardar");
     } finally {
@@ -246,16 +257,18 @@ export function SchedulePanel({
           </View>
         ) : null}
 
-        <FieldRow>
-          <View style={styles.half}>
-            <FieldLabel>Generar desde</FieldLabel>
-            <TextField value={desde} onChangeText={setDesde} placeholder="yyyy-mm-dd" />
-          </View>
-          <View style={styles.half}>
-            <FieldLabel>Generar hasta</FieldLabel>
-            <TextField value={hasta} onChangeText={setHasta} placeholder="yyyy-mm-dd" />
-          </View>
-        </FieldRow>
+        {canGenerate ? (
+          <FieldRow>
+            <View style={styles.half}>
+              <FieldLabel>Generar desde</FieldLabel>
+              <TextField value={desde} onChangeText={setDesde} placeholder="yyyy-mm-dd" />
+            </View>
+            <View style={styles.half}>
+              <FieldLabel>Generar hasta</FieldLabel>
+              <TextField value={hasta} onChangeText={setHasta} placeholder="yyyy-mm-dd" />
+            </View>
+          </FieldRow>
+        ) : null}
 
         <View style={styles.field}>
           <FieldLabel>Observaciones</FieldLabel>

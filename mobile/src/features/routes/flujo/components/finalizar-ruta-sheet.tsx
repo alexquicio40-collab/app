@@ -1,3 +1,4 @@
+import { FirmaPad } from "@/features/routes/flujo/components/firma-pad";
 import {
   hasAnyFinalizacionField,
   MAX_PHOTO_BYTES,
@@ -56,6 +57,8 @@ function emptyForm(): FinalizarRutaInput {
     observaciones: "",
     fotoGuia: null,
     fotoMercaderia: null,
+    fotoPago: null,
+    firma: "",
   };
 }
 
@@ -85,7 +88,7 @@ export function FinalizarRutaSheet({
   const showPhotos = config.requiereFotoGuia || config.requiereFotoMercaderia;
   const anyField = hasAnyFinalizacionField(config);
 
-  const pickPhoto = async (field: "fotoGuia" | "fotoMercaderia") => {
+  const pickPhoto = async (field: "fotoGuia" | "fotoMercaderia" | "fotoPago") => {
     const choice =
       Platform.OS === "web"
         ? "gallery"
@@ -124,7 +127,10 @@ export function FinalizarRutaSheet({
     applyAsset(field, result.assets[0]);
   };
 
-  const applyAsset = (field: "fotoGuia" | "fotoMercaderia", asset: ImagePicker.ImagePickerAsset) => {
+  const applyAsset = (
+    field: "fotoGuia" | "fotoMercaderia" | "fotoPago",
+    asset: ImagePicker.ImagePickerAsset,
+  ) => {
     if (asset.fileSize != null && asset.fileSize > MAX_PHOTO_BYTES) {
       notify("La foto es demasiado grande. Máximo 1 GB");
       return;
@@ -234,6 +240,14 @@ export function FinalizarRutaSheet({
               </View>
             ) : null}
 
+            <PagoPhotoCard
+              metodos={route.metodosPago.map((item) => item.nombre)}
+              foto={form.fotoPago}
+              error={errors.fotoPago}
+              onPick={() => void pickPhoto("fotoPago")}
+              onRemove={() => setForm((prev) => ({ ...prev, fotoPago: null }))}
+            />
+
             {showPhotos ? (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Fotos</Text>
@@ -259,6 +273,11 @@ export function FinalizarRutaSheet({
                 </View>
               </View>
             ) : null}
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Firma</Text>
+              <FirmaPad value={form.firma} onChange={(firma) => setForm((prev) => ({ ...prev, firma }))} />
+            </View>
 
             {config.requiereNotas ? (
               <View style={styles.section}>
@@ -295,6 +314,7 @@ export function FinalizarRutaSheet({
             fotos={[
               form.fotoGuia ? { label: "Guía", bytes: form.fotoGuia.bytes } : null,
               form.fotoMercaderia ? { label: "Mercadería", bytes: form.fotoMercaderia.bytes } : null,
+              form.fotoPago ? { label: "Pago", bytes: form.fotoPago.bytes } : null,
             ].filter((item): item is FotoLine => Boolean(item))}
             upload={upload}
           />
@@ -370,6 +390,62 @@ function QtyField({
     <View style={styles.qtyField}>
       <FieldLabel>{label}</FieldLabel>
       <TextField value={value} onChangeText={onChange} keyboardType="number-pad" placeholder="0" />
+      {error ? <Text style={styles.fieldError}>{error}</Text> : null}
+    </View>
+  );
+}
+
+function PagoPhotoCard({
+  metodos,
+  foto,
+  error,
+  onPick,
+  onRemove,
+}: {
+  metodos: string[];
+  foto: PendingFoto | null;
+  error?: string;
+  onPick: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <View style={styles.pagoCard}>
+      <View style={styles.pagoHead}>
+        <View style={styles.pagoMark}>
+          <Text style={styles.pagoMarkText}>S/</Text>
+        </View>
+        <View style={styles.pagoCopy}>
+          <Text style={styles.pagoTitle}>Foto del pago</Text>
+          <Text style={styles.pagoSub}>
+            Voucher, Yape, transferencia o efectivo. Queda guardado en la visita.
+          </Text>
+        </View>
+      </View>
+      {metodos.length ? (
+        <View style={styles.pagoChips}>
+          {metodos.map((nombre) => (
+            <View key={nombre} style={styles.pagoChip}>
+              <Text style={styles.pagoChipText}>{nombre}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      {foto ? (
+        <View style={styles.pagoPreview}>
+          <Image source={{ uri: foto.uri }} style={styles.pagoImg} />
+          <View style={styles.pagoPreviewBar}>
+            <Text style={styles.pagoReady}>Listo para enviar</Text>
+            <Pressable onPress={onRemove} style={styles.pagoRemove}>
+              <Text style={styles.pagoRemoveText}>Quitar</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <Pressable onPress={onPick} style={[styles.pagoBtn, error ? styles.photoBtnErr : null]}>
+          <Text style={styles.pagoBtnKicker}>Opcional</Text>
+          <Text style={styles.pagoBtnText}>Tomar o elegir foto</Text>
+        </Pressable>
+      )}
       {error ? <Text style={styles.fieldError}>{error}</Text> : null}
     </View>
   );
@@ -501,6 +577,77 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.dangerSoft,
   },
   photoRemoveText: { color: theme.colors.danger, fontSize: 11, fontWeight: "800" },
+  pagoCard: {
+    gap: 10,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#E4D08A",
+    backgroundColor: theme.colors.goldSoft,
+  },
+  pagoHead: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  pagoMark: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.gold,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pagoMarkText: { color: "#fff", fontSize: 13, fontWeight: "900" },
+  pagoCopy: { flex: 1, minWidth: 0, gap: 2 },
+  pagoTitle: { color: theme.colors.ink, fontSize: 15, fontWeight: "900" },
+  pagoSub: { color: theme.colors.muted, fontSize: 12, fontWeight: "600", lineHeight: 16 },
+  pagoChips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  pagoChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#E4D08A",
+  },
+  pagoChipText: { color: theme.colors.ink, fontSize: 11, fontWeight: "800" },
+  pagoBtn: {
+    minHeight: 86,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: theme.colors.gold,
+    borderStyle: "dashed",
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
+  pagoBtnKicker: {
+    color: theme.colors.gold,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  pagoBtnText: { color: theme.colors.ink, fontSize: 13, fontWeight: "800" },
+  pagoPreview: {
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#fff",
+  },
+  pagoImg: { width: "100%", height: 148, backgroundColor: theme.colors.cream },
+  pagoPreviewBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  pagoReady: { color: theme.colors.accent, fontSize: 12, fontWeight: "800" },
+  pagoRemove: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7,
+    backgroundColor: theme.colors.dangerSoft,
+  },
+  pagoRemoveText: { color: theme.colors.danger, fontSize: 11, fontWeight: "800" },
   fieldError: { color: theme.colors.danger, fontSize: 11, fontWeight: "700" },
   submit: {
     height: 48,

@@ -1,6 +1,6 @@
+import { readPreciseFix } from "@/features/map/lib/precise-location";
 import { loadVehicleType } from "@/features/routes/flujo/lib/vehicle-store";
 import type { RouteItem } from "@/features/routes/types";
-import * as Location from "expo-location";
 import { useCallback, useState } from "react";
 import { Alert, Platform } from "react-native";
 import { fetchSuggestedRoutes, loadNavRestrictions } from "./api";
@@ -12,14 +12,8 @@ function notify(title: string, message: string) {
 }
 
 async function getOrigin(): Promise<LatLng> {
-  const perm = await Location.requestForegroundPermissionsAsync();
-  if (!perm.granted) {
-    throw new Error("Activa el permiso de ubicación para calcular rutas");
-  }
-  const pos = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.Balanced,
-  });
-  return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+  const fix = await readPreciseFix();
+  return { lat: fix.lat, lng: fix.lng };
 }
 
 function findRoute(result: DirectionsResult | null, id: string | null): SuggestedRoute | null {

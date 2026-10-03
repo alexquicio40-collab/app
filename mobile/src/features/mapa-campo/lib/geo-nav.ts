@@ -257,7 +257,7 @@ export function shouldAcceptMove(
 }
 
 export const OFF_ROUTE_METERS = 55;
-/** Dentro de este radio se pega el marker a la calle. */
-export const SNAP_METERS = 45;
+/** Micro-ajuste a la calle: solo ruido GPS, no un salto de cuadra. */
+export const SNAP_METERS = 12;
 export const RECALC_COOLDOWN_MS = 18_000;
 export const ARRIVAL_METERS = 35;

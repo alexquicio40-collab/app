@@ -162,7 +162,7 @@ export function RouteDetailSheet({
                 </Section>
               ) : null}
 
-              {(route.fotoGuia || route.fotoMercaderia) ? (
+              {(route.fotoGuia || route.fotoMercaderia || route.fotoPago) ? (
                 <Section title="Evidencias">
                   <View style={styles.photos}>
                     {route.fotoGuia ? (
@@ -173,6 +173,13 @@ export function RouteDetailSheet({
                         uri={route.fotoMercaderia}
                         label="Mercadería"
                         onPress={() => setPreview(route.fotoMercaderia)}
+                      />
+                    ) : null}
+                    {route.fotoPago ? (
+                      <PhotoThumb
+                        uri={route.fotoPago}
+                        label="Pago"
+                        onPress={() => setPreview(route.fotoPago)}
                       />
                     ) : null}
                   </View>

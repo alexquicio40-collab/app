@@ -1,7 +1,9 @@
+import { BitacoraVistaHost } from "@/features/bitacora/vista-host";
 import { ProgramacionAlerta } from "@/features/programacion-alerta";
 import { canSeeMapaCampo, canSeeOperadores } from "@/lib/role-nav";
 import { theme } from "@/lib/theme";
 import { useAuth } from "@/providers/auth-provider";
+import { BrandLogo } from "@/ui/brand-logo";
 import { FloatingTabBar } from "@/ui/floating-tab-bar";
 import { Tabs } from "expo-router";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
@@ -15,6 +17,7 @@ export default function AppLayout() {
   if (status !== "authenticated") {
     return (
       <View style={styles.boot}>
+        <BrandLogo height={88} />
         <ActivityIndicator color={theme.colors.accent} />
       </View>
     );
@@ -43,13 +46,17 @@ export default function AppLayout() {
         <Tabs.Screen name="locales" options={{ href: null }} />
         <Tabs.Screen name="rutas-mapa" options={{ href: null }} />
         <Tabs.Screen name="usuarios" options={{ href: null }} />
+        <Tabs.Screen name="sesiones" options={{ href: null }} />
         <Tabs.Screen name="conductores" options={{ href: null }} />
         <Tabs.Screen name="planta" options={{ href: null }} />
         <Tabs.Screen name="certificados" options={{ href: null }} />
         <Tabs.Screen name="pagos" options={{ href: null }} />
         <Tabs.Screen name="reportes-kpi" options={{ href: null }} />
+        <Tabs.Screen name="reportes" options={{ href: null }} />
+        <Tabs.Screen name="historial" options={{ href: null }} />
         <Tabs.Screen name="hoja-ruta" options={{ href: null }} />
       </Tabs>
+      <BitacoraVistaHost />
       <ProgramacionAlerta />
     </View>
   );
@@ -61,6 +68,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 18,
     backgroundColor: theme.colors.bg,
   },
 });

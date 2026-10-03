@@ -29,7 +29,8 @@ export type ModuleKey =
   | "planta"
   | "historial"
   | "estadisticas"
-  | "reportes";
+  | "reportes"
+  | "sesiones";
 
 export type AppModule = {
   key: ModuleKey;
@@ -50,7 +51,9 @@ export type AppModule = {
     | "/certificados"
     | "/pagos"
     | "/reportes-kpi"
-    | "/hoja-ruta";
+    | "/hoja-ruta"
+    | "/sesiones"
+    | "/reportes";
   /** Params de ruta (ej. tab de Rutas). */
   params?: Record<string, string>;
 };

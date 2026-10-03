@@ -1,4 +1,4 @@
-import type { ReportFilters } from "@/features/reportes-kpi/types";
+import type { AsignadorOption, ReportFilters } from "@/features/reportes-kpi/types";
 import type { ConductorOption } from "@/features/routes/types";
 import { theme } from "@/lib/theme";
 import { SearchableOptionSheet } from "@/ui/searchable-option-sheet";
@@ -9,16 +9,22 @@ type ReportFiltersBarProps = {
   filters: ReportFilters;
   rangeLabel: string;
   conductores: ConductorOption[];
+  asignadores: AsignadorOption[];
   onPatchDates: (patch: Partial<Pick<ReportFilters, "fechaDesde" | "fechaHasta">>) => void;
   onConductor: (id: string | null) => void;
+  onAsignador: (id: string | null) => void;
+  showAsignador?: boolean;
 };
 
 export function ReportFiltersBar({
   filters,
   rangeLabel,
   conductores,
+  asignadores,
   onPatchDates,
   onConductor,
+  onAsignador,
+  showAsignador = true,
 }: ReportFiltersBarProps) {
   return (
     <View style={styles.wrap}>
@@ -42,12 +48,33 @@ export function ReportFiltersBar({
           onChange={(fechaHasta) => onPatchDates({ fechaHasta })}
         />
         <View style={styles.divider} />
-        <ConductorSelect
+        <PersonSelect
+          label="Operador"
+          title="Operador"
+          allLabel="Todos los operadores"
+          placeholder="Buscar operador…"
+          clearLabel="Quitar operador"
           value={filters.conductorId}
           options={conductores}
           onChange={onConductor}
         />
       </View>
+
+      {showAsignador ? (
+        <View style={styles.row}>
+          <PersonSelect
+            label="Asignador"
+            title="Asignador"
+            allLabel="Todos los asignadores"
+            placeholder="Buscar asignador…"
+            clearLabel="Quitar asignador"
+            value={filters.asignadorId}
+            options={asignadores}
+            onChange={onAsignador}
+            wide
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -76,14 +103,26 @@ function DateField({
   );
 }
 
-function ConductorSelect({
+function PersonSelect({
+  label,
+  title,
+  allLabel,
+  placeholder,
+  clearLabel,
   value,
   options,
   onChange,
+  wide,
 }: {
+  label: string;
+  title: string;
+  allLabel: string;
+  placeholder: string;
+  clearLabel: string;
   value: string | null;
-  options: ConductorOption[];
+  options: { id: string; nombre: string }[];
   onChange: (id: string | null) => void;
+  wide?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((item) => item.id === value)?.nombre;
@@ -91,15 +130,22 @@ function ConductorSelect({
 
   return (
     <>
-      <View style={[styles.cell, styles.conductorCell, active ? styles.cellOn : null]}>
+      <View
+        style={[
+          styles.cell,
+          styles.personCell,
+          wide ? styles.personWide : null,
+          active ? styles.cellOn : null,
+        ]}
+      >
         <Pressable
           accessibilityRole="button"
           onPress={() => setOpen(true)}
-          style={styles.conductorMain}
+          style={styles.personMain}
         >
-          <Text style={styles.cellLabel}>Operador</Text>
+          <Text style={styles.cellLabel}>{label}</Text>
           <Text
-            style={[styles.conductorValue, active ? styles.conductorValueOn : null]}
+            style={[styles.personValue, active ? styles.personValueOn : null]}
             numberOfLines={1}
           >
             {selected ?? "Todos"}
@@ -108,7 +154,7 @@ function ConductorSelect({
         {active ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Quitar operador"
+            accessibilityLabel={clearLabel}
             onPress={() => onChange(null)}
             hitSlop={6}
             style={styles.clear}
@@ -120,11 +166,11 @@ function ConductorSelect({
 
       <SearchableOptionSheet
         visible={open}
-        title="Operador"
+        title={title}
         options={options.map((item) => ({ value: item.id, label: item.nombre }))}
         value={value}
-        allLabel="Todos los operadores"
-        placeholder="Buscar operador…"
+        allLabel={allLabel}
+        placeholder={placeholder}
         onSelect={onChange}
         onClose={() => setOpen(false)}
       />
@@ -202,23 +248,26 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
   },
-  conductorCell: {
+  personCell: {
     flex: 1.15,
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
   },
-  conductorMain: {
+  personWide: {
+    flex: 1,
+  },
+  personMain: {
     flex: 1,
     minWidth: 0,
     gap: 2,
   },
-  conductorValue: {
+  personValue: {
     color: theme.colors.muted,
     fontSize: 11,
     fontWeight: "700",
   },
-  conductorValueOn: {
+  personValueOn: {
     color: theme.colors.accent,
   },
   clear: {

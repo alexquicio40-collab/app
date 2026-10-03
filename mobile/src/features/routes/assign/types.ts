@@ -2,6 +2,7 @@ export type LocalOption = {
   id: string;
   nombre: string;
   direccion: string;
+  asesorBioClim?: string;
 };
 
 export type ScheduleItem = {

@@ -1,14 +1,17 @@
 import type { PlantaRegistro } from "@/features/planta/types";
-import { asEstado } from "@/features/routes/lib/estados-recojo";
+import { asEstado, estadoRecojoLabel } from "@/features/routes/lib/estados-recojo";
 import type { RouteItem } from "@/features/routes/types";
 import { dayKeyFromIso } from "./period";
 import type {
+  AsignadorAgg,
+  AsignadorOption,
   ConductorAgg,
   EnvasesTotales,
   LocalAgg,
   PlantaAsesorAgg,
   PlantaProveedorAgg,
   ReportSnapshot,
+  RutaAsignadaItem,
   RutasConteo,
 } from "../types";
 
@@ -81,6 +84,78 @@ function conteoRutas(rows: RouteItem[]): RutasConteo {
     ...map,
     cumplimientoPct: efectivo > 0 ? Math.round((map.recolectado / efectivo) * 1000) / 10 : 0,
   };
+}
+
+export function asignadorKey(item: RouteItem): string {
+  const id = item.creadoPorId?.trim();
+  if (id) return id;
+  const nombre = item.creadoPorNombre?.trim();
+  return nombre ? `n:${nombre}` : "sin";
+}
+
+export function asignadorNombre(item: RouteItem): string {
+  const nombre = item.creadoPorNombre?.trim();
+  if (nombre) return nombre;
+  const id = item.creadoPorId?.trim();
+  return id ? `Usuario ${id}` : "Sin asignador";
+}
+
+export function uniqueAsignadores(rows: RouteItem[]): AsignadorOption[] {
+  const map = new Map<string, AsignadorOption>();
+  for (const item of rows) {
+    const id = asignadorKey(item);
+    if (!map.has(id)) map.set(id, { id, nombre: asignadorNombre(item) });
+  }
+  return [...map.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+}
+
+function porAsignador(rows: RouteItem[]): AsignadorAgg[] {
+  const map = new Map<string, AsignadorAgg>();
+  for (const item of rows) {
+    const id = asignadorKey(item);
+    const prev =
+      map.get(id) ??
+      ({
+        id,
+        nombre: asignadorNombre(item),
+        asignadas: 0,
+        recolectadas: 0,
+        litros: 0,
+        baldes: 0,
+        galoneras: 0,
+      } satisfies AsignadorAgg);
+    prev.asignadas += 1;
+    if (asEstado(item.estado) === "recolectado") {
+      prev.recolectadas += 1;
+      prev.litros += item.litraje ?? 0;
+      prev.baldes += item.baldesVacios ?? 0;
+      prev.galoneras += item.galonerasVacias ?? 0;
+    }
+    map.set(id, prev);
+  }
+  return [...map.values()].sort((a, b) => b.asignadas - a.asignadas);
+}
+
+function rutasAsignadas(rows: RouteItem[]): RutaAsignadaItem[] {
+  return rows
+    .slice()
+    .sort((a, b) => {
+      const fa = a.fechaAsignacion || "";
+      const fb = b.fechaAsignacion || "";
+      if (fa !== fb) return fa.localeCompare(fb);
+      return asignadorNombre(a).localeCompare(asignadorNombre(b), "es");
+    })
+    .map((item) => ({
+      id: item.id,
+      fecha: (item.fechaAsignacion || "").slice(0, 10),
+      asignador: asignadorNombre(item),
+      conductor: item.conductorNombre || "Sin operador",
+      local: item.localNombre || "Sin local",
+      estado: estadoRecojoLabel(item.estado),
+      litros: item.litraje ?? 0,
+      baldes: item.baldesVacios ?? 0,
+      galoneras: item.galonerasVacias ?? 0,
+    }));
 }
 
 function porConductor(rows: RouteItem[]): ConductorAgg[] {
@@ -190,6 +265,8 @@ export function buildReportSnapshot(
     envasesTotal: mergeEnvases(envasesRutas, envasesPlanta),
     rutas: conteoRutas(rutas),
     porConductor: porConductor(rutas),
+    porAsignador: porAsignador(rutas),
+    rutasAsignadas: rutasAsignadas(rutas),
     porLocal: porLocal(rutas),
     plantaPorAsesor: plantaPorAsesor(planta),
     plantaPorProveedor: plantaPorProveedor(planta),

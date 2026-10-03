@@ -1,12 +1,11 @@
 import { fetchLocales } from "@/features/locales/api";
 import { ROUTES_POLL_MS } from "@/features/map/constants";
 import { connectLiveSocket } from "@/features/map/socket";
-import { getAdminCoords } from "@/features/map/lib/admin-location";
-import { fetchOperadorRutas } from "@/features/routes/api";
+import { useMyLocation } from "@/features/map/lib/use-my-location";
+import { fetchOperadorRutasRango } from "@/features/routes/api";
 import { enrichRoutesWithLocales } from "@/features/routes/lib/enrich";
 import { asEstado, isCerrado, isEnCurso, isRecolectado } from "@/features/routes/lib/estados-recojo";
 import type { RouteItem } from "@/features/routes/types";
-import type { LatLng } from "@/features/routes/navegacion/types";
 import { limaDate } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -41,9 +40,12 @@ export function useMapaCampo() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [origin, setOrigin] = useState<LatLng | null>(null);
+  const me = useMyLocation();
+  const origin = me ? { lat: me.lat, lng: me.lng } : null;
   const [panelOpen, setPanelOpen] = useState(false);
   const [live, setLive] = useState(false);
+  const [fechaDesde, setFechaDesde] = useState(() => limaDate());
+  const [fechaHasta, setFechaHasta] = useState(() => limaDate());
   const fingerprintRef = useRef("");
   const localesRef = useRef<Awaited<ReturnType<typeof fetchLocales>>>([]);
 
@@ -59,9 +61,7 @@ export function useMapaCampo() {
         setError(null);
       }
       try {
-        const fecha = limaDate();
-        // Endpoint Flutter: trae tipo_envase / bidones / metodos_pago del local
-        const rutas = await fetchOperadorRutas(userId, fecha);
+        const rutas = await fetchOperadorRutasRango(userId, fechaDesde, fechaHasta);
         // Refuerzo: si algún campo falta, completar desde catálogo de locales
         if (!localesRef.current.length) {
           localesRef.current = await fetchLocales().catch(() => []);
@@ -94,31 +94,20 @@ export function useMapaCampo() {
         if (!silent) setLoading(false);
       }
     },
-    [userId],
+    [fechaDesde, fechaHasta, userId],
   );
-
-  const refreshOrigin = useCallback(async () => {
-    try {
-      const pos = await getAdminCoords();
-      setOrigin({ lat: pos.lat, lng: pos.lng });
-    } catch {
-      // Sin GPS no se pinta un punto falso.
-    }
-  }, []);
 
   useEffect(() => {
     void reload(false);
-    void refreshOrigin();
-  }, [reload, refreshOrigin]);
+  }, [reload]);
 
   // Polling silencioso del panel (paridad Flutter Timer.periodic).
   useEffect(() => {
     const timer = setInterval(() => {
       void reload(true);
-      void refreshOrigin();
     }, ROUTES_POLL_MS);
     return () => clearInterval(timer);
-  }, [reload, refreshOrigin]);
+  }, [reload]);
 
   // Socket: al iniciar/detener ruta, refrescar el panel al instante.
   useEffect(() => {
@@ -152,7 +141,17 @@ export function useMapaCampo() {
   const pendientes = routes.filter((item) => asEstado(item.estado) === "programado").length;
   const enCurso = routes.filter((item) => isEnCurso(item.estado)).length;
 
+  const setRango = useCallback((desde: string, hasta: string) => {
+    const start = desde <= hasta ? desde : hasta;
+    const end = desde <= hasta ? hasta : desde;
+    setFechaDesde(start);
+    setFechaHasta(end);
+  }, []);
+
   return {
+    fechaDesde,
+    fechaHasta,
+    setRango,
     routes,
     loading,
     error,
@@ -164,7 +163,7 @@ export function useMapaCampo() {
     panelOpen,
     setPanelOpen,
     reload: () => reload(false),
-    refreshOrigin,
+    refreshOrigin: async () => undefined,
     pendientes,
     enCurso,
     live,

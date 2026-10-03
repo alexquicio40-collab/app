@@ -51,6 +51,7 @@ export type LocalItem = {
   metodosPago: { id: number; nombre: string }[];
   fotos: LocalFoto[];
   prioridad: "alta" | "media" | "baja";
+  createdAt: string | null;
 };
 
 export type LocalFormInput = {

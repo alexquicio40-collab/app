@@ -1,6 +1,18 @@
 import { logoutRequest, meRequest } from "@/features/auth/api";
+import { marcarDispositivoAutorizado } from "@/features/sesiones/lib/dispositivo";
 import type { AuthResult, User } from "@/features/auth/types";
-import { clearTokens, getAccessToken, saveTokens } from "@/lib/secure-store";
+import { hayInternet } from "@/lib/red";
+import {
+  clearTokens,
+  getAccessToken,
+  getSessionToken,
+  getUserSnapshot,
+  saveTokens,
+  saveUserSnapshot,
+  sesionOfflineValida,
+  touchSesion,
+} from "@/lib/secure-store";
+import { resetSessionClosed, setSessionClosedHandler } from "@/lib/session-bus";
 import {
   createContext,
   useCallback,
@@ -10,6 +22,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { AppState } from "react-native";
 
 type AuthStatus = "loading" | "guest" | "authenticated";
 
@@ -37,7 +50,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        const online = await hayInternet();
+        if (!online) {
+          const token = await getSessionToken();
+          const snap = await getUserSnapshot();
+          const vigente = await sesionOfflineValida();
+          if (token && snap && vigente) {
+            if (!cancelled) {
+              setUser(snap);
+              setStatus("authenticated");
+            }
+            return;
+          }
+          await clearTokens();
+          if (!cancelled) {
+            setUser(null);
+            setStatus("guest");
+          }
+          return;
+        }
+
         const { user: current } = await meRequest();
+        await saveUserSnapshot(current);
+        await touchSesion();
         if (!cancelled) {
           setUser(current);
           setStatus("authenticated");
@@ -56,8 +91,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    setSessionClosedHandler(() => {
+      void clearTokens().then(() => {
+        setUser(null);
+        setStatus("guest");
+      });
+    });
+    return () => setSessionClosedHandler(null);
+  }, []);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      void (async () => {
+        if (await hayInternet()) {
+          if (status !== "authenticated") return;
+          try {
+            await meRequest();
+          } catch {
+            // SESSION_CLOSED ya cierra en session-bus
+          }
+          return;
+        }
+        if (await sesionOfflineValida()) return;
+        await clearTokens();
+        setUser(null);
+        setStatus("guest");
+      })();
+    });
+    return () => sub.remove();
+  }, [status]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const ping = async () => {
+      if (!(await hayInternet())) return;
+      try {
+        await meRequest();
+      } catch {
+        // SESSION_CLOSED ya cierra en session-bus
+      }
+    };
+    const id = setInterval(() => void ping(), 12000);
+    return () => clearInterval(id);
+  }, [status]);
+
   const signIn = useCallback(async (result: AuthResult) => {
-    await saveTokens(result.accessToken, result.refreshToken);
+    resetSessionClosed();
+    await saveTokens(result.accessToken, result.refreshToken, result.sessionToken);
+    await saveUserSnapshot(result.user);
+    await marcarDispositivoAutorizado();
+    await touchSesion();
     setUser(result.user);
     setStatus("authenticated");
   }, []);

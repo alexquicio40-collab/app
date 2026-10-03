@@ -17,6 +17,7 @@ export type RouteItem = {
   id: string;
   conductorId: string;
   conductorNombre: string;
+  creadoPorId: string;
   creadoPorNombre: string;
   editadoPorNombre: string;
   localId: string;
@@ -34,6 +35,7 @@ export type RouteItem = {
   galonerasVacias: number | null;
   fotoGuia: string | null;
   fotoMercaderia: string | null;
+  fotoPago: string | null;
   encargadoNombre: string;
   encargadoTelefono: string;
   horarioEntrada: string;
@@ -58,6 +60,7 @@ export type RouteItem = {
 export type ConductorOption = {
   id: string;
   nombre: string;
+  activo?: boolean;
 };
 
 export type RoutesFilters = {

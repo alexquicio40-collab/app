@@ -1,5 +1,6 @@
 import { hoy } from "./fecha-lima";
-import { getAccessToken } from "./secure-store";
+import { getAccessToken, getSessionToken, touchSesion } from "./secure-store";
+import { emitSessionClosed } from "./session-bus";
 
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
@@ -36,7 +37,10 @@ export function getLiveSocketUrl() {
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, skipAuth, headers, ...rest } = options;
-  const userId = skipAuth ? null : await getAccessToken();
+  const [userId, sessionToken] = await Promise.all([
+    skipAuth ? Promise.resolve(null) : getAccessToken(),
+    getSessionToken(),
+  ]);
 
   const response = await fetch(`${BASE_URL}${path}`, {
     ...rest,
@@ -44,6 +48,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     headers: {
       "Content-Type": "application/json",
       ...(userId ? { "X-User-Id": userId } : {}),
+      ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
       ...headers,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -66,10 +71,14 @@ export async function apiUpload<T>(
     onProgress?: (loaded: number, total: number) => void;
   } = {},
 ): Promise<T> {
-  const userId = options.skipAuth ? null : await getAccessToken();
+  const [userId, sessionToken] = await Promise.all([
+    options.skipAuth ? Promise.resolve(null) : getAccessToken(),
+    getSessionToken(),
+  ]);
   const response = await sendMultipart(`${BASE_URL}${path}`, formData, {
     method: options.method ?? "POST",
     userId,
+    sessionToken,
     onProgress: options.onProgress,
   });
   return parseApiResponse<T>(response);
@@ -81,6 +90,7 @@ function sendMultipart(
   options: {
     method: string;
     userId: string | null;
+    sessionToken?: string | null;
     onProgress?: (loaded: number, total: number) => void;
   },
 ) {
@@ -90,6 +100,7 @@ function sendMultipart(
     xhr.withCredentials = true;
     xhr.responseType = "text";
     if (options.userId) xhr.setRequestHeader("X-User-Id", options.userId);
+    if (options.sessionToken) xhr.setRequestHeader("X-Session-Token", options.sessionToken);
     xhr.upload.onprogress = (event) => {
       options.onProgress?.(event.loaded, event.lengthComputable ? event.total : 0);
     };
@@ -111,17 +122,21 @@ async function parseApiResponse<T>(response: Response): Promise<T> {
   const payload = (await response.json().catch(() => ({}))) as ApiErrorBody & T;
 
   if (!response.ok || (payload as ApiErrorBody).success === false) {
+    const code = (payload as ApiErrorBody).code ?? "REQUEST_FAILED";
+    if (code === "SESSION_CLOSED") emitSessionClosed();
     const message =
       (payload as ApiErrorBody).message ||
       (payload as ApiErrorBody).error ||
       "No se pudo completar la solicitud";
-    throw new ApiError(response.status, (payload as ApiErrorBody).code ?? "REQUEST_FAILED", message);
+    throw new ApiError(response.status, code, message);
   }
 
   if (response.status === 204) {
+    void touchSesion();
     return undefined as T;
   }
 
+  void touchSesion();
   return payload as T;
 }
 

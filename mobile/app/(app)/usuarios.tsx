@@ -1,12 +1,15 @@
 import { UsuarioCard } from "@/features/usuarios/components/usuario-card";
 import { UsuarioFormSheet } from "@/features/usuarios/components/usuario-form-sheet";
 import { UsuarioPermisosSheet } from "@/features/usuarios/components/usuario-permisos-sheet";
+import { UsuariosTabs } from "@/features/usuarios/components/usuarios-tabs";
 import { UsuariosToolbar } from "@/features/usuarios/components/usuarios-toolbar";
 import { useUsuariosScreen } from "@/features/usuarios/hooks";
+import { UsuariosUbicacion } from "@/features/usuarios/ubicacion";
+import type { UsuariosTab } from "@/features/usuarios/ubicacion/types";
 import { theme } from "@/lib/theme";
 import { ScreenHeader } from "@/ui/screen-header";
 import { useContentBottomPad } from "@/ui/use-content-bottom-pad";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -20,6 +23,7 @@ import {
 export default function UsuariosScreen() {
   const screen = useUsuariosScreen();
   const bottomPad = useContentBottomPad(12);
+  const [tab, setTab] = useState<UsuariosTab>("lista");
 
   const renderItem = useCallback(
     ({ item }: { item: (typeof screen.filtered)[number] }) => (
@@ -48,6 +52,12 @@ export default function UsuariosScreen() {
         }
       />
 
+      <UsuariosTabs tab={tab} onTab={setTab} />
+
+      {tab === "ubicacion" ? (
+        <UsuariosUbicacion usuarios={screen.usuarios} />
+      ) : (
+        <>
       <UsuariosToolbar
         filters={screen.filters}
         total={screen.usuarios.length}
@@ -97,6 +107,8 @@ export default function UsuariosScreen() {
             </View>
           }
         />
+      )}
+        </>
       )}
 
       <UsuarioFormSheet

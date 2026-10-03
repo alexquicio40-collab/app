@@ -1,4 +1,5 @@
 import { HeaderAction, IconSignOut } from "@/ui/header-action";
+import { BrandLogo } from "@/ui/brand-logo";
 import { theme } from "@/lib/theme";
 import { useAuth } from "@/providers/auth-provider";
 import { type ReactNode } from "react";
@@ -44,8 +45,9 @@ export function ScreenHeader({
         </Pressable>
       ) : null}
 
+      <BrandLogo height={compact ? 24 : 30} plated />
+
       <View style={styles.copy}>
-        {!compact ? <Text style={styles.brand}>BIOCLIM</Text> : null}
         <Text style={[styles.title, compact ? styles.titleCompact : null]} numberOfLines={1}>
           {title}
         </Text>
@@ -78,7 +80,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 10,
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
   },
@@ -111,22 +113,14 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  brand: {
-    color: theme.colors.gold,
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 1.6,
-  },
   title: {
     color: "#FFFFFF",
     fontSize: 20,
     fontWeight: "700",
     letterSpacing: -0.3,
-    marginTop: 2,
   },
   titleCompact: {
     fontSize: 17,
-    marginTop: 0,
   },
   subtitle: {
     color: "#B7D4C8",

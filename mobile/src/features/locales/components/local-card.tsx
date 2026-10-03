@@ -1,3 +1,5 @@
+import { portadaLocal } from "@/features/locales/api";
+import { LocalPortada } from "@/features/locales/components/local-portada";
 import { ActionIconButton, RouteActionBar, TrashIcon } from "@/features/routes/components/route-action-bar";
 import { certLabel, certTone } from "@/features/locales/lib/format";
 import { canSeePrecios, formatPrecios } from "@/features/locales/lib/precios";
@@ -25,6 +27,9 @@ export function LocalCard({ local, canManage, onOpen, onEdit, onDelete }: LocalC
         onPress={onOpen}
         style={({ pressed }) => [styles.main, pressed ? styles.pressed : null]}
       >
+        <View style={styles.row}>
+        <LocalPortada uri={portadaLocal(local)} size={48} radius={10} />
+        <View style={styles.body}>
         <View style={styles.head}>
           <Text style={styles.title} numberOfLines={1}>
             {local.nombre}
@@ -61,6 +66,8 @@ export function LocalCard({ local, canManage, onOpen, onEdit, onDelete }: LocalC
             {canManage && !local.operadoresVenPrecio ? " · oculto" : ""}
           </Text>
         ) : null}
+        </View>
+        </View>
       </Pressable>
 
       {canManage ? (
@@ -93,6 +100,8 @@ const styles = StyleSheet.create({
   },
   main: { gap: 3 },
   pressed: { opacity: 0.92 },
+  row: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  body: { flex: 1, minWidth: 0, gap: 3 },
   head: {
     flexDirection: "row",
     alignItems: "center",

@@ -1,3 +1,4 @@
+import { matchAsesorTag, seesAllUsers } from "@/lib/scope-user";
 import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Platform } from "react-native";
@@ -60,15 +61,19 @@ export function usePlantaScreen() {
         fetchPlantaRegistros(),
         fetchAsesores().catch(() => [] as AsesorOption[]),
       ]);
-      setRegistros(rows);
-      setAsesores(asesoresRows);
+      const allPlanta = seesAllUsers(rol) || rol === "planta";
+      const mine = allPlanta
+        ? rows
+        : rows.filter((item) => matchAsesorTag(item.asesorComercial, user));
+      setRegistros(mine);
+      setAsesores(allPlanta ? asesoresRows : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar los registros");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [rol, user]);
 
   useEffect(() => {
     void load("boot");

@@ -4,8 +4,14 @@ import {
   createDefaultReportFilters,
   formatRangeLabel,
 } from "@/features/reportes-kpi/lib/period";
-import type { ReportFilters, ReportPeriodo, ReportSnapshot } from "@/features/reportes-kpi/types";
+import type {
+  AsignadorOption,
+  ReportFilters,
+  ReportPeriodo,
+  ReportSnapshot,
+} from "@/features/reportes-kpi/types";
 import type { ConductorOption } from "@/features/routes/types";
+import { seesAllUsers } from "@/lib/scope-user";
 import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useEffect, useState } from "react";
 
@@ -25,6 +31,8 @@ const EMPTY: ReportSnapshot = {
     cumplimientoPct: 0,
   },
   porConductor: [],
+  porAsignador: [],
+  rutasAsignadas: [],
   porLocal: [],
   plantaPorAsesor: [],
   plantaPorProveedor: [],
@@ -39,6 +47,7 @@ export function useReportesKpiScreen() {
 
   const [filters, setFilters] = useState<ReportFilters>(createDefaultReportFilters);
   const [conductores, setConductores] = useState<ConductorOption[]>([]);
+  const [asignadores, setAsignadores] = useState<AsignadorOption[]>([]);
   const [snapshot, setSnapshot] = useState<ReportSnapshot>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -59,9 +68,13 @@ export function useReportesKpiScreen() {
       try {
         const [ops, report] = await Promise.all([
           fetchConductores().catch(() => [] as ConductorOption[]),
-          loadReportesKpi(active),
+          loadReportesKpi(active, user),
         ]);
-        setConductores(ops);
+        const ownOps = seesAllUsers(user?.rol)
+          ? ops
+          : ops.filter((item) => report.snapshot.porConductor.some((row) => row.id === item.id));
+        setConductores(ownOps);
+        setAsignadores(seesAllUsers(user?.rol) ? report.asignadores : []);
         setSnapshot(report.snapshot);
         setHint(report.plantaHint);
       } catch (err) {
@@ -72,7 +85,7 @@ export function useReportesKpiScreen() {
         setRefreshing(false);
       }
     },
-    [canAccess, filters],
+    [canAccess, filters, user],
   );
 
   useEffect(() => {
@@ -117,11 +130,22 @@ export function useReportesKpiScreen() {
     [filters, load],
   );
 
+  const setAsignadorId = useCallback(
+    (asignadorId: string | null) => {
+      const next = { ...filters, asignadorId };
+      setFilters(next);
+      void load("boot", next);
+    },
+    [filters, load],
+  );
+
   return {
     canAccess,
+    showAsignador: seesAllUsers(user?.rol),
     filters,
     rangeLabel: formatRangeLabel(filters.fechaDesde, filters.fechaHasta),
     conductores,
+    asignadores,
     snapshot,
     loading,
     refreshing,
@@ -130,6 +154,7 @@ export function useReportesKpiScreen() {
     setPeriodo,
     patchDates,
     setConductorId,
+    setAsignadorId,
     reload: () => load("refresh"),
   };
 }

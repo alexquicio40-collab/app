@@ -49,6 +49,7 @@ export function createDefaultReportFilters(): ReportFilters {
     fechaDesde: range.fechaDesde,
     fechaHasta: range.fechaHasta,
     conductorId: null,
+    asignadorId: null,
   };
 }
 

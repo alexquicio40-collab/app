@@ -36,6 +36,8 @@ type LocalFormSheetProps = {
   local: LocalItem | null;
   metodosPago: MetodoPagoOption[];
   saving?: boolean;
+  ownerName?: string;
+  lockAsesor?: boolean;
   onClose: () => void;
   onSave: (input: LocalFormInput) => Promise<void>;
 };
@@ -109,6 +111,8 @@ export function LocalFormSheet({
   local,
   metodosPago,
   saving = false,
+  ownerName = "",
+  lockAsesor = false,
   onClose,
   onSave,
 }: LocalFormSheetProps) {
@@ -126,6 +130,7 @@ export function LocalFormSheet({
   const geoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rucTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const direccionRef = useRef("");
+  const rucInicial = useRef("");
   const formRef = useRef(form);
   formRef.current = form;
 
@@ -140,7 +145,9 @@ export function LocalFormSheet({
     if (rucTimer.current) clearTimeout(rucTimer.current);
 
     if (!local) {
-      setForm(emptyForm());
+      const blank = emptyForm();
+      blank.asesorBioClim = ownerName;
+      setForm(blank);
       setShowMap(false);
       setError(null);
       setGeoStatus(null);
@@ -148,6 +155,7 @@ export function LocalFormSheet({
       setPendingFotos([]);
       setRemovedFotoIds([]);
       direccionRef.current = "";
+      rucInicial.current = "";
       return;
     }
 
@@ -191,6 +199,7 @@ export function LocalFormSheet({
     setPendingFotos([]);
     setRemovedFotoIds([]);
     direccionRef.current = local.direccion;
+    rucInicial.current = sanitizeRucInput(local.ruc);
   }, [open, local]);
 
   useEffect(() => {
@@ -261,6 +270,10 @@ export function LocalFormSheet({
           }
         }
       } catch (err) {
+        if (formRef.current.razonSocial.trim()) {
+          setRucError(null);
+          return;
+        }
         setRucError(err instanceof Error ? err.message : "No se pudo consultar el RUC");
       } finally {
         rucLoadingRef.current = false;
@@ -277,6 +290,7 @@ export function LocalFormSheet({
       setRucError(null);
       if (rucTimer.current) clearTimeout(rucTimer.current);
       if (!isValidRuc(ruc)) return;
+      if (ruc === rucInicial.current) return;
       rucTimer.current = setTimeout(() => {
         void runConsultarRuc(ruc);
       }, 600);
@@ -347,7 +361,7 @@ export function LocalFormSheet({
       latitud: form.lat,
       longitud: form.lng,
       horarioEntrada: form.horarioEntrada.trim(),
-      asesorBioClim: form.asesorBioClim.trim(),
+      asesorBioClim: (lockAsesor ? ownerName : form.asesorBioClim).trim(),
       telefonoAsesor: form.telefonoAsesor.trim(),
       encargadoNombre: form.encargadoNombre.trim(),
       encargadoTelefono: form.encargadoTelefono.trim(),
@@ -529,6 +543,29 @@ export function LocalFormSheet({
                   value={form.referencia}
                   onChangeText={(referencia) => patch({ referencia })}
                   placeholder="Cerca de…"
+                />
+              </View>
+            </FieldRow>
+
+            <FieldRow>
+              <View style={styles.half}>
+                <FieldLabel>Asesor</FieldLabel>
+                <TextField
+                  value={lockAsesor ? ownerName || form.asesorBioClim : form.asesorBioClim}
+                  onChangeText={(asesorBioClim) => {
+                    if (lockAsesor) return;
+                    patch({ asesorBioClim });
+                  }}
+                  placeholder="Nombre del asesor"
+                />
+              </View>
+              <View style={styles.half}>
+                <FieldLabel>Tel. asesor</FieldLabel>
+                <TextField
+                  value={form.telefonoAsesor}
+                  onChangeText={(telefonoAsesor) => patch({ telefonoAsesor })}
+                  placeholder="999…"
+                  keyboardType="phone-pad"
                 />
               </View>
             </FieldRow>

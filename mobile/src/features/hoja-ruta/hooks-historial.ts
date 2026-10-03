@@ -70,8 +70,7 @@ function totalesFromDetail(item: {
 export function useHistorialHr(enabled: boolean) {
   const { user } = useAuth();
   const rol = (user?.rol ?? "").toLowerCase();
-  /** Misma regla Flutter/backend: admin y asesor ven todas. */
-  const puedeVerTodas = rol === "administrador" || rol === "asesor";
+  const puedeVerTodas = rol === "administrador";
 
   const [filters, setFilters] = useState<HistorialFilters>(EMPTY_FILTERS);
   const [items, setItems] = useState<HojaHistorialItem[]>([]);
@@ -94,7 +93,11 @@ export function useHistorialHr(enabled: boolean) {
         const query: HistorialFilters = {
           fechaDesde: active.fechaDesde,
           fechaHasta: active.fechaHasta,
-          conductorId: puedeVerTodas ? active.conductorId : null,
+          conductorId: puedeVerTodas
+            ? active.conductorId
+            : user?.id != null
+              ? String(user.id)
+              : "0",
         };
         const [rows, ops] = await Promise.all([
           fetchHojasRuta(query),
@@ -113,7 +116,7 @@ export function useHistorialHr(enabled: boolean) {
         setRefreshing(false);
       }
     },
-    [puedeVerTodas],
+    [puedeVerTodas, user?.id],
   );
 
   useEffect(() => {

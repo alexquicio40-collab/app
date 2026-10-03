@@ -50,6 +50,14 @@ export const APP_MODULES: AppModule[] = [
     href: "/usuarios",
   },
   {
+    key: "sesiones",
+    label: "Sesiones",
+    hint: "Acceso",
+    description: "Dispositivos y\ncierre remoto.",
+    roles: ["administrador"],
+    href: "/sesiones",
+  },
+  {
     key: "mapa",
     label: "Mapa",
     hint: "Campo",
@@ -75,11 +83,11 @@ export const APP_MODULES: AppModule[] = [
   },
   {
     key: "historial",
-    label: "Historial",
-    hint: "Trazos",
-    description: "Recorre visitas\ny recorridos.",
-    roles: ["operador", "administrador"],
-    href: "/modulos",
+    label: "Trazos",
+    hint: "Historial",
+    description: "Recorrido GPS,\nparadas y locales.",
+    roles: ["operador", "administrador", "asesor", "gerente"],
+    href: "/historial",
   },
   {
     key: "estadisticas",
@@ -92,10 +100,10 @@ export const APP_MODULES: AppModule[] = [
   {
     key: "reportes",
     label: "Reportes",
-    hint: "Gestión",
-    description: "Genera reportes\nde gestión.",
+    hint: "Bitácora",
+    description: "Historial de todo\nlo que ocurre.",
     roles: ["administrador"],
-    href: "/modulos",
+    href: "/reportes",
   },
 ];
 

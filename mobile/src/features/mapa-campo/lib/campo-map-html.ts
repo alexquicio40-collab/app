@@ -253,13 +253,12 @@ export function buildCampoMapHtml() {
       displayHeading = lerpAngle(displayHeading, targetHeading, 0.35);
       meMarker.setPosition(displayPos);
       var icon = meMarker.getIcon();
-      if (icon) {
+      if (icon && meMarker.__kind === 'arrow') {
         icon.rotation = displayHeading;
         meMarker.setIcon(icon);
       }
       if (followEnabled) {
         map.panTo(displayPos);
-        if (map.setHeading) map.setHeading(displayHeading);
       }
       var dx = Math.abs(displayPos.lat - targetPos.lat) + Math.abs(displayPos.lng - targetPos.lng);
       if (dx > 0.000004) {
@@ -283,15 +282,15 @@ export function buildCampoMapHtml() {
         displayHeading = targetHeading;
         meMarker.setPosition(displayPos);
         var icon = meMarker.getIcon();
-        if (icon) {
+        if (icon && meMarker.__kind === 'arrow') {
           icon.rotation = displayHeading;
           meMarker.setIcon(icon);
         }
         if (followEnabled) {
           map.setCenter(displayPos);
-          map.setZoom(17);
-          if (map.setTilt) map.setTilt(45);
-          if (map.setHeading) map.setHeading(displayHeading);
+          map.setZoom(18);
+          if (map.setTilt) map.setTilt(0);
+          if (map.setHeading) map.setHeading(0);
         }
       }
       if (!anim) anim = requestAnimationFrame(tickAnim);

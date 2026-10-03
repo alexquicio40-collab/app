@@ -29,8 +29,8 @@ type Glyph = {
 type RutaDetalleSheetProps = {
   route: RouteItem | null;
   onClose: () => void;
-  onStart: (route: RouteItem) => void;
-  onComplete: (route: RouteItem) => void;
+  onStart?: (route: RouteItem) => void;
+  onComplete?: (route: RouteItem) => void;
 };
 
 export function RutaDetalleSheet({ route, onClose, onStart, onComplete }: RutaDetalleSheetProps) {
@@ -119,20 +119,22 @@ export function RutaDetalleSheet({ route, onClose, onStart, onComplete }: RutaDe
           </ScrollView>
 
           <View style={styles.actions}>
-            <View style={styles.actionRow}>
-              <Btn
-                label="Comenzar"
-                tone="fill"
-                glyph={{ ios: "play.fill", android: "play_arrow" }}
-                onPress={() => onStart(route)}
-              />
-              <Btn
-                label="Completar"
-                tone="ok"
-                glyph={{ ios: "checkmark", android: "check" }}
-                onPress={() => onComplete(route)}
-              />
-            </View>
+            {onStart && onComplete ? (
+              <View style={styles.actionRow}>
+                <Btn
+                  label="Comenzar"
+                  tone="fill"
+                  glyph={{ ios: "play.fill", android: "play_arrow" }}
+                  onPress={() => onStart(route)}
+                />
+                <Btn
+                  label="Completar"
+                  tone="ok"
+                  glyph={{ ios: "checkmark", android: "check" }}
+                  onPress={() => onComplete(route)}
+                />
+              </View>
+            ) : null}
             <View style={styles.actionRow}>
               <Btn label="Llamar" glyph={{ ios: "phone.fill", android: "call" }} onPress={call} />
               <Btn

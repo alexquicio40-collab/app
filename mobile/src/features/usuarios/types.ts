@@ -22,7 +22,8 @@ export type MenuModuloKey =
   | "hoja_ruta"
   | "historial_hr"
   | "certificados"
-  | "pagos";
+  | "pagos"
+  | "sesiones";
 
 export type PermisosMenu = Record<MenuModuloKey, boolean>;
 

@@ -1,5 +1,6 @@
 import { useLoginForm } from "@/features/auth/hooks";
 import { theme } from "@/lib/theme";
+import { BrandLogo } from "@/ui/brand-logo";
 import { Button } from "@/ui/button";
 import { Field } from "@/ui/field";
 import { CheckIcon } from "@/ui/icons";
@@ -25,10 +26,7 @@ export default function LoginScreen() {
         <View style={styles.center}>
           <View style={styles.card}>
             <View style={styles.brand}>
-              <View style={styles.mark}>
-                <View style={styles.pin} />
-              </View>
-              <Text style={styles.product}>Ubicación</Text>
+              <BrandLogo height={92} />
               <Text style={styles.title}>Iniciar sesión</Text>
               <Text style={styles.subtitle}>Ingresa tus credenciales para continuar</Text>
             </View>
@@ -112,28 +110,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 8,
   },
-  mark: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    backgroundColor: theme.colors.accent,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  pin: {
-    width: 14,
-    height: 14,
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
-  },
-  product: {
-    color: theme.colors.accent,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.8,
-    textTransform: "uppercase",
-  },
   title: {
     color: theme.colors.ink,
     fontSize: 28,
@@ -179,6 +155,33 @@ const styles = StyleSheet.create({
     color: theme.colors.ink,
     fontSize: 14,
     fontWeight: "500",
+  },
+  codigoBox: {
+    borderWidth: 1,
+    borderColor: theme.colors.line,
+    backgroundColor: theme.colors.cream,
+    borderRadius: 12,
+    padding: 10,
+    gap: 4,
+  },
+  codigoLabel: {
+    color: theme.colors.muted,
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  codigo: {
+    color: theme.colors.ink,
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: 2,
+    textAlign: "center",
+  },
+  codigoHint: {
+    color: theme.colors.muted,
+    fontSize: 11,
+    lineHeight: 15,
+    textAlign: "center",
   },
   copyright: {
     color: theme.colors.muted,

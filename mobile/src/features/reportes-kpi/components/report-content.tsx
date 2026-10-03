@@ -42,6 +42,54 @@ export function ReportContent({ snapshot, rangeLabel }: ReportContentProps) {
           <ReportRutasSection rutas={snapshot.rutas} />
 
           <ReportTableCard
+            title="Rutas asignadas"
+            subtitle={`${snapshot.rutasAsignadas.length} ruta${snapshot.rutasAsignadas.length === 1 ? "" : "s"}`}
+            columns={[
+              { key: "fecha", label: "Fecha", width: 88 },
+              { key: "asignador", label: "Asignó", width: 110 },
+              { key: "conductor", label: "Operador", width: 110 },
+              { key: "local", label: "Local", width: 140 },
+              { key: "estado", label: "Estado", width: 92 },
+              { key: "litros", label: "Litros", width: 56, align: "right" },
+              { key: "baldes", label: "Baldes", width: 56, align: "right" },
+              { key: "galoneras", label: "Galon.", width: 56, align: "right" },
+            ]}
+            rows={snapshot.rutasAsignadas.map((item) => ({
+              id: item.id,
+              fecha: item.fecha || "—",
+              asignador: item.asignador,
+              conductor: item.conductor,
+              local: item.local,
+              estado: item.estado,
+              litros: formatQty(item.litros),
+              baldes: formatQty(item.baldes),
+              galoneras: formatQty(item.galoneras),
+            }))}
+          />
+
+          <ReportTableCard
+            title="Por asignador"
+            subtitle="Cantidades recogidas"
+            columns={[
+              { key: "nombre", label: "Asignador", width: 130 },
+              { key: "asignadas", label: "Asig.", width: 52, align: "right" },
+              { key: "recolectadas", label: "Rec.", width: 52, align: "right" },
+              { key: "litros", label: "Litros", width: 64, align: "right" },
+              { key: "baldes", label: "Baldes", width: 58, align: "right" },
+              { key: "galoneras", label: "Galon.", width: 58, align: "right" },
+            ]}
+            rows={snapshot.porAsignador.map((item) => ({
+              id: item.id,
+              nombre: item.nombre,
+              asignadas: formatQty(item.asignadas),
+              recolectadas: formatQty(item.recolectadas),
+              litros: formatQty(item.litros),
+              baldes: formatQty(item.baldes),
+              galoneras: formatQty(item.galoneras),
+            }))}
+          />
+
+          <ReportTableCard
             title="Por operador"
             subtitle={`${snapshot.porConductor.length} operador${snapshot.porConductor.length === 1 ? "" : "es"}`}
             columns={[

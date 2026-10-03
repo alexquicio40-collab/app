@@ -11,7 +11,7 @@ export function myLocationDotJs() {
         return null;
       }
       var pos = { lat: Number(me.lat), lng: Number(me.lng) };
-      var radius = Math.max(20, Number(me.accuracy) || 40);
+      var radius = Math.max(8, Number(me.accuracy) || 12);
       if (!meMarker) {
         meMarker = new google.maps.Marker({
           map: map,

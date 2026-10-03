@@ -81,6 +81,10 @@ export function isRecolectado(estado: string | null | undefined) {
   return asEstado(estado) === "recolectado";
 }
 
+export function isNoRecolectado(estado: string | null | undefined) {
+  return asEstado(estado) === "no_recolectado";
+}
+
 export function isCerrado(estado: string | null | undefined) {
   return asEstado(estado) === "cerrado";
 }

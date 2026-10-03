@@ -15,6 +15,7 @@ export const MODULE_TONES: Record<
   certificados: { bg: theme.colors.warnSoft, fg: theme.colors.warn, kind: "sheet" },
   pagos: { bg: "#F4E9C4", fg: theme.colors.gold, kind: "coin" },
   usuarios: { bg: theme.colors.accentSoft, fg: theme.colors.accent, kind: "dot" },
+  sesiones: { bg: theme.colors.warnSoft, fg: theme.colors.warn, kind: "coin" },
   operadores: { bg: theme.colors.accentSoft, fg: theme.colors.accent, kind: "pin" },
   planta: { bg: theme.colors.accentSoft, fg: theme.colors.accent, kind: "box" },
   historial: { bg: theme.colors.infoSoft, fg: theme.colors.info, kind: "bars" },

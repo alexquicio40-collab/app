@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { localesDelUsuario, seesAllUsers } from "@/lib/scope-user";
+import { useAuth } from "@/providers/auth-provider";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { InteractionManager } from "react-native";
 import {
   createRestriction,
@@ -29,6 +31,7 @@ type AssignWorkspaceOptions = {
 };
 
 export function useAssignWorkspace({ enabled = true }: AssignWorkspaceOptions = {}) {
+  const { user } = useAuth();
   const [locales, setLocales] = useState<LocalOption[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [restrictions, setRestrictions] = useState<RestrictionItem[]>([]);
@@ -43,13 +46,13 @@ export function useAssignWorkspace({ enabled = true }: AssignWorkspaceOptions = 
     setLocalesLoading(true);
     try {
       const locs = await fetchLocales({ force });
-      setLocales(locs);
+      setLocales(seesAllUsers(user?.rol) ? locs : localesDelUsuario(locs, user));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar los locales");
     } finally {
       setLocalesLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -139,9 +142,15 @@ export function useAssignWorkspace({ enabled = true }: AssignWorkspaceOptions = 
     setRestrictions((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
+  const scopedSchedules = useMemo(() => {
+    if (seesAllUsers(user?.rol)) return schedules;
+    const ids = new Set(locales.map((item) => item.id));
+    return schedules.filter((item) => ids.has(item.localId));
+  }, [locales, schedules, user?.rol]);
+
   return {
     locales,
-    schedules,
+    schedules: scopedSchedules,
     restrictions,
     loading,
     localesLoading,
@@ -153,6 +162,7 @@ export function useAssignWorkspace({ enabled = true }: AssignWorkspaceOptions = 
     saveSchedule,
     removeSchedule,
     generateRoutes,
+    canGenerate: seesAllUsers(user?.rol),
     saveRestriction,
     toggleRestriction,
     removeRestriction,

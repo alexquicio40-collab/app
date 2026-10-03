@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Ubicación",
+    "name": "BIOCLIM",
     "slug": "ubicacionnewapp",
-    "version": "1.0.1",
+    "version": "1.0.10",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ubicacion",
@@ -11,13 +11,16 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Permite que Ubicación muestre tu posición en el mapa.",
+        "NSLocationWhenInUseUsageDescription": "Permite que BIOCLIM muestre tu posición en el mapa.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "BIO CLIM sigue enviando tu ubicación con la app cerrada, la pantalla bloqueada o en otra aplicación.",
+        "NSLocationAlwaysUsageDescription": "BIO CLIM sigue enviando tu ubicación con la app cerrada, la pantalla bloqueada o en otra aplicación.",
+        "UIBackgroundModes": ["location"],
         "NSCameraUsageDescription": "Permite tomar fotos de la entrada de proveedores.",
         "NSPhotoLibraryUsageDescription": "Permite elegir fotos de la entrada de proveedores."
       }
     },
     "android": {
-      "versionCode": 2,
+      "versionCode": 12,
       "package": "com.ubicacionnewapp.app",
       "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "resize",
@@ -29,10 +32,22 @@
         "CAMERA",
         "READ_MEDIA_IMAGES",
         "android.permission.CAMERA",
-        "android.permission.READ_MEDIA_IMAGES"
+        "android.permission.READ_MEDIA_IMAGES",
+        "ACCESS_BACKGROUND_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "android.permission.POST_NOTIFICATIONS",
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "WAKE_LOCK",
+        "android.permission.WAKE_LOCK"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#12231F",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -52,13 +67,17 @@
         {
           "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#F4F1EA"
+          "backgroundColor": "#000000"
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Permite que Ubicación muestre tu posición en el mapa."
+          "locationWhenInUsePermission": "Permite que BIOCLIM muestre tu posición en el mapa.",
+          "locationAlwaysAndWhenInUsePermission": "BIO CLIM sigue enviando tu ubicación con la app cerrada, la pantalla bloqueada o en otra aplicación.",
+          "locationAlwaysPermission": "BIO CLIM sigue enviando tu ubicación con la app cerrada, la pantalla bloqueada o en otra aplicación.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true
         }
       ],
       [
@@ -68,6 +87,7 @@
           "cameraPermission": "Permite tomar fotos de la entrada de proveedores."
         }
       ],
+      "./plugins/with-location-foreground-type.js",
       "@react-native-community/datetimepicker",
       "expo-sharing"
     ],

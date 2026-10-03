@@ -74,9 +74,12 @@ export function validateFinalizarRuta(
   if (input.fotoMercaderia && estimateTooBig(input.fotoMercaderia.uri)) {
     errors.fotoMercaderia = "Máximo 1 GB";
   }
+  if (input.fotoPago && estimateTooBig(input.fotoPago.uri)) {
+    errors.fotoPago = "Máximo 1 GB";
+  }
 
   return {
-    ok: missing.length === 0 && !errors.fotoGuia && !errors.fotoMercaderia,
+    ok: missing.length === 0 && !errors.fotoGuia && !errors.fotoMercaderia && !errors.fotoPago,
     errors,
     missing,
   };

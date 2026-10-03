@@ -1,7 +1,8 @@
 import { RouteBriefBar } from "@/features/routes/components/route-brief-bar";
 import { routePagoHint, routeRecogeHint } from "@/features/mapa-campo/lib/route-hints";
 import { estadoLabel } from "@/features/routes/lib/format";
-import { asEstado, isCerrado, isEnCurso, isRecolectado } from "@/features/routes/lib/estados-recojo";
+import { TrashIcon } from "@/features/routes/components/route-action-bar";
+import { asEstado, isCerrado, isEnCurso, isNoRecolectado, isRecolectado } from "@/features/routes/lib/estados-recojo";
 import type { RouteItem } from "@/features/routes/types";
 import { theme } from "@/lib/theme";
 import { useRef } from "react";
@@ -14,6 +15,7 @@ type MisRutasPanelProps = {
   onToggle: () => void;
   onSelect: (id: string) => void;
   onOpen: (route: RouteItem) => void;
+  onDelete?: (route: RouteItem) => void;
 };
 
 function isRutaActiva(route: RouteItem) {
@@ -28,6 +30,7 @@ export function MisRutasPanel({
   onToggle,
   onSelect,
   onOpen,
+  onDelete,
 }: MisRutasPanelProps) {
   const lastTap = useRef<{ id: string; at: number } | null>(null);
 
@@ -88,9 +91,22 @@ export function MisRutasPanel({
                     <Text style={styles.orden} numberOfLines={1}>
                       {route.orden != null ? `#${route.orden}` : "—"} · {estadoLabel(route.estado)}
                     </Text>
-                    <Text style={styles.name} numberOfLines={1}>
-                      {route.localNombre}
-                    </Text>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.name} numberOfLines={1}>
+                        {route.localNombre}
+                      </Text>
+                      {isNoRecolectado(route.estado) && onDelete ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Eliminar ruta ${route.localNombre}`}
+                          hitSlop={8}
+                          onPress={() => onDelete(route)}
+                          style={styles.trash}
+                        >
+                          <TrashIcon size={16} />
+                        </Pressable>
+                      ) : null}
+                    </View>
                     {pickup ? (
                       <Text style={styles.pickup} numberOfLines={1}>
                         Recogerás · {pickup}
@@ -161,7 +177,16 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.accentSoft,
   },
   orden: { color: theme.colors.muted, fontSize: 9, fontWeight: "800" },
-  name: { color: theme.colors.ink, fontSize: 13, fontWeight: "900" },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  name: { flex: 1, color: theme.colors.ink, fontSize: 13, fontWeight: "900" },
+  trash: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.dangerSoft,
+  },
   pickup: { color: theme.colors.accent, fontSize: 10, fontWeight: "700" },
   pago: { color: "#1B5E20", fontSize: 10, fontWeight: "700" },
   brief: { paddingHorizontal: 10 },

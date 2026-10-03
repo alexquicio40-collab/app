@@ -130,8 +130,9 @@ export async function fetchLocalesActivos(opts?: { force?: boolean }): Promise<L
 export async function fetchUserPlaca(userId: number | string): Promise<string> {
   const payload = await api<unknown>(`/api/users/${userId}`).catch(() => null);
   if (!isRecord(payload)) return "";
-  const user = isRecord(payload.user) ? payload.user : payload;
-  return text(user.placa);
+  const nested = payload.usuario ?? payload.user ?? payload.data ?? payload;
+  if (!isRecord(nested)) return "";
+  return text(nested.placa);
 }
 
 export { fetchCajaDelDia } from "@/features/caja-diaria/api";

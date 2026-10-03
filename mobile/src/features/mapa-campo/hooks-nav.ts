@@ -34,7 +34,7 @@ import type {
   VehicleTypeNav,
 } from "@/features/routes/navegacion/types";
 import type { RouteItem } from "@/features/routes/types";
-import * as Location from "expo-location";
+import { readPreciseFix, watchPreciseFix } from "@/features/map/lib/precise-location";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Platform } from "react-native";
 
@@ -114,46 +114,20 @@ const IDLE: Omit<CampoNavState, "selected"> = {
   vehicleType: null,
 };
 
-async function readPosition(): Promise<{ origin: LatLng; heading: number; mocked: boolean }> {
+async function readPosition(): Promise<{ origin: LatLng; heading: number; mocked: boolean; accuracy: number }> {
   // Web demo: no pedir GPS real (el prompt puede colgarse detrás del lock del browser).
   if (isWebMockGpsEnabled()) {
-    return { origin: MOCK_GPS_LIMA, heading: 0, mocked: true };
+    return { origin: MOCK_GPS_LIMA, heading: 0, mocked: true, accuracy: 8 };
   }
 
   try {
-    const perm = await Location.requestForegroundPermissionsAsync();
-    if (!perm.granted) {
-      throw new Error("permiso");
-    }
-
-    try {
-      const pos = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      return {
-        origin: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-        heading:
-          Number.isFinite(pos.coords.heading) && (pos.coords.heading ?? -1) >= 0
-            ? Number(pos.coords.heading)
-            : 0,
-        mocked: false,
-      };
-    } catch {
-      if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.geolocation) {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: false,
-            timeout: 4000,
-          });
-        });
-        return {
-          origin: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-          heading: Number(pos.coords.heading) >= 0 ? Number(pos.coords.heading) : 0,
-          mocked: false,
-        };
-      }
-      throw new Error("gps");
-    }
+    const fix = await readPreciseFix();
+    return {
+      origin: { lat: fix.lat, lng: fix.lng },
+      heading: fix.heading ?? 0,
+      mocked: false,
+      accuracy: fix.accuracy,
+    };
   } catch {
     throw new Error("Activa el permiso de ubicación o prueba en un dispositivo con GPS");
   }
@@ -163,7 +137,7 @@ async function readPosition(): Promise<{ origin: LatLng; heading: number; mocked
 export function useCampoNav() {
   const [state, setState] = useState(IDLE);
   const [mockingGps, setMockingGps] = useState(false);
-  const watchRef = useRef<Location.LocationSubscription | null>(null);
+  const watchRef = useRef<{ remove: () => void } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastRecalcRef = useRef(0);
   const selectedRef = useRef<SuggestedRoute | null>(null);
@@ -221,10 +195,10 @@ export function useCampoNav() {
       const pick = directions.best;
       selectedRef.current = pick;
       const snap = snapToPolyline(position, pick.coords);
-      const onRoad = snap.dist <= SNAP_METERS ? snap.point : position;
-      const roadHeading = snap.dist <= SNAP_METERS ? snap.heading : heading;
+      const onRoad = position;
+      const roadHeading = snap.dist <= SNAP_METERS ? heading || snap.heading : heading;
       const remaining =
-        snap.dist <= SNAP_METERS
+        snap.dist <= OFF_ROUTE_METERS
           ? snap.remainingMeters
           : pathLengthMeters(pick.coords);
       const speedFactor = Math.max(remaining / Math.max(pick.distMeters, 1), 0.15);
@@ -278,6 +252,7 @@ export function useCampoNav() {
         latitude: number;
         longitude: number;
         heading?: number | null;
+        accuracy?: number | null;
       },
       opts?: { force?: boolean },
     ) => {
@@ -285,6 +260,7 @@ export function useCampoNav() {
       const raw = { lat: coords.latitude, lng: coords.longitude };
       const now = Date.now();
       const dt = lastPosAtRef.current ? now - lastPosAtRef.current : 1000;
+      const accuracy = coords.accuracy ?? null;
 
       if (!opts?.force && !shouldAcceptMove(lastPosRef.current, raw, dt)) return;
 
@@ -299,12 +275,13 @@ export function useCampoNav() {
       let heading = gpsHeading ?? 0;
       let remaining = 0;
       let offRoute = false;
+      const canSnap = accuracy == null || accuracy <= 25;
 
       if (path.length >= 2) {
         const snap = snapToPolyline(raw, path);
         offRoute = snap.dist > OFF_ROUTE_METERS;
         remaining = snap.remainingMeters;
-        if (snap.dist <= SNAP_METERS) {
+        if (canSnap && snap.dist <= SNAP_METERS) {
           position = snap.point;
           heading = gpsHeading ?? snap.heading;
           lastOnRouteRef.current = position;
@@ -435,25 +412,25 @@ export function useCampoNav() {
     }
 
     try {
-      watchRef.current = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 1200,
-          distanceInterval: 4,
-        },
-        (pos) => {
-          void onPosition(pos.coords);
-        },
-      );
+      const handle = await watchPreciseFix((fix) => {
+        void onPosition({
+          latitude: fix.lat,
+          longitude: fix.lng,
+          heading: fix.heading,
+          accuracy: fix.accuracy,
+        });
+      });
+      watchRef.current = handle;
     } catch {
       pollRef.current = setInterval(() => {
         void (async () => {
           try {
-            const { origin, heading } = await readPosition();
+            const { origin, heading, accuracy } = await readPosition();
             await onPosition({
               latitude: origin.lat,
               longitude: origin.lng,
               heading,
+              accuracy,
             });
           } catch {
             // ignore tick

@@ -7,6 +7,8 @@ import {
   useCampoNav,
   useMapaCampo,
 } from "@/features/mapa-campo";
+import { MapaFechaBar } from "@/features/mapa-campo/components/mapa-fecha-bar";
+import { RecojosPendientesBar } from "@/features/recojo-offline/components/pendientes-bar";
 import { routePagoHint, routeRecogeHint } from "@/features/mapa-campo/lib/route-hints";
 import { prioridadMeta } from "@/features/locales/lib/prioridad";
 import {
@@ -19,8 +21,9 @@ import { theme } from "@/lib/theme";
 import { ScreenHeader } from "@/ui/screen-header";
 import { useContentBottomPad } from "@/ui/use-content-bottom-pad";
 import { RutaDetalleSheet } from "@/features/mapa-campo/components/ruta-detalle-sheet";
+import { deleteRoute } from "@/features/routes/api";
 import type { RouteItem } from "@/features/routes/types";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useEffect, useState } from "react";
 
 /**
@@ -44,6 +47,29 @@ export default function MapaScreen() {
       return campo.routes.find((item) => item.id === prev.id) ?? null;
     });
   }, [campo.routes]);
+
+  const quitarNoRecolectado = (route: RouteItem) => {
+    const ask =
+      Platform.OS === "web"
+        ? Promise.resolve(window.confirm(`¿Eliminar la ruta de ${route.localNombre}?`))
+        : new Promise<boolean>((resolve) => {
+            Alert.alert("Eliminar ruta", route.localNombre, [
+              { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
+              { text: "Eliminar", style: "destructive", onPress: () => resolve(true) },
+            ]);
+          });
+    void ask.then(async (ok) => {
+      if (!ok) return;
+      try {
+        await deleteRoute(route.id);
+        void campo.reload();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "No se pudo eliminar";
+        if (Platform.OS === "web") window.alert(message);
+        else Alert.alert("Error", message);
+      }
+    });
+  };
 
   const startRoute = (route: RouteItem) => {
     setDetail(null);
@@ -79,6 +105,9 @@ export default function MapaScreen() {
       />
 
       <View style={styles.stage}>
+        {!nav.active ? (
+          <MapaFechaBar desde={campo.fechaDesde} hasta={campo.fechaHasta} onChange={campo.setRango} />
+        ) : null}
         {campo.loading && !campo.routes.length && !nav.active ? (
           <View style={styles.boot}>
             <ActivityIndicator color={theme.colors.accent} />
@@ -156,17 +185,21 @@ export default function MapaScreen() {
               />
             )
           ) : (
-            <MisRutasPanel
-              routes={campo.routes}
-              selectedId={campo.selectedId}
-              expanded={campo.panelOpen}
-              onToggle={() => campo.setPanelOpen((v) => !v)}
-              onSelect={campo.setSelectedId}
-              onOpen={(route) => {
-                campo.setSelectedId(route.id);
-                setDetail(route);
-              }}
-            />
+            <View style={styles.panelStack}>
+              <RecojosPendientesBar />
+              <MisRutasPanel
+                routes={campo.routes}
+                selectedId={campo.selectedId}
+                expanded={campo.panelOpen}
+                onToggle={() => campo.setPanelOpen((v) => !v)}
+                onSelect={campo.setSelectedId}
+                onOpen={(route) => {
+                  campo.setSelectedId(route.id);
+                  setDetail(route);
+                }}
+                onDelete={quitarNoRecolectado}
+              />
+            </View>
           )}
         </View>
       </View>
@@ -243,6 +276,7 @@ export default function MapaScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.accentDeep },
   stage: { flex: 1 },
+  panelStack: { gap: 8 },
   boot: {
     flex: 1,
     alignItems: "center",

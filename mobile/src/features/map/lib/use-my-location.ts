@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { getAdminCoords, type AdminCoords } from "./admin-location";
+import type { AdminCoords } from "./admin-location";
+import { watchPreciseFix } from "./precise-location";
 
-/** Posición actual del usuario. Sin GPS no inventa un punto. */
+/** Posición actual en vivo. Sin GPS no inventa un punto. */
 export function useMyLocation(enabled = true) {
   const [coords, setCoords] = useState<AdminCoords | null>(null);
 
@@ -12,20 +13,26 @@ export function useMyLocation(enabled = true) {
     }
 
     let cancel = false;
-    const read = async () => {
-      try {
-        const next = await getAdminCoords();
-        if (!cancel) setCoords(next);
-      } catch {
-        // El mapa sigue sin el punto si el permiso o el GPS fallan.
-      }
-    };
+    let remove: (() => void) | null = null;
 
-    void read();
-    const timer = setInterval(() => void read(), 20000);
+    void watchPreciseFix((fix) => {
+      if (cancel) return;
+      setCoords({ lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy });
+    })
+      .then((handle) => {
+        if (cancel) {
+          handle.remove();
+          return;
+        }
+        remove = handle.remove;
+      })
+      .catch(() => {
+        // El mapa sigue sin el punto si el permiso o el GPS fallan.
+      });
+
     return () => {
       cancel = true;
-      clearInterval(timer);
+      remove?.();
     };
   }, [enabled]);
 

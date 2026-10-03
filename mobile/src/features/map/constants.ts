@@ -1,4 +1,4 @@
-export const POLL_MS = 6000;
+export const POLL_MS = 3000;
 /** Refresh del panel "Mis rutas" / detalle de rutas (paridad Flutter ~30s). */
 export const ROUTES_POLL_MS = 15_000;
 export const SOCKET_KEEP_MS = 15_000;

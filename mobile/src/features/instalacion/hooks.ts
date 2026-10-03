@@ -24,6 +24,9 @@ function withStatus(
 
 const PENDING_MAP: Record<PermissionKind, PermissionGrant> = {
   location: "pending",
+  locationBg: "pending",
+  notifications: "pending",
+  battery: "pending",
   camera: "pending",
   photos: "pending",
 };

@@ -39,6 +39,7 @@ export function rolTone(rol: string): string {
 
 export const MENU_MODULOS: { key: MenuModuloKey; label: string; group: string }[] = [
   { key: "usuarios", label: "Usuarios", group: "Administración" },
+  { key: "sesiones", label: "Sesiones", group: "Administración" },
   { key: "operadores", label: "Operadores", group: "Administración" },
   { key: "locales", label: "Locales", group: "Administración" },
   { key: "asignar", label: "Asignar rutas", group: "Administración" },

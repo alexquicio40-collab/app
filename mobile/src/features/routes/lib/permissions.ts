@@ -47,6 +47,10 @@ export function canReprogramRoute(route: RouteItem) {
   return asEstado(route.estado) === "no_recolectado";
 }
 
+export function canCloseRoute(route: RouteItem) {
+  return statusTargetsFor(route).some((item) => item.value === "cerrado");
+}
+
 export function statusTargetsFor(route: RouteItem) {
   return statusTargetsForEstado(route.estado).map((item) => ({
     value: item.value,

@@ -8,5 +8,6 @@ export type User = {
 export type AuthResult = {
   accessToken: string;
   refreshToken: string;
+  sessionToken?: string;
   user: User;
 };

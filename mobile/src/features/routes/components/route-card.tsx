@@ -3,6 +3,7 @@ import { StatusBadge } from "@/features/routes/components/status-badge";
 import {
   canArriveRoute,
   canChangeStatus,
+  canCloseRoute,
   canDeleteRoute,
   canEditRoute,
   canFinalizeRoute,
@@ -26,6 +27,7 @@ export type RouteCardActions = {
   onFinalize?: () => void;
   onSkip?: () => void;
   onReprogram?: () => void;
+  onCloseRoute?: () => void;
 };
 
 type RouteCardProps = {
@@ -43,8 +45,17 @@ export function RouteCard({ route, actions }: RouteCardProps) {
   const showFinalize = canFinalizeRoute(route) && Boolean(actions.onFinalize);
   const showSkip = canSkipCollection(route) && Boolean(actions.onSkip);
   const showReprogram = canReprogramRoute(route) && Boolean(actions.onReprogram);
+  const showClose = canCloseRoute(route) && Boolean(actions.onCloseRoute);
   const hasActions =
-    showEdit || showStatus || showDelete || showStart || showArrive || showFinalize || showSkip || showReprogram;
+    showEdit ||
+    showStatus ||
+    showDelete ||
+    showStart ||
+    showArrive ||
+    showFinalize ||
+    showSkip ||
+    showReprogram ||
+    showClose;
 
   const hasQty =
     route.estado === "recolectado" && (route.litraje || route.baldesVacios || route.galonerasVacias);
@@ -89,12 +100,12 @@ export function RouteCard({ route, actions }: RouteCardProps) {
               route.litraje ? `${route.litraje} L` : null,
               route.baldesVacios ? `${route.baldesVacios} baldes` : null,
               route.galonerasVacias ? `${route.galonerasVacias} gal.` : null,
-              route.fotoGuia || route.fotoMercaderia ? "fotos" : null,
+              route.fotoGuia || route.fotoMercaderia || route.fotoPago ? "fotos" : null,
             ]
               .filter(Boolean)
               .join(" · ")}
           </Text>
-        ) : route.fotoGuia || route.fotoMercaderia ? (
+        ) : route.fotoGuia || route.fotoMercaderia || route.fotoPago ? (
           <Text style={styles.qty}>fotos</Text>
         ) : null}
 
@@ -138,6 +149,9 @@ export function RouteCard({ route, actions }: RouteCardProps) {
           ) : null}
           {showEdit ? (
             <ActionIconButton label="Editar" glyph="✎" tone="accent" onPress={actions.onEdit!} />
+          ) : null}
+          {showClose ? (
+            <ActionIconButton label="Cerrar" glyph="⊘" tone="muted" onPress={actions.onCloseRoute!} />
           ) : null}
           {showStatus ? (
             <ActionIconButton

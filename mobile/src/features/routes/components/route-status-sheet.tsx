@@ -2,7 +2,8 @@ import { statusTargetsFor } from "@/features/routes/lib/permissions";
 import { estadoLabel } from "@/features/routes/lib/format";
 import type { RouteItem } from "@/features/routes/types";
 import { theme } from "@/lib/theme";
-import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useContentBottomPad } from "@/ui/use-content-bottom-pad";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type RouteStatusSheetProps = {
@@ -19,6 +20,7 @@ export function RouteStatusSheet({
   onSelect,
 }: RouteStatusSheetProps) {
   const insets = useSafeAreaInsets();
+  const bottom = useContentBottomPad(12);
   if (!route) return null;
 
   const options = statusTargetsFor(route);
@@ -27,7 +29,7 @@ export function RouteStatusSheet({
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, bottom, 16) }]}>
           <Text style={styles.kicker}>Cambiar estado</Text>
           <Text style={styles.title} numberOfLines={1}>
             {route.localNombre}
@@ -37,7 +39,7 @@ export function RouteStatusSheet({
           {saving ? (
             <ActivityIndicator color={theme.colors.accent} style={styles.loader} />
           ) : (
-            <View style={styles.list}>
+            <ScrollView style={styles.listScroll} contentContainerStyle={styles.list}>
               {options.map((item) => (
                 <Pressable
                   key={item.value}
@@ -46,10 +48,10 @@ export function RouteStatusSheet({
                   style={({ pressed }) => [styles.option, pressed ? styles.optionPressed : null]}
                 >
                   <Text style={styles.optionText}>{item.label}</Text>
-                  <Text style={styles.optionHint}>↻</Text>
+                  <Text style={styles.optionHint}>{item.value === "cerrado" ? "⊘" : "↻"}</Text>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
           )}
 
           <Pressable onPress={onClose} style={styles.cancel}>
@@ -97,6 +99,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 8,
   },
+  listScroll: { maxHeight: 320 },
   list: { gap: 6 },
   option: {
     flexDirection: "row",

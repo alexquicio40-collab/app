@@ -14,6 +14,7 @@ import { theme } from "@/lib/theme";
 import { HeaderAction, IconCard } from "@/ui/header-action";
 import { ScreenHeader } from "@/ui/screen-header";
 import { useContentBottomPad } from "@/ui/use-content-bottom-pad";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -27,9 +28,17 @@ import {
 
 export default function LocalesScreen() {
   const screen = useLocalesScreen();
+  const params = useLocalSearchParams<{ crear?: string }>();
   const bottomPad = useContentBottomPad(12);
   const [mode, setMode] = useState<LocalesViewMode>("mapa");
   const [lista, setLista] = useState<"locales" | "certificados">("locales");
+
+  useFocusEffect(
+    useCallback(() => {
+      if (params.crear !== "1" || !screen.canManage) return;
+      screen.openCreate();
+    }, [params.crear, screen.canManage, screen.openCreate]),
+  );
 
   const visibles = useMemo(
     () =>
@@ -187,10 +196,6 @@ export default function LocalesScreen() {
           }
           renderItem={renderItem}
           ItemSeparatorComponent={Sep}
-          initialNumToRender={10}
-          maxToRenderPerBatch={8}
-          windowSize={7}
-          removeClippedSubviews
         />
       )}
 
@@ -219,6 +224,8 @@ export default function LocalesScreen() {
         local={screen.editing}
         metodosPago={screen.metodosPago}
         saving={screen.mutating}
+        ownerName={screen.ownerName}
+        lockAsesor={screen.lockAsesor}
         onClose={screen.closeForm}
         onSave={screen.saveLocal}
       />

@@ -29,6 +29,8 @@ export type FinalizarRutaInput = {
   observaciones: string;
   fotoGuia: PendingFoto | null;
   fotoMercaderia: PendingFoto | null;
+  fotoPago: PendingFoto | null;
+  firma: string;
 };
 
 export type FinalizarFieldErrors = Partial<
@@ -38,6 +40,7 @@ export type FinalizarFieldErrors = Partial<
     | "cantidadGalonerasVacias"
     | "fotoGuia"
     | "fotoMercaderia"
+    | "fotoPago"
     | "observaciones"
     | "form",
     string

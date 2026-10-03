@@ -88,6 +88,11 @@ function parseFotos(value: unknown, localId: string): LocalFoto[] {
   return out.sort((a, b) => a.orden - b.orden);
 }
 
+function parseFirstFoto(value: unknown, localId: string): LocalFoto[] {
+  const first = parseFotos(value, localId)[0];
+  return first ? [first] : [];
+}
+
 export function parseLocal(
   row: UnknownRecord,
   opts?: { includeFotos?: boolean },
@@ -129,9 +134,10 @@ export function parseLocal(
     operadoresVenPrecio: bool(row.operadores_ven_precio ?? row.operadoresVenPrecio),
     frecuencias: parseFrecuencias(row.frecuencias_asignacion),
     metodosPago: parseMetodos(row.metodos_pago),
-    // Fotos: caras de parsear en listados grandes; se hidratan al abrir detalle.
-    fotos: includeFotos ? parseFotos(row.fotos, id) : [],
+    // Listados: solo la portada (entrada). El resto se hidrata al abrir detalle.
+    fotos: includeFotos ? parseFotos(row.fotos, id) : parseFirstFoto(row.fotos, id),
     prioridad: normalizePrioridad(text(row.prioridad)),
+    createdAt: text(row.created_at, row.createdAt) || null,
   };
 }
 
@@ -209,15 +215,25 @@ export async function fetchLocales(opts?: {
       id: item.id,
       nombre: item.nombre,
       direccion: item.direccion,
+      asesorBioClim: item.asesorBioClim,
       activo: item.activo,
     })),
   };
   return items;
 }
 
+/** Primera foto de entrada (ya viene en el payload de /api/locales). */
+export function portadaLocal(local: LocalItem | null | undefined): string | null {
+  if (!local) return null;
+  const own = local.fotos[0]?.rutaArchivo?.trim();
+  if (own) return own;
+  const raw = rawLocalesById.get(local.id);
+  if (!raw) return null;
+  return parseFotos(raw.fotos, local.id)[0]?.rutaArchivo ?? null;
+}
+
 /** Reparsea fotos desde el payload crudo (sin re-fetch) al abrir detalle/editar. */
 export function hydrateLocalFotos(local: LocalItem): LocalItem {
-  if (local.fotos.length) return local;
   const raw = rawLocalesById.get(local.id);
   if (!raw) return local;
   return parseLocal(raw, { includeFotos: true }) ?? local;
@@ -234,6 +250,7 @@ export type LocalLiteOption = {
   id: string;
   nombre: string;
   direccion: string;
+  asesorBioClim: string;
 };
 
 type LocalLiteCached = LocalLiteOption & { activo: boolean };
@@ -263,7 +280,12 @@ export async function fetchLocalesLite(opts?: {
   ) {
     const cached = localesLiteCache.items;
     const rows = opts?.onlyActivos ? cached.filter((item) => item.activo) : cached;
-    return rows.map(({ id, nombre, direccion }) => ({ id, nombre, direccion }));
+    return rows.map(({ id, nombre, direccion, asesorBioClim }) => ({
+      id,
+      nombre,
+      direccion,
+      asesorBioClim,
+    }));
   }
 
   const payload = await api<unknown>("/api/locales");
@@ -275,6 +297,7 @@ export async function fetchLocalesLite(opts?: {
         id,
         nombre: text(row.nombre, row.local_nombre) || `Local ${id}`,
         direccion: text(row.direccion, row.local_direccion),
+        asesorBioClim: text(row.asesor_bio_clim),
         activo: row.activo == null ? true : bool(row.activo),
       };
     })
@@ -283,7 +306,12 @@ export async function fetchLocalesLite(opts?: {
 
   localesLiteCache = { at: Date.now(), items };
   const rows = opts?.onlyActivos ? items.filter((item) => item.activo) : items;
-  return rows.map(({ id, nombre, direccion }) => ({ id, nombre, direccion }));
+  return rows.map(({ id, nombre, direccion, asesorBioClim }) => ({
+    id,
+    nombre,
+    direccion,
+    asesorBioClim,
+  }));
 }
 
 export async function createLocal(input: LocalFormInput) {

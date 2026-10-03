@@ -1,3 +1,4 @@
+import { localesDelUsuario, seesAllUsers } from "@/lib/scope-user";
 import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Platform } from "react-native";
@@ -69,7 +70,7 @@ export function useLocalesScreen() {
         force: mode === "refresh",
         includeFotos: false,
       });
-      setLocales(rows);
+      setLocales(localesDelUsuario(rows, user));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar los locales");
     } finally {
@@ -81,7 +82,7 @@ export function useLocalesScreen() {
     void fetchMetodosPago()
       .then(setMetodosPago)
       .catch(() => setMetodosPago([]));
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     void load("boot");
@@ -159,13 +160,19 @@ export function useLocalesScreen() {
   const saveLocal = useCallback(
     async (input: LocalFormInput) => {
       const { pendingFotos = [], removedFotoIds = [], ...payload } = input;
+      const stamped = {
+        ...payload,
+        asesorBioClim: seesAllUsers(rol)
+          ? payload.asesorBioClim
+          : user?.name || user?.username || payload.asesorBioClim,
+      };
       setMutating(true);
       try {
         let localId = editingId ?? "";
         if (editingId) {
-          await updateLocal(editingId, payload);
+          await updateLocal(editingId, stamped);
         } else {
-          const created = await createLocal(payload);
+          const created = await createLocal(stamped);
           localId = extractCreatedLocalId(created);
           if (!localId) {
             throw new Error("Local creado pero sin ID para subir fotos");
@@ -187,7 +194,7 @@ export function useLocalesScreen() {
         setMutating(false);
       }
     },
-    [editingId, closeForm, load],
+    [editingId, closeForm, load, rol, user],
   );
 
   const removeLocal = useCallback(
@@ -319,6 +326,8 @@ export function useLocalesScreen() {
     formOpen: creating || editingId != null,
     mutating,
     canManage,
+    ownerName: user?.name || user?.username || "",
+    lockAsesor: !seesAllUsers(rol),
     metodosOpen,
     metodosSaving,
     openMetodos: () => setMetodosOpen(true),

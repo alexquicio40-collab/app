@@ -1,4 +1,5 @@
 import { api, ApiError } from "@/lib/api";
+import { getDispositivo } from "@/features/sesiones/lib/dispositivo";
 import type { AuthResult, User } from "./types";
 
 type WebUser = {
@@ -10,6 +11,7 @@ type WebUser = {
 
 type LoginResponse = {
   success: boolean;
+  sesion_token?: string;
   user: WebUser;
 };
 
@@ -27,22 +29,24 @@ function toUser(user: WebUser): User {
   };
 }
 
-function toAuthResult(user: WebUser): AuthResult {
+function toAuthResult(user: WebUser, sessionToken?: string): AuthResult {
   const id = String(user.id);
   return {
     accessToken: id,
     refreshToken: id,
+    sessionToken,
     user: toUser(user),
   };
 }
 
 async function tryLogin(usuario: string, password: string) {
+  const dispositivo = await getDispositivo();
   const data = await api<LoginResponse>("/api/login", {
     method: "POST",
     skipAuth: true,
-    body: { usuario, password },
+    body: { usuario, password, dispositivo },
   });
-  return toAuthResult(data.user);
+  return toAuthResult(data.user, data.sesion_token);
 }
 
 export async function loginRequest(username: string, password: string) {

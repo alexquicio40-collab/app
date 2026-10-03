@@ -4,9 +4,27 @@ import type { PermissionDef } from "../types";
 export const INSTALACION_PERMISSIONS: PermissionDef[] = [
   {
     kind: "location",
-    title: "Ubicación",
-    body: "Para mostrarte en el mapa, navegar rutas y registrar tu posición en campo.",
+    title: "Ubicación precisa",
+    body: "Para ubicar a cualquier usuario en el mapa, no solo al operador de ruta.",
     accent: "location",
+  },
+  {
+    kind: "locationBg",
+    title: "Segundo plano",
+    body: "Sigue enviando tu posición con la pantalla bloqueada o en otra app.",
+    accent: "locationBg",
+  },
+  {
+    kind: "notifications",
+    title: "Notificaciones",
+    body: "Android las pide para mantener el seguimiento activo sin cortar el proceso.",
+    accent: "notifications",
+  },
+  {
+    kind: "battery",
+    title: "Batería sin restricción",
+    body: "Evita que Xiaomi, Huawei o Samsung cierren la app en segundo plano.",
+    accent: "battery",
   },
   {
     kind: "camera",

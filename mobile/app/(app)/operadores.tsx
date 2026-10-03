@@ -2,6 +2,7 @@ import { CajaDiariaSheet } from "@/features/caja-diaria";
 import { ActionsPanel } from "@/features/map/components/actions-panel";
 import { LiveMap, type LiveMapHandle } from "@/features/map/components/live-map";
 import { LocateButton } from "@/features/map/components/locate-button";
+import { useMyLocation } from "@/features/map/lib/use-my-location";
 import { getAdminCoords } from "@/features/map/lib/admin-location";
 import {
   OperadoresRail,
@@ -24,26 +25,13 @@ export default function OperadoresScreen() {
   const [satelliteOn, setSatelliteOn] = useState(false);
   const [locating, setLocating] = useState(false);
   const [located, setLocated] = useState(false);
+  const me = useMyLocation();
 
   useEffect(() => {
-    let cancel = false;
-    const paint = async () => {
-      try {
-        const coords = await getAdminCoords();
-        if (cancel) return;
-        live.current?.showMyLocation(coords, false);
-        setLocated(true);
-      } catch {
-        // Sin GPS el mapa de la flota sigue igual.
-      }
-    };
-    void paint();
-    const timer = setInterval(() => void paint(), 20000);
-    return () => {
-      cancel = true;
-      clearInterval(timer);
-    };
-  }, []);
+    if (!me) return;
+    live.current?.showMyLocation(me, false);
+    setLocated(true);
+  }, [me]);
 
   const locateMe = useCallback(async () => {
     if (locating) return;

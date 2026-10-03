@@ -46,8 +46,11 @@ export default function ReportesKpiScreen() {
         filters={screen.filters}
         rangeLabel={screen.rangeLabel}
         conductores={screen.conductores}
+        asignadores={screen.asignadores}
         onPatchDates={screen.patchDates}
         onConductor={screen.setConductorId}
+        onAsignador={screen.setAsignadorId}
+        showAsignador={screen.showAsignador}
       />
 
       {screen.hint ? (

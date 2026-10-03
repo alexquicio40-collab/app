@@ -82,6 +82,10 @@ export function reprogramarRuta(rutaId: string) {
   return setEstado(rutaId, "reprogramado");
 }
 
+export function cerrarRuta(rutaId: string) {
+  return setEstado(rutaId, "cerrado");
+}
+
 async function appendFoto(form: FormData, field: string, foto: PendingFoto | null) {
   if (!foto) return;
   if (foto.uri.startsWith("blob:") || foto.uri.startsWith("data:")) {
@@ -115,8 +119,10 @@ export async function finalizarRuta(
     String(Math.max(0, Math.floor(input.cantidadGalonerasVacias) || 0)),
   );
   form.append("observaciones", input.observaciones.trim());
+  if (input.firma.trim()) form.append("firma", input.firma.trim());
   await appendFoto(form, "foto_guia", input.fotoGuia);
   await appendFoto(form, "foto_mercaderia", input.fotoMercaderia);
+  await appendFoto(form, "foto_pago", input.fotoPago);
 
   return apiUpload<{ success?: boolean; message?: string }>(`/api/rutas/${rutaId}/finalizar`, form, {
     onProgress,

@@ -1,6 +1,7 @@
 import { todayLabel } from "@/features/dashboard/lib/week";
 import type { DashboardSummary } from "@/features/dashboard/types";
 import { theme } from "@/lib/theme";
+import { BrandLogo } from "@/ui/brand-logo";
 import { useAuth } from "@/providers/auth-provider";
 import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -24,7 +25,7 @@ export function DashHeader({ kpis }: { kpis: DashboardSummary["kpis"] }) {
 
       <View style={styles.top}>
         <View style={styles.brandWrap}>
-          <Text style={styles.brand}>BIOCLIM</Text>
+          <BrandLogo height={42} plated />
           <Text style={styles.slogan}>NO LO TIRES, TRANSFÓRMALO</Text>
           <Text style={styles.date}>{todayLabel()}</Text>
         </View>
@@ -108,13 +109,8 @@ const styles = StyleSheet.create({
   },
   brandWrap: {
     flex: 1,
+    alignItems: "flex-start",
     paddingRight: 12,
-  },
-  brand: {
-    color: theme.colors.gold,
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 2,
   },
   slogan: {
     color: "#E7F4EE",
