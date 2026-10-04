@@ -4,7 +4,7 @@ import {
   campoMapRecenterScript,
   campoMapUpdateScript,
 } from "@/features/mapa-campo/lib/campo-map-html";
-import type { CampoMapPayload } from "@/features/mapa-campo/nav-types";
+import type { CampoMapPayload, CampoMapPin } from "@/features/mapa-campo/nav-types";
 import type { LatLng } from "@/features/routes/navegacion/types";
 import { theme } from "@/lib/theme";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -24,7 +24,10 @@ type CampoMapProps = {
   idleOrigin?: LatLng | null;
   idleDest?: LatLng | null;
   idleDestColor?: string | null;
+  pins?: CampoMapPin[];
+  selectedPinId?: string | null;
   onSelectRoute?: (id: string) => void;
+  onSelectPin?: (id: string) => void;
   /** FAB para volver a centrar el carrito tras mover el mapa. */
   showRecenter?: boolean;
   locateBottom?: number;
@@ -35,25 +38,35 @@ export function CampoMap({
   idleOrigin,
   idleDest,
   idleDestColor,
+  pins,
+  selectedPinId,
   onSelectRoute,
+  onSelectPin,
   showRecenter = false,
   locateBottom = 16,
 }: CampoMapProps) {
   const html = useMemo(() => buildCampoMapHtml(), []);
   const effective = useMemo((): CampoMapPayload => {
-    if (payload && (payload.tracking || payload.routes.length > 0)) return payload;
+    const base: CampoMapPayload =
+      payload && (payload.tracking || payload.routes.length > 0)
+        ? payload
+        : {
+            type: "nav",
+            tracking: false,
+            position: idleOrigin ?? null,
+            heading: 0,
+            dest: idleDest ?? null,
+            destColor: idleDestColor ?? null,
+            selectedId: null,
+            routes: [],
+            traveled: [],
+          };
     return {
-      type: "nav",
-      tracking: false,
-      position: idleOrigin ?? null,
-      heading: 0,
-      dest: idleDest ?? null,
-      destColor: idleDestColor ?? null,
-      selectedId: null,
-      routes: [],
-      traveled: [],
+      ...base,
+      pins: pins ?? base.pins ?? [],
+      selectedPinId: selectedPinId ?? base.selectedPinId ?? null,
     };
-  }, [payload, idleOrigin, idleDest, idleDestColor]);
+  }, [payload, idleOrigin, idleDest, idleDestColor, pins, selectedPinId]);
 
   const [following, setFollowing] = useState(true);
   const webRef = useRef<WebView>(null);
@@ -93,9 +106,10 @@ export function CampoMap({
         setFollowing(!!data.on);
         return;
       }
+      if (data?.type === "select-pin" && data.id) onSelectPin?.(data.id);
       if (data?.type === "select-route" && data.id) onSelectRoute?.(data.id);
     },
-    [onSelectRoute],
+    [onSelectPin, onSelectRoute],
   );
 
   useEffect(() => {

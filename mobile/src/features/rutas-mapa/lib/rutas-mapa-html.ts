@@ -92,7 +92,7 @@ export function buildRutasMapaHtml() {
       pins.forEach(function (pin) {
         keep[pin.id] = true;
         var active = selectedId === pin.id;
-        var icon = pinIcon(pin.color || '#1976D2', pin.orden || 0, active);
+        var icon = pinIcon(pin.color || '#F9A825', pin.orden || 0, active);
         if (markers[pin.id]) {
           markers[pin.id].setPosition({ lat: pin.lat, lng: pin.lng });
           markers[pin.id].setIcon(icon);

@@ -23,3 +23,8 @@ export function prioridadMeta(value: string | null | undefined) {
   const code = normalizePrioridad(value);
   return PRIORIDADES.find((item) => item.value === code) ?? PRIORIDADES[1];
 }
+
+/** Color del pin en mapa: alta rojo · media amarillo · baja verde. */
+export function pinColorForLocal(value: string | null | undefined) {
+  return prioridadMeta(value).color;
+}

@@ -31,6 +31,8 @@ export function buildCampoMapHtml() {
   <script>
     var map = null, ready = false, pending = null;
     var meMarker = null, destMarker = null;
+    var stopPins = {};
+    var lastPinsKey = '';
     var routeLayers = [];
     var traveledLine = null;
     var lastRoutesKey = '';
@@ -189,6 +191,62 @@ export function buildCampoMapHtml() {
       meMarker.__kind = kind;
     }
 
+    function pinIcon(color, orden, active) {
+      var scale = active ? 1.18 : 1;
+      var w = Math.round(36 * scale);
+      var h = Math.round(46 * scale);
+      var label = String(orden > 0 ? orden : '');
+      var fontSize = orden >= 100 ? 11 : (orden >= 10 ? 13 : 15);
+      var svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'" viewBox="0 0 36 46">' +
+        '<path d="M18 1.5C9.4 1.5 2.5 8.4 2.5 17c0 11 15.5 27.5 15.5 27.5S33.5 28 33.5 17C33.5 8.4 26.6 1.5 18 1.5z" fill="'+color+'" stroke="#fff" stroke-width="2.2"/>' +
+        '<circle cx="18" cy="17" r="9.2" fill="'+color+'"/>' +
+        '<text x="18" y="17" text-anchor="middle" dominant-baseline="central" fill="#fff" font-family="system-ui,sans-serif" font-weight="900" font-size="'+fontSize+'">'+label+'</text>' +
+        '</svg>';
+      return {
+        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+        scaledSize: new google.maps.Size(w, h),
+        anchor: new google.maps.Point(w / 2, h)
+      };
+    }
+
+    function drawPins(pins, selectedPinId) {
+      var list = pins || [];
+      var key = selectedPinId + '|' + list.map(function (p) {
+        return p.id + ':' + p.orden + ':' + p.lat + ',' + p.lng + ':' + (p.color || '');
+      }).join('|');
+      if (key === lastPinsKey) return;
+      lastPinsKey = key;
+      var keep = {};
+      list.forEach(function (pin) {
+        keep[pin.id] = true;
+        var active = selectedPinId === pin.id;
+        var icon = pinIcon(pin.color || '#F9A825', pin.orden || 0, active);
+        if (stopPins[pin.id]) {
+          stopPins[pin.id].setPosition({ lat: pin.lat, lng: pin.lng });
+          stopPins[pin.id].setIcon(icon);
+          stopPins[pin.id].setZIndex(active ? 80 : (pin.orden || 1));
+          return;
+        }
+        var marker = new google.maps.Marker({
+          map: map,
+          position: { lat: pin.lat, lng: pin.lng },
+          icon: icon,
+          title: pin.label || '',
+          zIndex: active ? 80 : (pin.orden || 1)
+        });
+        marker.addListener('click', function () {
+          post({ type: 'select-pin', id: pin.id });
+        });
+        stopPins[pin.id] = marker;
+      });
+      Object.keys(stopPins).forEach(function (id) {
+        if (keep[id]) return;
+        stopPins[id].setMap(null);
+        delete stopPins[id];
+      });
+    }
+
     function ensureDestMarker(dest, color) {
       var fill = color || '#E53935';
       var key = dest ? dest.lat + ',' + dest.lng + ':' + fill : '';
@@ -337,8 +395,11 @@ export function buildCampoMapHtml() {
       var selectedId = payload.selectedId;
       var routes = payload.routes || [];
 
+      var pins = payload.pins || [];
+      var selectedPinId = payload.selectedPinId || null;
       var routeBounds = drawRoutes(routes, selectedId, payload.traveled || []);
-      ensureDestMarker(dest, payload.destColor);
+      drawPins(pins, selectedPinId);
+      ensureDestMarker(pins.length ? null : dest, payload.destColor);
       setMe(position, heading, tracking);
 
       if (!tracking && routeBounds) {
@@ -352,12 +413,20 @@ export function buildCampoMapHtml() {
         if (map.setHeading) map.setHeading(0);
         var idle = new google.maps.LatLngBounds();
         var has = false;
+        pins.forEach(function (pin) { idle.extend({ lat: pin.lat, lng: pin.lng }); has = true; });
         if (dest) { idle.extend(dest); has = true; }
         if (position) { idle.extend(position); has = true; }
-        var idleKey = (dest ? dest.lat + ',' + dest.lng : '') + (position ? ':me' : '');
+        var idleKey = pins.map(function (p) { return p.id; }).join(',') +
+          (dest ? dest.lat + ',' + dest.lng : '') + (position ? ':me' : '');
         if (has && idleKey !== lastIdleFit) {
           lastIdleFit = idleKey;
-          map.fitBounds(idle, 64);
+          if (pins.length + (dest ? 1 : 0) + (position ? 1 : 0) === 1) {
+            var only = pins[0] || dest || position;
+            map.setCenter({ lat: only.lat, lng: only.lng });
+            map.setZoom(14);
+          } else {
+            map.fitBounds(idle, 64);
+          }
         }
       }
     }

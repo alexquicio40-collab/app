@@ -2,10 +2,12 @@ import { fetchLocales } from "@/features/locales/api";
 import { ROUTES_POLL_MS } from "@/features/map/constants";
 import { connectLiveSocket } from "@/features/map/socket";
 import { useMyLocation } from "@/features/map/lib/use-my-location";
-import { fetchOperadorRutasRango } from "@/features/routes/api";
+import { fetchOperadorRutas } from "@/features/routes/api";
+import { pinColorForLocal } from "@/features/locales/lib/prioridad";
 import { enrichRoutesWithLocales } from "@/features/routes/lib/enrich";
 import { asEstado, isCerrado, isEnCurso, isRecolectado } from "@/features/routes/lib/estados-recojo";
 import type { RouteItem } from "@/features/routes/types";
+import type { CampoMapPin } from "@/features/mapa-campo/nav-types";
 import { limaDate } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -44,8 +46,7 @@ export function useMapaCampo() {
   const origin = me ? { lat: me.lat, lng: me.lng } : null;
   const [panelOpen, setPanelOpen] = useState(false);
   const [live, setLive] = useState(false);
-  const [fechaDesde, setFechaDesde] = useState(() => limaDate());
-  const [fechaHasta, setFechaHasta] = useState(() => limaDate());
+  const [fecha, setFecha] = useState(() => limaDate());
   const fingerprintRef = useRef("");
   const localesRef = useRef<Awaited<ReturnType<typeof fetchLocales>>>([]);
 
@@ -61,7 +62,7 @@ export function useMapaCampo() {
         setError(null);
       }
       try {
-        const rutas = await fetchOperadorRutasRango(userId, fechaDesde, fechaHasta);
+        const rutas = await fetchOperadorRutas(userId, fecha);
         // Refuerzo: si algún campo falta, completar desde catálogo de locales
         if (!localesRef.current.length) {
           localesRef.current = await fetchLocales().catch(() => []);
@@ -94,7 +95,7 @@ export function useMapaCampo() {
         if (!silent) setLoading(false);
       }
     },
-    [fechaDesde, fechaHasta, userId],
+    [fecha, userId],
   );
 
   useEffect(() => {
@@ -141,17 +142,29 @@ export function useMapaCampo() {
   const pendientes = routes.filter((item) => asEstado(item.estado) === "programado").length;
   const enCurso = routes.filter((item) => isEnCurso(item.estado)).length;
 
-  const setRango = useCallback((desde: string, hasta: string) => {
-    const start = desde <= hasta ? desde : hasta;
-    const end = desde <= hasta ? hasta : desde;
-    setFechaDesde(start);
-    setFechaHasta(end);
+  const pins = useMemo<CampoMapPin[]>(
+    () =>
+      routes
+        .filter((item) => item.localLatitud != null && item.localLongitud != null)
+        .map((item) => ({
+          id: item.id,
+          lat: item.localLatitud!,
+          lng: item.localLongitud!,
+          orden: item.orden ?? 0,
+          color: pinColorForLocal(item.prioridad),
+          label: item.localNombre,
+        })),
+    [routes],
+  );
+
+  const setFechaSafe = useCallback((next: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(next)) return;
+    setFecha(next);
   }, []);
 
   return {
-    fechaDesde,
-    fechaHasta,
-    setRango,
+    fecha,
+    setFecha: setFechaSafe,
     routes,
     loading,
     error,
@@ -164,6 +177,7 @@ export function useMapaCampo() {
     setPanelOpen,
     reload: () => reload(false),
     refreshOrigin: async () => undefined,
+    pins,
     pendientes,
     enCurso,
     live,

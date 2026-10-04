@@ -1,3 +1,4 @@
+import { pinColorForLocal } from "@/features/locales/lib/prioridad";
 import { ConductoresBar } from "@/features/rutas-mapa/components/conductores-bar";
 import { FechaBar } from "@/features/rutas-mapa/components/fecha-bar";
 import { ResumenFooter } from "@/features/rutas-mapa/components/resumen-footer";
@@ -28,9 +29,9 @@ export default function RutasMapaScreen() {
     );
   }, [screen.conductores, screen.selectedConductorId]);
 
-  const accent =
-    (screen.selectedRuta && screen.colorByConductor.get(screen.selectedRuta.conductorId)) ||
-    theme.colors.accent;
+  const accent = screen.selectedRuta
+    ? pinColorForLocal(screen.selectedRuta.prioridad)
+    : theme.colors.accent;
 
   return (
     <View style={styles.safe}>

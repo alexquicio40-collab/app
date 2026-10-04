@@ -1,3 +1,4 @@
+import { normalizePrioridad } from "@/features/locales/lib/prioridad";
 import type { LocalItem } from "@/features/locales/types";
 import type { RouteItem } from "../types";
 
@@ -28,6 +29,7 @@ export function enrichRouteWithLocal(route: RouteItem, local?: LocalItem | null)
     localDireccion: route.localDireccion || local.direccion,
     localLatitud: route.localLatitud ?? local.latitud,
     localLongitud: route.localLongitud ?? local.longitud,
+    prioridad: normalizePrioridad(local.prioridad || route.prioridad),
   };
 }
 

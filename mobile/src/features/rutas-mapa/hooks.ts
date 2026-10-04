@@ -1,11 +1,14 @@
+import { fetchLocales } from "@/features/locales/api";
+import { pinColorForLocal } from "@/features/locales/lib/prioridad";
 import { limaDate } from "@/lib/api";
 import { fetchConductores, fetchRoutes } from "@/features/routes/api";
+import { enrichRoutesWithLocales } from "@/features/routes/lib/enrich";
 import type { ConductorOption, RouteItem } from "@/features/routes/types";
 import { buildConductorColorMap } from "./lib/colors";
 import { hasCoords, sortByOrden } from "./lib/format";
 import { useMyLocation } from "@/features/map/lib/use-my-location";
 import type { RutasMapaPayload } from "./types";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function toIsoDate(d: Date) {
   const y = d.getFullYear();
@@ -23,6 +26,7 @@ export function useRutasMapaScreen() {
   const [selectedRutaId, setSelectedRutaId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const localesRef = useRef<Awaited<ReturnType<typeof fetchLocales>>>([]);
 
   const colorByConductor = useMemo(
     () => buildConductorColorMap(conductores.map((item) => item.id)),
@@ -33,12 +37,15 @@ export function useRutasMapaScreen() {
     setLoading(true);
     setError(null);
     try {
+      if (!localesRef.current.length) {
+        localesRef.current = await fetchLocales().catch(() => []);
+      }
       const [ops, rows] = await Promise.all([
         fetchConductores(),
         fetchRoutes({ fecha }),
       ]);
       setConductores(ops);
-      setRutas(rows);
+      setRutas(enrichRoutesWithLocales(rows, localesRef.current));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar las rutas");
     } finally {
@@ -77,7 +84,7 @@ export function useRutasMapaScreen() {
       lat: item.localLatitud!,
       lng: item.localLongitud!,
       orden: item.orden ?? 0,
-      color: colorByConductor.get(item.conductorId) ?? "#1976D2",
+      color: pinColorForLocal(item.prioridad),
       label: item.localNombre,
     }));
 

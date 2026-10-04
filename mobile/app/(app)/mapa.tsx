@@ -106,7 +106,7 @@ export default function MapaScreen() {
 
       <View style={styles.stage}>
         {!nav.active ? (
-          <MapaFechaBar desde={campo.fechaDesde} hasta={campo.fechaHasta} onChange={campo.setRango} />
+          <MapaFechaBar fecha={campo.fecha} onChange={campo.setFecha} />
         ) : null}
         {campo.loading && !campo.routes.length && !nav.active ? (
           <View style={styles.boot}>
@@ -119,7 +119,10 @@ export default function MapaScreen() {
             idleOrigin={nav.active ? null : campo.origin}
             idleDest={campo.dest}
             idleDestColor={campo.selected ? prioridadMeta(campo.selected.prioridad).color : null}
+            pins={campo.pins}
+            selectedPinId={nav.active ? nav.routeItem?.id ?? campo.selectedId : campo.selectedId}
             onSelectRoute={nav.selectAlternative}
+            onSelectPin={campo.setSelectedId}
             showRecenter={nav.active && !nav.arrived}
             locateBottom={bottomPad + 58}
           />
@@ -178,7 +181,6 @@ export default function MapaScreen() {
                 remainingMeters={nav.remainingMeters}
                 etaSeconds={nav.etaSeconds}
                 recalculating={nav.recalculating}
-                arrived={false}
                 selected={nav.selected}
                 vehicleType={nav.vehicleType}
                 onStop={nav.stop}

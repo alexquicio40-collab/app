@@ -11,6 +11,15 @@ export type NavMapRoute = {
   trafficTone: "ok" | "warn" | "bad";
 };
 
+export type CampoMapPin = {
+  id: string;
+  lat: number;
+  lng: number;
+  orden: number;
+  color: string;
+  label: string;
+};
+
 export type CampoMapPayload = {
   type: "nav";
   tracking: boolean;
@@ -19,6 +28,8 @@ export type CampoMapPayload = {
   dest: LatLng | null;
   destColor?: string | null;
   selectedId: string | null;
+  selectedPinId?: string | null;
+  pins?: CampoMapPin[];
   routes: NavMapRoute[];
   /** Tramo ya recorrido (no se recalcula). */
   traveled: LatLng[];
