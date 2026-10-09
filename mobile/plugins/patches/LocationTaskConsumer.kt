@@ -40,6 +40,7 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
   private var mTask: TaskInterface? = null
   private var mPendingIntent: PendingIntent? = null
   private var mService: LocationTaskService? = null
+  private var mConnection: ServiceConnection? = null
   private var mLocationRequest: LocationRequest? = null
   private var mLastReportedLocation: Location? = null
   private var mDeferredDistance = 0.0
@@ -83,6 +84,14 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
 
   override fun didReceiveBroadcast(intent: Intent) {
     mTask ?: return
+    try {
+      deliverBroadcast(intent)
+    } catch (e: Exception) {
+      Log.w(TAG, "Location update rejected", e)
+    }
+  }
+
+  private fun deliverBroadcast(intent: Intent) {
     val result = LocationResult.extractResult(intent)
     if (result != null) {
       handleLocationUpdate(result.locations)
@@ -217,6 +226,9 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
       extras.putString("appId", task.appScopeKey)
       extras.putString("taskName", task.name)
       extras.putBoolean("killService", serviceOptions.getBoolean("killServiceOnDestroy", false))
+      // onStartCommand publica la notificación antes de volver. Si las opciones
+      // no viajan en el intent, el servicio arranca sin aviso visible.
+      extras.putBundle("serviceOptions", serviceOptions)
       serviceIntent.putExtras(extras)
       try {
         // expo/expo#49425: startService, no startForegroundService.
@@ -227,37 +239,46 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
         Log.w(TAG, "Foreground location task could not be started", e)
         return
       }
-      context.bindService(
-        serviceIntent,
-        object : ServiceConnection {
-          override fun onServiceConnected(name: ComponentName, service: IBinder) {
-            mService = (service as? ServiceBinder)?.service
-            mService?.let {
-              it.setParentContext(context)
-              try {
-                it.startForeground(serviceOptions)
-              } catch (e: Exception) {
-                Log.w(TAG, "Foreground location task could not enter the foreground", e)
-                it.stop()
-                mService = null
-              }
-            }
-          }
-
-          override fun onServiceDisconnected(name: ComponentName) {
-            mService?.stop()
+      val connection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName, service: IBinder) {
+          val bound = (service as? ServiceBinder)?.service
+          mService = bound
+          if (bound == null) return
+          bound.setParentContext(context)
+          try {
+            bound.startForeground(serviceOptions)
+          } catch (e: Exception) {
+            Log.w(TAG, "Foreground location task could not enter the foreground", e)
+            bound.stop()
             mService = null
+            try {
+              context.unbindService(this)
+            } catch (_: Exception) {
+            }
+            if (mConnection === this) mConnection = null
           }
-        },
-        Context.BIND_AUTO_CREATE
-      )
+        }
+
+        override fun onServiceDisconnected(name: ComponentName) {
+          // El proceso del servicio ya murió. Llamar stop() aquí dispara
+          // otro cierre ("sigue fallando") al pedir stopForeground tarde.
+          mService = null
+          mConnection = null
+        }
+      }
+      mConnection = connection
+      try {
+        context.bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
+      } catch (e: Exception) {
+        Log.w(TAG, "Foreground location task could not bind", e)
+        mConnection = null
+      }
     } else {
       try {
         mService?.startForeground(options.getArguments(FOREGROUND_SERVICE_KEY).toBundle())
       } catch (e: Exception) {
         Log.w(TAG, "Foreground location task could not be restarted", e)
-        mService?.stop()
-        mService = null
+        stopForegroundService()
       }
     }
   }
@@ -269,7 +290,19 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
   }
 
   private fun stopForegroundService() {
-    mService?.stop()
+    try {
+      mService?.stop()
+    } catch (_: Exception) {
+    }
+    mService = null
+    val connection = mConnection
+    mConnection = null
+    if (connection != null) {
+      try {
+        context.unbindService(connection)
+      } catch (_: Exception) {
+      }
+    }
   }
 
   /**
@@ -371,6 +404,9 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
   override fun onHostResume() {
     mIsHostPaused = false
     maybeReportDeferredLocations()
+    // Al volver a primer plano se reintenta la notificación. En Samsung el
+    // proceso sobrevive al cierre y setOptions no la vuelve a mostrar.
+    maybeStartForegroundService()
   }
 
   override fun onHostPause() {

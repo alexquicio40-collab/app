@@ -2,7 +2,7 @@
   "expo": {
     "name": "BIOCLIM",
     "slug": "ubicacionnewapp",
-    "version": "1.0.10",
+    "version": "1.0.19",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ubicacion",
@@ -20,7 +20,7 @@
       }
     },
     "android": {
-      "versionCode": 12,
+      "versionCode": 21,
       "package": "com.ubicacionnewapp.app",
       "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "resize",

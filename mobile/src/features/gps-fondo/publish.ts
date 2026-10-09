@@ -86,8 +86,13 @@ async function drenar() {
   enviando = true;
   const punto = pendiente;
   pendiente = null;
-  await guardar(punto.userId, punto.lat, punto.lng, punto.speed);
-  enviando = false;
+  try {
+    await guardar(punto.userId, punto.lat, punto.lng, punto.speed);
+  } catch {
+    // Un fallo de red no puede cerrar la app.
+  } finally {
+    enviando = false;
+  }
   if (pendiente) void drenar();
 }
 
