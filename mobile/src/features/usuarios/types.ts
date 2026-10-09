@@ -1,5 +1,6 @@
 export type UsuarioRol =
   | "operador"
+  | "chofer"
   | "asesor"
   | "gerente"
   | "administrador"
@@ -42,6 +43,8 @@ export type UsuarioItem = {
   requiereFotoMercaderia: boolean;
   requiereNotas: boolean;
   permisosMenu: PermisosMenu;
+  localesIds: string[];
+  vinculadoUsuarioId: string;
 };
 
 export type UsuarioFormInput = {
@@ -58,6 +61,7 @@ export type UsuarioFormInput = {
   requiereFotoGuia?: boolean;
   requiereFotoMercaderia?: boolean;
   requiereNotas?: boolean;
+  vinculadoUsuarioId?: string;
 };
 
 export type UsuarioPermisosInput = {
@@ -68,6 +72,7 @@ export type UsuarioPermisosInput = {
   requiereFotoGuia: boolean;
   requiereFotoMercaderia: boolean;
   requiereNotas: boolean;
+  localesIds: string[];
 };
 
 export type UsuariosFilters = {

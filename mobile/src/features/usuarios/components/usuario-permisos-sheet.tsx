@@ -1,3 +1,4 @@
+import { fetchLocalesLite } from "@/features/locales/api";
 import { emptyPermisosMenu } from "@/features/usuarios/api";
 import { FINALIZACION_FLAGS, MENU_MODULOS } from "@/features/usuarios/lib/roles";
 import type {
@@ -37,6 +38,8 @@ export function UsuarioPermisosSheet({
 }: UsuarioPermisosSheetProps) {
   const insets = useSafeAreaInsets();
   const [permisos, setPermisos] = useState<PermisosMenu>(emptyPermisosMenu);
+  const [localesIds, setLocalesIds] = useState<string[]>([]);
+  const [locales, setLocales] = useState<{ id: string; nombre: string }[]>([]);
   const [flags, setFlags] = useState({
     requiereLitraje: false,
     requiereBaldesVacios: false,
@@ -49,6 +52,7 @@ export function UsuarioPermisosSheet({
   useEffect(() => {
     if (!open || !user) return;
     setPermisos({ ...emptyPermisosMenu(), ...user.permisosMenu });
+    setLocalesIds(user.localesIds ?? []);
     setFlags({
       requiereLitraje: user.requiereLitraje,
       requiereBaldesVacios: user.requiereBaldesVacios,
@@ -57,6 +61,9 @@ export function UsuarioPermisosSheet({
       requiereFotoMercaderia: user.requiereFotoMercaderia,
       requiereNotas: user.requiereNotas,
     });
+    void fetchLocalesLite()
+      .then((rows) => setLocales(rows.map((item) => ({ id: item.id, nombre: item.nombre }))))
+      .catch(() => setLocales([]));
   }, [open, user]);
 
   const groups = useMemo(() => {
@@ -137,6 +144,44 @@ export function UsuarioPermisosSheet({
             ))}
 
             <View style={styles.group}>
+              <View style={styles.groupHead}>
+                <Text style={styles.groupTitle}>Locales visibles</Text>
+                <View style={styles.groupActions}>
+                  <Pressable onPress={() => setLocalesIds(locales.map((item) => item.id))}>
+                    <Text style={styles.link}>Todo</Text>
+                  </Pressable>
+                  <Pressable onPress={() => setLocalesIds([])}>
+                    <Text style={styles.linkMuted}>Nada</Text>
+                  </Pressable>
+                </View>
+              </View>
+              <Text style={styles.note}>
+                Si no marcas ninguno, no hay restricción extra. Marca sólo los locales que este
+                usuario puede ver.
+              </Text>
+              <View style={styles.chips}>
+                {locales.map((item) => {
+                  const on = localesIds.includes(item.id);
+                  return (
+                    <Pressable
+                      key={item.id}
+                      onPress={() =>
+                        setLocalesIds((prev) =>
+                          on ? prev.filter((id) => id !== item.id) : [...prev, item.id],
+                        )
+                      }
+                      style={[styles.chip, on ? styles.chipOn : null]}
+                    >
+                      <Text style={[styles.chipText, on ? styles.chipTextOn : null]} numberOfLines={1}>
+                        {on ? "●" : "○"} {item.nombre}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.group}>
               <Text style={styles.groupTitle}>Finalización de ruta</Text>
               {user.rol !== "operador" ? (
                 <Text style={styles.note}>
@@ -168,6 +213,7 @@ export function UsuarioPermisosSheet({
                   onPress={() =>
                     void onSave({
                       permisosMenu: permisos,
+                      localesIds,
                       ...flags,
                     })
                   }

@@ -2,6 +2,7 @@ import type { MenuModuloKey, PermisosMenu, UsuarioRol } from "../types";
 
 export const ROL_OPTIONS: { value: UsuarioRol; label: string }[] = [
   { value: "operador", label: "Operador" },
+  { value: "chofer", label: "Chofer" },
   { value: "asesor", label: "Asesor" },
   { value: "gerente", label: "Gerente" },
   { value: "administrador", label: "Administrador" },
@@ -10,10 +11,16 @@ export const ROL_OPTIONS: { value: UsuarioRol; label: string }[] = [
 
 export const ROL_FILTER_OPTIONS = [
   { value: "operador", label: "Operador" },
+  { value: "chofer", label: "Chofer" },
   { value: "asesor", label: "Asesor" },
   { value: "administrador", label: "Administrador" },
   { value: "planta", label: "Planta" },
 ] as const;
+
+export function esRolCampo(rol?: string | null) {
+  const key = (rol ?? "").toLowerCase();
+  return key === "operador" || key === "chofer" || key === "conductor";
+}
 
 export function rolLabel(rol: string) {
   return ROL_OPTIONS.find((item) => item.value === rol)?.label ?? (rol || "—");
@@ -31,6 +38,7 @@ export function rolTone(rol: string): string {
       return "#FB8C00";
     case "operador":
     case "conductor":
+    case "chofer":
       return "#2E7D32";
     default:
       return "#455A64";
@@ -75,26 +83,29 @@ export function emptyPermisosMenu(): PermisosMenu {
   return out;
 }
 
-export function parsePermisosMenu(raw: unknown): PermisosMenu {
-  const out = emptyPermisosMenu();
-  let parsed: Record<string, unknown> | null = null;
-
+export function parsePermisosObject(raw: unknown): Record<string, unknown> {
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    parsed = raw as Record<string, unknown>;
-  } else if (typeof raw === "string" && raw.trim()) {
+    return raw as Record<string, unknown>;
+  }
+  if (typeof raw === "string" && raw.trim()) {
     try {
       const decoded = JSON.parse(raw) as unknown;
       if (decoded && typeof decoded === "object" && !Array.isArray(decoded)) {
-        parsed = decoded as Record<string, unknown>;
+        return decoded as Record<string, unknown>;
       }
     } catch {
       // ignore
     }
   }
+  return {};
+}
 
-  if (!parsed) return out;
+export function parsePermisosMenu(raw: unknown): PermisosMenu {
+  const out = emptyPermisosMenu();
+  const parsed = parsePermisosObject(raw);
 
   for (const [backendKey, value] of Object.entries(parsed)) {
+    if (backendKey.startsWith("_")) continue;
     const appKey = (BACKEND_TO_APP[backendKey] ?? backendKey) as MenuModuloKey;
     if (!(appKey in out)) continue;
     out[appKey] = value === 1 || value === true || value === "1" || value === "true";
@@ -102,11 +113,33 @@ export function parsePermisosMenu(raw: unknown): PermisosMenu {
   return out;
 }
 
+export type PermisosExtras = {
+  localesIds: string[];
+  vinculadoUsuarioId: string;
+};
+
+export function parsePermisosExtras(raw: unknown): PermisosExtras {
+  const parsed = parsePermisosObject(raw);
+  const localesIds = Array.isArray(parsed._locales)
+    ? parsed._locales.map((item) => String(item).trim()).filter(Boolean)
+    : [];
+  const vinculadoUsuarioId =
+    parsed._vinculado == null ? "" : String(parsed._vinculado).trim();
+  return { localesIds, vinculadoUsuarioId };
+}
+
 export function permisosMenuToBackend(permisos: PermisosMenu) {
-  const out: Record<string, boolean> = {};
+  const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(permisos)) {
     out[APP_TO_BACKEND[key] ?? key] = Boolean(value);
   }
+  return out;
+}
+
+export function permisosToBackend(permisos: PermisosMenu, extras: PermisosExtras) {
+  const out = permisosMenuToBackend(permisos);
+  out._locales = extras.localesIds;
+  out._vinculado = extras.vinculadoUsuarioId || "";
   return out;
 }
 

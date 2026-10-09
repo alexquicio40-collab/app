@@ -114,6 +114,7 @@ export default function UsuariosScreen() {
       <UsuarioFormSheet
         open={screen.formOpen}
         user={screen.editing}
+        usuarios={screen.usuarios}
         saving={screen.mutating}
         onClose={screen.closeForm}
         onSave={screen.saveUsuario}

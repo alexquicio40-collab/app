@@ -39,6 +39,7 @@ export function soles(value: number) {
 export function rolLabel(rol?: string | null) {
   const key = (rol ?? "operador").toLowerCase();
   if (key === "operador") return "Operador";
+  if (key === "chofer") return "Chofer";
   if (key === "conductor") return "Conductor";
   if (key === "asesor") return "Asesor comercial";
   if (key === "administrador") return "Administrador";

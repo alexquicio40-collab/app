@@ -1,6 +1,6 @@
 import { GpsFondoHost } from "@/features/gps-fondo/host";
 import { InstalacionProvider, useInstalacionGate } from "@/features/instalacion";
-import { RecojoSyncHost } from "@/features/recojo-offline/host";
+import { OfflineSyncHost } from "@/lib/offline";
 import { LicenciaProvider, useLicenciaGate } from "@/features/sesiones/licencia-gate";
 import { theme } from "@/lib/theme";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
@@ -21,7 +21,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AuthProvider>
         <GpsFondoHost />
-        <RecojoSyncHost />
+        <OfflineSyncHost />
         <InstalacionProvider>
           <LicenciaProvider>
             <StatusBar style="light" />

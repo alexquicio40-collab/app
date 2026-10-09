@@ -6,7 +6,7 @@ export const APP_MODULES: AppModule[] = [
     label: "Hoja ruta",
     hint: "Cierre",
     description: "Registra ventas,\ngastos y caja.",
-    roles: ["operador", "administrador"],
+    roles: ["operador", "chofer", "administrador"],
     href: "/hoja-ruta",
   },
   {
@@ -14,7 +14,7 @@ export const APP_MODULES: AppModule[] = [
     label: "Rutas mapa",
     hint: "Asignadas",
     description: "Ver rutas del día\nen el mapa.",
-    roles: ["operador", "administrador", "asesor"],
+    roles: ["operador", "chofer", "administrador", "asesor"],
     href: "/rutas-mapa",
   },
   {
@@ -62,7 +62,7 @@ export const APP_MODULES: AppModule[] = [
     label: "Mapa",
     hint: "Campo",
     description: "Navegación de campo\ny tus rutas del día.",
-    roles: ["operador", "conductor", "gerente"],
+    roles: ["operador", "chofer", "conductor", "gerente"],
     href: "/mapa",
   },
   {
@@ -86,7 +86,7 @@ export const APP_MODULES: AppModule[] = [
     label: "Trazos",
     hint: "Historial",
     description: "Recorrido GPS,\nparadas y locales.",
-    roles: ["operador", "administrador", "asesor", "gerente"],
+    roles: ["operador", "chofer", "administrador", "asesor", "gerente"],
     href: "/historial",
   },
   {

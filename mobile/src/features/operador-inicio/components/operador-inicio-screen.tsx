@@ -7,7 +7,6 @@ import { ResumenDia } from "@/features/operador-inicio/components/resumen-dia";
 import { RutaHoyCard } from "@/features/operador-inicio/components/ruta-hoy-card";
 import { SiguienteLocalCard } from "@/features/operador-inicio/components/siguiente-local-card";
 import { useOperadorInicio } from "@/features/operador-inicio/hooks";
-import { RecojosPendientesBar } from "@/features/recojo-offline/components/pendientes-bar";
 import { dash } from "@/features/operador-inicio/palette";
 import { useContentBottomPad } from "@/ui/use-content-bottom-pad";
 import { useRouter } from "expo-router";
@@ -76,7 +75,6 @@ export function OperadorInicioScreen() {
         ) : null}
         {data ? (
           <>
-            <RecojosPendientesBar />
             <RutaHoyCard data={data} onOpenRuta={irRutas} onAccion={onAccion} />
             <SiguienteLocalCard
               local={data.siguiente}

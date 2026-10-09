@@ -7,7 +7,7 @@ import { Platform, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 
 export type LiveMapHandle = {
-  sendCmd: (action: "traffic" | "satellite") => void;
+  sendCmd: (action: "traffic" | "satellite" | "compass") => void;
   showMyLocation: (coords: AdminCoords, pan?: boolean) => void;
 };
 

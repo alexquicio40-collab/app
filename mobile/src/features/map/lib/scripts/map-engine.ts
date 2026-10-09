@@ -23,6 +23,10 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
     var myMarker = null;
     var myCircle = null;
     var MY_BLUE = "#1A73E8";
+    var compassOn = false;
+    var lastMapHeading = 0;
+    var deviceHeading = null;
+    var compassBound = false;
 
     var STYLE = [
       { featureType: "poi", stylers: [{ visibility: "off" }] },
@@ -516,6 +520,56 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
       ensureAnim();
     }
 
+    function headingFromEvent(event) {
+      if (!event) return null;
+      if (typeof event.webkitCompassHeading === "number") return event.webkitCompassHeading;
+      if (typeof event.alpha !== "number") return null;
+      return (360 - event.alpha + 360) % 360;
+    }
+
+    function paintCompassRose(heading) {
+      var rose = document.getElementById("compassRose");
+      if (!rose) return;
+      rose.classList.toggle("on", compassOn);
+      rose.style.transform = "rotate(" + (-Number(heading || 0)) + "deg)";
+    }
+
+    function applyMapHeading(heading) {
+      if (!map || !compassOn || heading == null || isNaN(heading)) return;
+      var next = (Number(heading) + 360) % 360;
+      if (Math.abs(next - lastMapHeading) < 2) return;
+      lastMapHeading = next;
+      if (map.setHeading) map.setHeading(next);
+      if (map.setTilt) map.setTilt(35);
+      paintCompassRose(next);
+    }
+
+    function bindDeviceCompass() {
+      if (compassBound) return;
+      compassBound = true;
+      var onOrient = function (event) {
+        var heading = headingFromEvent(event);
+        if (heading == null) return;
+        deviceHeading = heading;
+        applyMapHeading(heading);
+      };
+      window.addEventListener("deviceorientationabsolute", onOrient, true);
+      window.addEventListener("deviceorientation", onOrient, true);
+    }
+
+    function setCompass(on) {
+      compassOn = Boolean(on);
+      bindDeviceCompass();
+      paintCompassRose(lastMapHeading);
+      if (!compassOn) {
+        lastMapHeading = 0;
+        if (map && map.setHeading) map.setHeading(0);
+        if (map && map.setTilt) map.setTilt(0);
+        return;
+      }
+      if (deviceHeading != null) applyMapHeading(deviceHeading);
+    }
+
     function maybeFit(ops) {
       var key = ops.map(function (op) { return String(op.id); }).sort().join(",");
       if (!ops.length) {
@@ -565,7 +619,9 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
 
       if (focus) {
         map.panTo({ lat: focus.lat, lng: focus.lng });
-        map.setZoom(15);
+        if (!compassOn) map.setZoom(15);
+        var mot = motion[focus.id];
+        if (compassOn && deviceHeading == null && mot) applyMapHeading(mot.toHeading);
       } else {
         maybeFit(ops);
       }
@@ -577,6 +633,9 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
         zoom: 12,
         disableDefaultUI: true,
         gestureHandling: "greedy",
+        heading: 0,
+        tilt: 0,
+        rotateControl: false,
         styles: STYLE,
         clickableIcons: false
       });
@@ -586,6 +645,9 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
       window.runMapCmd = function (action) {
         if (action === "traffic") traffic.setMap(traffic.getMap() ? null : map);
         if (action === "satellite") map.setMapTypeId(map.getMapTypeId() === "hybrid" ? "roadmap" : "hybrid");
+        if (action === "compass") setCompass(!compassOn);
+        if (action === "compassOn") setCompass(true);
+        if (action === "compassOff") setCompass(false);
       };
 
       window.addEventListener("message", function (event) {

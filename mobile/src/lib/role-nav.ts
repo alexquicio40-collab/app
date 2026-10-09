@@ -10,7 +10,7 @@ export function canSeeOperadores(rol?: string | null) {
 
 export function canSeeMapaCampo(rol?: string | null) {
   const r = roleKey(rol);
-  return r === "operador" || r === "conductor" || r === "gerente";
+  return r === "operador" || r === "conductor" || r === "chofer" || r === "gerente";
 }
 
 export function isAdministrador(rol?: string | null) {
@@ -24,7 +24,7 @@ export function isAsesor(rol?: string | null) {
 /** Inicio de campo. El gerente sigue en el panel de flota. */
 export function usesOperadorInicio(rol?: string | null) {
   const r = roleKey(rol);
-  return r === "operador" || r === "conductor";
+  return r === "operador" || r === "conductor" || r === "chofer";
 }
 
 /** Tab principal del medio: Operadores (admin) o Mapa (operador). */

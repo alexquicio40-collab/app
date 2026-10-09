@@ -11,7 +11,8 @@ import {
   reprogramarRuta,
   startRuta,
 } from "./api";
-import { enqueueRecojo, isNetworkError } from "@/features/recojo-offline/queue";
+import { isNetworkError } from "@/features/recojo-offline/queue";
+import { isQueuedResult } from "@/lib/offline";
 import { emptyFinalizacionConfig } from "./lib/validate";
 import { loadVehicleType, saveVehicleType } from "./lib/vehicle-store";
 import type {
@@ -145,20 +146,19 @@ export function useRutaFlujo(onChanged?: () => void) {
       setMutating(true);
       setUpload({ loaded: 0, total: photos });
       try {
-        await finalizarRuta(finishRoute.id, input, (loaded, total) => {
+        const result = await finalizarRuta(finishRoute.id, input, (loaded, total) => {
           setUpload({ loaded, total: total > 0 ? total : photos });
         });
-        notify("Listo", "Ruta finalizada correctamente");
+        if (isQueuedResult(result)) {
+          notify("Sin señal", "El recojo quedó en el teléfono. Se enviará al volver internet.");
+        } else {
+          notify("Listo", "Ruta finalizada correctamente");
+        }
         closeFinish();
         onChanged?.();
       } catch (err) {
         if (isNetworkError(err)) {
-          await enqueueRecojo({
-            rutaId: finishRoute.id,
-            localNombre: finishRoute.localNombre,
-            input,
-          });
-          notify("Sin señal", "El recojo quedó en el teléfono. Se enviará al volver la red.");
+          notify("Sin señal", "El recojo quedó en el teléfono. Se enviará al volver internet.");
           closeFinish();
           onChanged?.();
           return;

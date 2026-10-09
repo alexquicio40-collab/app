@@ -1,6 +1,7 @@
 import { CajaDiariaSheet } from "@/features/caja-diaria";
 import { ActionsPanel } from "@/features/map/components/actions-panel";
 import { LiveMap, type LiveMapHandle } from "@/features/map/components/live-map";
+import { CompassButton } from "@/features/map/components/compass-button";
 import { LocateButton } from "@/features/map/components/locate-button";
 import { useMyLocation } from "@/features/map/lib/use-my-location";
 import { getAdminCoords } from "@/features/map/lib/admin-location";
@@ -25,6 +26,7 @@ export default function OperadoresScreen() {
   const [satelliteOn, setSatelliteOn] = useState(false);
   const [locating, setLocating] = useState(false);
   const [located, setLocated] = useState(false);
+  const [compassOn, setCompassOn] = useState(false);
   const me = useMyLocation();
 
   useEffect(() => {
@@ -105,6 +107,13 @@ export default function OperadoresScreen() {
 
         <View style={styles.locate}>
           <LocateButton loading={locating} active={located} onPress={locateMe} />
+          <CompassButton
+            active={compassOn}
+            onPress={() => {
+              live.current?.sendCmd("compass");
+              setCompassOn((value) => !value);
+            }}
+          />
         </View>
 
         <View style={[styles.bottom, { bottom: bottomPad }]}>
@@ -159,6 +168,7 @@ const styles = StyleSheet.create({
     top: 12,
     right: 10,
     zIndex: 3,
+    gap: 8,
   },
   bottom: {
     position: "absolute",

@@ -175,6 +175,7 @@ function DateRangeChip({
   const openSheet = () => {
     setDraftDesde(desde);
     setDraftHasta(hasta);
+    setPicking("desde");
     setOpen(true);
   };
 
@@ -195,7 +196,6 @@ function DateRangeChip({
   };
 
   const onPick = (event: DateTimePickerEvent, date?: Date) => {
-    if (Platform.OS === "android") setPicking(null);
     if (event.type === "dismissed" || !date) return;
     const key = toIsoDay(date);
     if (picking === "desde") setDraftDesde(key);
@@ -229,13 +229,15 @@ function DateRangeChip({
               </View>
             ) : null}
 
-            {picking && Platform.OS !== "web" ? (
-              <DateTimePicker
-                value={parseIsoDay(picking === "desde" ? draftDesde : draftHasta, limaDate())}
-                mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={onPick}
-              />
+            {Platform.OS !== "web" ? (
+              <View style={styles.calendarBox}>
+                <DateTimePicker
+                  value={parseIsoDay(picking === "desde" ? draftDesde : draftHasta, limaDate())}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "inline" : "calendar"}
+                  onChange={onPick}
+                />
+              </View>
             ) : null}
 
             <View style={styles.rangeActions}>
@@ -439,6 +441,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 24,
     gap: 12,
+    maxHeight: "92%",
+  },
+  calendarBox: {
+    minHeight: 320,
+    alignItems: "center",
+    overflow: "hidden",
   },
   sheetTitle: {
     paddingHorizontal: 12,

@@ -1,3 +1,9 @@
+import { cacheSet, overlayLive, readWithOverlay } from "@/lib/offline/cache";
+import { formToFieldsAndFiles } from "@/lib/offline/form-parts";
+import { isNetworkError } from "@/lib/offline/net";
+import { enqueueJson, enqueueUpload } from "@/lib/offline/queue";
+import type { QueuedResult } from "@/lib/offline/types";
+import { hayInternet } from "@/lib/red";
 import { hoy } from "./fecha-lima";
 import { getAccessToken, getSessionToken, touchSesion } from "./secure-store";
 import { emitSessionClosed } from "./session-bus";
@@ -26,6 +32,7 @@ export class ApiError extends Error {
 
 const BASE_URL = (process.env.EXPO_PUBLIC_API_URL ?? "https://ubicacion.vezper.pe").replace(/\/$/, "");
 const SOCKET_URL = (process.env.EXPO_PUBLIC_SOCKET_URL ?? "https://ubicacion.vezper.pe").replace(/\/$/, "");
+const JSON_TIMEOUT_MS = 20000;
 
 export function getApiBaseUrl() {
   return BASE_URL;
@@ -35,34 +42,104 @@ export function getLiveSocketUrl() {
   return SOCKET_URL;
 }
 
-export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, skipAuth, headers, ...rest } = options;
+function bypassOffline(path: string, skipAuth?: boolean) {
+  if (skipAuth) return true;
+  return /^\/api\/(login|logout|session)(\?|$)/.test(path);
+}
+
+function methodOf(options: RequestOptions) {
+  return String(options.method ?? "GET").toUpperCase();
+}
+
+function queued<T>(): T {
+  return { success: true, queued: true } as QueuedResult as T;
+}
+
+/** Fetch directo. Lo usa la sincronización para no volver a encolar. */
+export async function apiOnline<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { body, skipAuth, headers, signal, ...rest } = options;
   const [userId, sessionToken] = await Promise.all([
     skipAuth ? Promise.resolve(null) : getAccessToken(),
     getSessionToken(),
   ]);
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    ...rest,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(userId ? { "X-User-Id": userId } : {}),
-      ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
-      ...headers,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), JSON_TIMEOUT_MS);
+  if (signal) {
+    if (signal.aborted) ctrl.abort();
+    else signal.addEventListener("abort", () => ctrl.abort(), { once: true });
+  }
 
-  return parseApiResponse<T>(response);
+  try {
+    const response = await fetch(`${BASE_URL}${path}`, {
+      ...rest,
+      signal: ctrl.signal,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(userId ? { "X-User-Id": userId } : {}),
+        ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
+        ...headers,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return parseApiResponse<T>(response);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-/**
- * Multipart por XMLHttpRequest.
- * El fetch de Expo no acepta `{ uri, name, type }` y en Android lanza
- * "Unsupported FormDataPart". La red nativa sí sube el archivo desde el teléfono.
- */
-export async function apiUpload<T>(
+export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = methodOf(options);
+  const skip = bypassOffline(path, options.skipAuth);
+  const online = skip ? true : await hayInternet();
+
+  if (method === "GET" || method === "HEAD") {
+    if (!online && !skip) {
+      const cached = await readWithOverlay(path);
+      if (cached != null) return cached as T;
+      throw new ApiError(0, "OFFLINE", "Sin internet. Entra a esta pantalla con señal una vez para usarla sin red.");
+    }
+    try {
+      const data = await apiOnline<T>(path, options);
+      if (!skip) {
+        await cacheSet(path, data);
+        return (await overlayLive(path, data)) as T;
+      }
+      return data;
+    } catch (err) {
+      if (skip || !isNetworkError(err)) throw err;
+      const cached = await readWithOverlay(path);
+      if (cached != null) return cached as T;
+      throw err;
+    }
+  }
+
+  if (skip) return apiOnline<T>(path, options);
+
+  if (!online) {
+    await enqueueJson({
+      method: method as "POST" | "PUT" | "PATCH" | "DELETE",
+      path,
+      body: options.body,
+    });
+    return queued<T>();
+  }
+
+  try {
+    return await apiOnline<T>(path, options);
+  } catch (err) {
+    if (!isNetworkError(err)) throw err;
+    await enqueueJson({
+      method: method as "POST" | "PUT" | "PATCH" | "DELETE",
+      path,
+      body: options.body,
+    });
+    return queued<T>();
+  }
+}
+
+export async function apiUploadOnline<T>(
   path: string,
   formData: FormData,
   options: {
@@ -84,6 +161,44 @@ export async function apiUpload<T>(
   return parseApiResponse<T>(response);
 }
 
+/**
+ * Multipart por XMLHttpRequest.
+ * Sin red, guarda archivos en el teléfono y los sube al recuperar señal.
+ */
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  options: {
+    skipAuth?: boolean;
+    method?: "POST" | "PUT";
+    onProgress?: (loaded: number, total: number) => void;
+  } = {},
+): Promise<T> {
+  if (options.skipAuth || bypassOffline(path, options.skipAuth)) {
+    return apiUploadOnline<T>(path, formData, options);
+  }
+
+  const park = async () => {
+    const parsed = formToFieldsAndFiles(formData);
+    await enqueueUpload({
+      method: options.method ?? "POST",
+      path,
+      fields: parsed.fields,
+      files: parsed.files,
+    });
+    return queued<T>();
+  };
+
+  if (!(await hayInternet())) return park();
+
+  try {
+    return await apiUploadOnline<T>(path, formData, options);
+  } catch (err) {
+    if (!isNetworkError(err)) throw err;
+    return park();
+  }
+}
+
 function sendMultipart(
   url: string,
   formData: FormData,
@@ -99,6 +214,7 @@ function sendMultipart(
     xhr.open(options.method, url);
     xhr.withCredentials = true;
     xhr.responseType = "text";
+    xhr.timeout = 120000;
     if (options.userId) xhr.setRequestHeader("X-User-Id", options.userId);
     if (options.sessionToken) xhr.setRequestHeader("X-Session-Token", options.sessionToken);
     xhr.upload.onprogress = (event) => {

@@ -8,7 +8,6 @@ import {
   useMapaCampo,
 } from "@/features/mapa-campo";
 import { MapaFechaBar } from "@/features/mapa-campo/components/mapa-fecha-bar";
-import { RecojosPendientesBar } from "@/features/recojo-offline/components/pendientes-bar";
 import { routePagoHint, routeRecogeHint } from "@/features/mapa-campo/lib/route-hints";
 import { prioridadMeta } from "@/features/locales/lib/prioridad";
 import {
@@ -190,7 +189,6 @@ export default function MapaScreen() {
             )
           ) : (
             <View style={styles.panelStack}>
-              <RecojosPendientesBar />
               <MisRutasPanel
                 routes={campo.routes}
                 selectedId={campo.selectedId}

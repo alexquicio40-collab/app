@@ -34,7 +34,8 @@ function emptyGasto(): GastoForm {
 export function useHojaRutaScreen() {
   const { user } = useAuth();
   const rol = (user?.rol ?? "").toLowerCase();
-  const canAccess = rol === "operador" || rol === "administrador" || rol === "conductor";
+  const canAccess =
+    rol === "operador" || rol === "administrador" || rol === "conductor" || rol === "chofer";
 
   const [fecha, setFecha] = useState(todayIso);
   const [placa, setPlaca] = useState("");

@@ -52,7 +52,7 @@ export function ResumenDia({ data, onMapa, onLocales, onRecojo, onCaja }: Resume
           tint={dash.orange}
           soft={dash.orangeSoft}
           title="Registrar recojo"
-          subtitle="Foto, litros, firma"
+          subtitle="Foto, litros y notas"
           onPress={onRecojo}
         />
         <Acceso

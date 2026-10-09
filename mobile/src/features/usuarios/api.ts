@@ -1,5 +1,10 @@
 import { api } from "@/lib/api";
-import { emptyPermisosMenu, parsePermisosMenu, permisosMenuToBackend } from "./lib/roles";
+import {
+  emptyPermisosMenu,
+  parsePermisosExtras,
+  parsePermisosMenu,
+  permisosToBackend,
+} from "./lib/roles";
 import type {
   UsuarioFormInput,
   UsuarioItem,
@@ -40,6 +45,7 @@ export function parseUsuario(row: UnknownRecord): UsuarioItem | null {
   const id = text(row.id);
   if (!id) return null;
 
+  const extras = parsePermisosExtras(row.permisos_menu);
   return {
     id,
     nombre: text(row.nombre) || `Usuario ${id}`,
@@ -55,10 +61,16 @@ export function parseUsuario(row: UnknownRecord): UsuarioItem | null {
     requiereFotoMercaderia: bool(row.requiere_foto_mercaderia),
     requiereNotas: bool(row.requiere_notas),
     permisosMenu: parsePermisosMenu(row.permisos_menu),
+    localesIds: extras.localesIds,
+    vinculadoUsuarioId: extras.vinculadoUsuarioId,
   };
 }
 
-function toBody(input: UsuarioFormInput, includePassword: boolean) {
+function toBody(
+  input: UsuarioFormInput,
+  includePassword: boolean,
+  current?: UsuarioItem | null,
+) {
   const body: Record<string, unknown> = {
     nombre: input.nombre.trim(),
     usuario: input.usuario.trim(),
@@ -72,6 +84,10 @@ function toBody(input: UsuarioFormInput, includePassword: boolean) {
     requiere_foto_guia: Boolean(input.requiereFotoGuia),
     requiere_foto_mercaderia: Boolean(input.requiereFotoMercaderia),
     requiere_notas: Boolean(input.requiereNotas),
+    permisos_menu: permisosToBackend(current?.permisosMenu ?? emptyPermisosMenu(), {
+      localesIds: current?.localesIds ?? [],
+      vinculadoUsuarioId: input.vinculadoUsuarioId?.trim() || "",
+    }),
   };
   if (includePassword && input.password?.trim()) {
     body.password = input.password.trim();
@@ -110,10 +126,14 @@ export async function createUsuario(input: UsuarioFormInput) {
   });
 }
 
-export async function updateUsuario(id: string, input: UsuarioFormInput) {
+export async function updateUsuario(
+  id: string,
+  input: UsuarioFormInput,
+  current?: UsuarioItem | null,
+) {
   return api<{ success?: boolean }>(`/api/users/${id}`, {
     method: "PUT",
-    body: toBody(input, Boolean(input.password?.trim())),
+    body: toBody(input, Boolean(input.password?.trim()), current),
   });
 }
 
@@ -133,6 +153,10 @@ export async function updateUsuarioActivo(user: UsuarioItem, activo: boolean) {
       requiere_foto_guia: user.requiereFotoGuia,
       requiere_foto_mercaderia: user.requiereFotoMercaderia,
       requiere_notas: user.requiereNotas,
+      permisos_menu: permisosToBackend(user.permisosMenu, {
+        localesIds: user.localesIds,
+        vinculadoUsuarioId: user.vinculadoUsuarioId,
+      }),
     },
   });
 }
@@ -153,9 +177,26 @@ export async function updateUsuarioPermisos(user: UsuarioItem, input: UsuarioPer
       requiere_foto_guia: input.requiereFotoGuia,
       requiere_foto_mercaderia: input.requiereFotoMercaderia,
       requiere_notas: input.requiereNotas,
-      permisos_menu: permisosMenuToBackend(input.permisosMenu),
+      permisos_menu: permisosToBackend(input.permisosMenu, {
+        localesIds: input.localesIds,
+        vinculadoUsuarioId: user.vinculadoUsuarioId,
+      }),
     },
   });
+}
+
+export async function vincularUsuarios(
+  selfId: string,
+  vinculadoId: string,
+  rows: UsuarioItem[],
+) {
+  const other = rows.find((item) => item.id === vinculadoId);
+  if (!other || other.id === selfId) return;
+  await updateUsuario(
+    other.id,
+    { ...defaultFormFromUser(other), vinculadoUsuarioId: selfId },
+    other,
+  ).catch(() => undefined);
 }
 
 export async function deleteUsuario(id: string) {
@@ -180,6 +221,7 @@ export function defaultFormFromUser(user?: UsuarioItem | null): UsuarioFormInput
       requiereFotoGuia: false,
       requiereFotoMercaderia: false,
       requiereNotas: false,
+      vinculadoUsuarioId: "",
     };
   }
   return {
@@ -196,6 +238,7 @@ export function defaultFormFromUser(user?: UsuarioItem | null): UsuarioFormInput
     requiereFotoGuia: user.requiereFotoGuia,
     requiereFotoMercaderia: user.requiereFotoMercaderia,
     requiereNotas: user.requiereNotas,
+    vinculadoUsuarioId: user.vinculadoUsuarioId,
   };
 }
 

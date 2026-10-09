@@ -51,7 +51,14 @@ export async function getRefreshToken() {
   return getSecureItem(REFRESH_KEY);
 }
 
-export async function saveUserSnapshot(user: { id: number; name: string; username: string; rol?: string }) {
+export async function saveUserSnapshot(user: {
+  id: number;
+  name: string;
+  username: string;
+  rol?: string;
+  localesIds?: string[];
+  vinculadoUsuarioId?: string;
+}) {
   await setSecureItem(USER_KEY, JSON.stringify(user));
 }
 
@@ -59,7 +66,14 @@ export async function getUserSnapshot() {
   const raw = await getSecureItem(USER_KEY);
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as { id: number; name: string; username: string; rol?: string };
+    const parsed = JSON.parse(raw) as {
+      id: number;
+      name: string;
+      username: string;
+      rol?: string;
+      localesIds?: string[];
+      vinculadoUsuarioId?: string;
+    };
     if (!parsed?.id) return null;
     return parsed;
   } catch {

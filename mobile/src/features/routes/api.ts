@@ -202,6 +202,10 @@ function daysBetween(desde: string, hasta: string) {
   return out.length ? out : [desde];
 }
 
+export async function fetchRutasReprogramadas() {
+  return fetchRoutesOnce({ estado: "reprogramado" });
+}
+
 async function fetchRoutesOnce(query: FetchRoutesQuery = {}): Promise<RouteItem[]> {
   const payload = await api<unknown>(buildQuery(query));
   return asRows(payload, "rutas")

@@ -19,6 +19,13 @@ function applyPatch(projectRoot) {
   const file = servicePath(projectRoot);
   if (!fs.existsSync(file)) return false;
   const source = fs.readFileSync(file, "utf8");
+  if (source.includes("stopSelf()") && source.includes(MARK)) {
+    fs.writeFileSync(
+      file,
+      source.replace(/\n    stopSelf\(\)\n    return START_NOT_STICKY/, "\n    return START_STICKY"),
+    );
+    return true;
+  }
   if (source.includes(MARK)) return true;
 
   let next = source.replace(
@@ -44,8 +51,7 @@ function applyPatch(projectRoot) {
       mKillService = extras.getBoolean("killService", false)
     }
     if (mChannelId.isNullOrBlank()) mChannelId = "bioclim:gps"
-    stopSelf()
-    return START_NOT_STICKY
+    return START_STICKY
   }`,
   );
 
@@ -92,7 +98,7 @@ function applyConsumerPatch(projectRoot) {
   if (source.includes(CONSUMER_MARK)) return true;
   const next = source.replace(
     "      context.startForegroundService(serviceIntent)\n",
-    `      try {\n        // ${CONSUMER_MARK}: startService no arma el plazo que cierra la app.\n        context.startService(serviceIntent)\n      } catch (e: IllegalStateException) {\n        Log.e(TAG, "Location service start not allowed; skipping the foreground service.", e)\n        return\n      } catch (e: SecurityException) {\n        Log.e(TAG, "Location service start rejected; skipping the foreground service.", e)\n        return\n      }\n`,
+    `      try {\n        // ${CONSUMER_MARK}: tipo location ya va en startForeground.\n        if (android.os.Build.VERSION.SDK_INT >= 26) {\n          context.startForegroundService(serviceIntent)\n        } else {\n          context.startService(serviceIntent)\n        }\n      } catch (e: IllegalStateException) {\n        try { context.startService(serviceIntent) } catch (ignored: Exception) {\n          Log.e(TAG, "Location service start not allowed; skipping the foreground service.", e)\n          return\n        }\n      } catch (e: SecurityException) {\n        Log.e(TAG, "Location service start rejected; skipping the foreground service.", e)\n        return\n      }\n`,
   );
   if (!next.includes(CONSUMER_MARK)) return false;
   fs.writeFileSync(file, next);

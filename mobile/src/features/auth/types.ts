@@ -3,6 +3,8 @@ export type User = {
   name: string;
   username: string;
   rol?: string;
+  localesIds?: string[];
+  vinculadoUsuarioId?: string;
 };
 
 export type AuthResult = {

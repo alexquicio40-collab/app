@@ -4,12 +4,26 @@ import { clearGpsUser, publishFix, saveGpsUser } from "@/features/gps-fondo/publ
 import { useAuth } from "@/providers/auth-provider";
 import * as Location from "expo-location";
 import { useEffect, useRef } from "react";
-import { AppState, Platform } from "react-native";
+import { Platform } from "react-native";
 
 const RELOJ = {
   accuracy: Location.Accuracy.Balanced,
   timeInterval: 8000,
   distanceInterval: 15,
+};
+
+const FONDO = {
+  accuracy: Location.Accuracy.Balanced,
+  timeInterval: 8000,
+  distanceInterval: 15,
+  deferredUpdatesInterval: 8000,
+  pausesUpdatesAutomatically: false,
+  showsBackgroundLocationIndicator: true,
+  foregroundService: {
+    notificationTitle: "BIOCLIM",
+    notificationBody: "Ubicación activa en segundo plano",
+    notificationColor: "#0B5340",
+  },
 };
 
 function kmh(speed: number | null | undefined) {
@@ -21,10 +35,7 @@ function publicar(pos: Location.LocationObject) {
   void publishFix(pos.coords.latitude, pos.coords.longitude, kmh(pos.coords.speed));
 }
 
-/**
- * GPS de cualquier usuario logueado.
- * No arranca el servicio de Android: ese startForeground cierra la app.
- */
+/** GPS de cualquier usuario logueado, también con la app en segundo plano. */
 export function GpsFondoHost() {
   const { status, user } = useAuth();
   const watch = useRef<Location.LocationSubscription | number | null>(null);
@@ -52,29 +63,37 @@ export function GpsFondoHost() {
         await saveGpsUser(id);
         abrirCanal(id);
         if (!activo()) return;
-        await cortarServicio();
-        if (!activo()) return;
         if (Platform.OS === "web") {
           arrancarWeb(activo);
           return;
         }
-        const fg = await Location.getForegroundPermissionsAsync().catch(() => ({ granted: false }));
+        const fg = await Location.requestForegroundPermissionsAsync().catch(() => ({
+          granted: false,
+        }));
         if (!fg.granted || !activo()) return;
-        if (watch.current != null) return;
-        watch.current = await Location.watchPositionAsync(RELOJ, publicar);
-        pulso.current = setInterval(() => {
-          if (!activo() || AppState.currentState !== "active") return;
-          void Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-            .then(publicar)
-            .catch(() => undefined);
-        }, 12000);
+        await Location.requestBackgroundPermissionsAsync().catch(() => null);
+        if (!activo()) return;
+        if (watch.current == null) {
+          watch.current = await Location.watchPositionAsync(RELOJ, publicar);
+        }
+        if (!pulso.current) {
+          pulso.current = setInterval(() => {
+            if (!activo()) return;
+            void Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+              .then(publicar)
+              .catch(() => undefined);
+          }, 12000);
+        }
+        await arrancarFondo();
       } catch {
         // Un fallo de GPS no puede tumbar la app.
       }
     }
 
     function arrancarWeb(activo: () => boolean) {
-      if (typeof navigator === "undefined" || !navigator.geolocation || watch.current != null) return;
+      if (typeof navigator === "undefined" || !navigator.geolocation || watch.current != null) {
+        return;
+      }
       watch.current = navigator.geolocation.watchPosition(
         (pos) => {
           if (!activo()) return;
@@ -109,6 +128,16 @@ export function GpsFondoHost() {
   }, [status, user?.id]);
 
   return null;
+}
+
+async function arrancarFondo() {
+  if (Platform.OS === "web") return;
+  try {
+    const activo = await Location.hasStartedLocationUpdatesAsync(GPS_TASK).catch(() => false);
+    if (!activo) await Location.startLocationUpdatesAsync(GPS_TASK, FONDO);
+  } catch {
+    // Si el servicio no arranca, el watch en primer plano sigue.
+  }
 }
 
 async function cortarServicio() {

@@ -1,4 +1,3 @@
-import { FirmaPad } from "@/features/routes/flujo/components/firma-pad";
 import {
   hasAnyFinalizacionField,
   MAX_PHOTO_BYTES,
@@ -273,11 +272,6 @@ export function FinalizarRutaSheet({
                 </View>
               </View>
             ) : null}
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Firma</Text>
-              <FirmaPad value={form.firma} onChange={(firma) => setForm((prev) => ({ ...prev, firma }))} />
-            </View>
 
             {config.requiereNotas ? (
               <View style={styles.section}>

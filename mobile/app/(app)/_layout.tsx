@@ -1,5 +1,6 @@
 import { BitacoraVistaHost } from "@/features/bitacora/vista-host";
-import { ProgramacionAlerta } from "@/features/programacion-alerta";
+import { OfflineBar } from "@/lib/offline";
+import { ProgramacionAlerta, ReprogramAviso } from "@/features/programacion-alerta";
 import { canSeeMapaCampo, canSeeOperadores } from "@/lib/role-nav";
 import { theme } from "@/lib/theme";
 import { useAuth } from "@/providers/auth-provider";
@@ -25,6 +26,8 @@ export default function AppLayout() {
 
   return (
     <View style={styles.root}>
+      <OfflineBar />
+      <View style={styles.tabs}>
       <Tabs
         tabBar={(props) => <FloatingTabBar {...props} />}
         screenOptions={{
@@ -56,14 +59,17 @@ export default function AppLayout() {
         <Tabs.Screen name="historial" options={{ href: null }} />
         <Tabs.Screen name="hoja-ruta" options={{ href: null }} />
       </Tabs>
+      </View>
       <BitacoraVistaHost />
       <ProgramacionAlerta />
+      <ReprogramAviso />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  tabs: { flex: 1 },
   boot: {
     flex: 1,
     alignItems: "center",

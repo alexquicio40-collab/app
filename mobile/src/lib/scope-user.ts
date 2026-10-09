@@ -7,7 +7,7 @@ export function seesAllUsers(rol?: string | null) {
 
 export function isRolCampo(rol?: string | null) {
   const key = roleKey(rol);
-  return key === "operador" || key === "conductor";
+  return key === "operador" || key === "conductor" || key === "chofer";
 }
 
 export function normName(value?: string | null) {
@@ -42,13 +42,19 @@ type ScopeUser = {
   name?: string | null;
   username?: string | null;
   rol?: string | null;
+  localesIds?: string[] | null;
+  vinculadoUsuarioId?: string | null;
 };
 
-export function localesDelUsuario<T extends { asesorBioClim?: string | null }>(
-  locales: T[],
-  user?: ScopeUser | User | null,
-) {
+export function localesDelUsuario<
+  T extends { id?: string | null; asesorBioClim?: string | null },
+>(locales: T[], user?: ScopeUser | User | null) {
   if (!user) return [];
+  const ids = (user.localesIds ?? []).map(String).filter(Boolean);
+  if (ids.length) {
+    const set = new Set(ids);
+    return locales.filter((item) => item.id != null && set.has(String(item.id)));
+  }
   if (seesAllUsers(user.rol)) return locales;
   return locales.filter((item) => matchAsesorTag(item.asesorBioClim, user));
 }
@@ -92,9 +98,17 @@ export function rutaDelUsuario<
   },
 >(route: T, user?: ScopeUser | User | null, localIds?: Set<string>) {
   if (!user) return false;
-  if (seesAllUsers(user.rol)) return true;
   const uid = String(user.id);
-  if (isRolCampo(user.rol)) return String(route.conductorId ?? "") === uid;
+  if (isRolCampo(user.rol)) {
+    if (String(route.conductorId ?? "") === uid) return true;
+    const vinculo = user.vinculadoUsuarioId ? String(user.vinculadoUsuarioId) : "";
+    return Boolean(vinculo && String(route.conductorId ?? "") === vinculo);
+  }
+  const restricted = (user.localesIds ?? []).map(String).filter(Boolean);
+  if (restricted.length) {
+    return Boolean(route.localId && restricted.includes(String(route.localId)));
+  }
+  if (seesAllUsers(user.rol)) return true;
   if (route.creadoPorId && String(route.creadoPorId) === uid) return true;
   if (matchAsesorTag(route.asesorBioClim, user)) return true;
   if (matchAsesorTag(route.creadoPorNombre, user)) return true;

@@ -1,5 +1,6 @@
 import { api, ApiError } from "@/lib/api";
 import { getDispositivo } from "@/features/sesiones/lib/dispositivo";
+import { parsePermisosExtras } from "@/features/usuarios/lib/roles";
 import type { AuthResult, User } from "./types";
 
 type WebUser = {
@@ -89,6 +90,23 @@ export function meRequest() {
     }
     return { user: toUser(data.user) };
   });
+}
+
+export async function hydrateUserScope(user: User): Promise<User> {
+  try {
+    const payload = await api<{ usuario?: { permisos_menu?: unknown }; permisos_menu?: unknown }>(
+      `/api/users/${user.id}`,
+    );
+    const raw = payload.usuario?.permisos_menu ?? payload.permisos_menu;
+    const extras = parsePermisosExtras(raw);
+    return {
+      ...user,
+      localesIds: extras.localesIds,
+      vinculadoUsuarioId: extras.vinculadoUsuarioId,
+    };
+  } catch {
+    return user;
+  }
 }
 
 export function logoutRequest() {

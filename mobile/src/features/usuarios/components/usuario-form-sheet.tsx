@@ -1,5 +1,5 @@
 import { checkUsuarioExists, defaultFormFromUser } from "@/features/usuarios/api";
-import { FINALIZACION_FLAGS, ROL_OPTIONS } from "@/features/usuarios/lib/roles";
+import { esRolCampo, FINALIZACION_FLAGS, ROL_OPTIONS } from "@/features/usuarios/lib/roles";
 import type { UsuarioFormInput, UsuarioItem } from "@/features/usuarios/types";
 import {
   FieldLabel,
@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 type UsuarioFormSheetProps = {
   open: boolean;
   user: UsuarioItem | null;
+  usuarios?: UsuarioItem[];
   saving?: boolean;
   onClose: () => void;
   onSave: (input: UsuarioFormInput) => Promise<void>;
@@ -33,6 +34,7 @@ type UsuarioFormSheetProps = {
 export function UsuarioFormSheet({
   open,
   user,
+  usuarios = [],
   saving = false,
   onClose,
   onSave,
@@ -101,14 +103,19 @@ export function UsuarioFormSheet({
       /** Crear siempre activo; editar conserva el valor del interruptor de la lista. */
       activo: user ? user.activo : true,
       password: form.password?.trim() || undefined,
-      dni: form.rol === "operador" ? form.dni : "",
-      placa: form.rol === "operador" ? form.placa : "",
+      dni: esRolCampo(form.rol) ? form.dni : "",
+      placa: esRolCampo(form.rol) ? form.placa : "",
+      vinculadoUsuarioId: esRolCampo(form.rol) ? form.vinculadoUsuarioId : "",
     });
   };
 
   if (!open) return null;
 
-  const isOperador = form.rol === "operador";
+  const isCampo = esRolCampo(form.rol);
+  const vinculoRol = form.rol === "chofer" ? "operador" : "chofer";
+  const vinculoOptions = usuarios
+    .filter((item) => item.id !== user?.id && item.rol === vinculoRol && item.activo)
+    .map((item) => ({ value: item.id, label: item.nombre }));
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -175,7 +182,19 @@ export function UsuarioFormSheet({
               onChange={(rol) => patch({ rol: rol || "operador" })}
             />
 
-            {isOperador ? (
+            {isCampo ? (
+              <SelectField
+                label={form.rol === "chofer" ? "Vincular con operador" : "Vincular con chofer"}
+                value={form.vinculadoUsuarioId ?? ""}
+                placeholder={form.rol === "chofer" ? "Operador…" : "Chofer…"}
+                options={vinculoOptions}
+                onChange={(vinculadoUsuarioId) =>
+                  patch({ vinculadoUsuarioId: vinculadoUsuarioId ?? "" })
+                }
+              />
+            ) : null}
+
+            {isCampo ? (
               <FieldRow>
                 <View style={styles.half}>
                   <FieldLabel>DNI</FieldLabel>
@@ -197,7 +216,7 @@ export function UsuarioFormSheet({
               </FieldRow>
             ) : null}
 
-            {isOperador ? (
+            {isCampo ? (
               <View style={styles.flags}>
                 <Text style={styles.flagsTitle}>Requeridos al finalizar ruta</Text>
                 <View style={styles.flagGrid}>

@@ -1,4 +1,4 @@
-import { logoutRequest, meRequest } from "@/features/auth/api";
+import { hydrateUserScope, logoutRequest, meRequest } from "@/features/auth/api";
 import { marcarDispositivoAutorizado } from "@/features/sesiones/lib/dispositivo";
 import type { AuthResult, User } from "@/features/auth/types";
 import { hayInternet } from "@/lib/red";
@@ -71,10 +71,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         const { user: current } = await meRequest();
-        await saveUserSnapshot(current);
+        const scoped = await hydrateUserScope(current);
+        await saveUserSnapshot(scoped);
         await touchSesion();
         if (!cancelled) {
-          setUser(current);
+          setUser(scoped);
           setStatus("authenticated");
         }
       } catch {
@@ -139,11 +140,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (result: AuthResult) => {
     resetSessionClosed();
+    const scoped = await hydrateUserScope(result.user);
     await saveTokens(result.accessToken, result.refreshToken, result.sessionToken);
-    await saveUserSnapshot(result.user);
+    await saveUserSnapshot(scoped);
     await marcarDispositivoAutorizado();
     await touchSesion();
-    setUser(result.user);
+    setUser(scoped);
     setStatus("authenticated");
   }, []);
 

@@ -9,6 +9,7 @@ import {
   updateUsuario,
   updateUsuarioActivo,
   updateUsuarioPermisos,
+  vincularUsuarios,
 } from "./api";
 import {
   createDefaultUsuariosFilters,
@@ -124,10 +125,18 @@ export function useUsuariosScreen() {
       setMutating(true);
       try {
         if (editingId) {
-          await updateUsuario(editingId, input);
+          await updateUsuario(editingId, input, editing);
+          if (input.vinculadoUsuarioId) {
+            await vincularUsuarios(editingId, input.vinculadoUsuarioId, usuarios);
+          }
           notify("Listo", "Usuario actualizado");
         } else {
           await createUsuario(input);
+          const rows = await fetchUsuarios();
+          const created = rows.find((item) => item.usuario === input.usuario.trim());
+          if (created?.id && input.vinculadoUsuarioId) {
+            await vincularUsuarios(created.id, input.vinculadoUsuarioId, rows);
+          }
           notify("Listo", "Usuario creado");
         }
         closeForm();
@@ -139,7 +148,7 @@ export function useUsuariosScreen() {
         setMutating(false);
       }
     },
-    [editingId, closeForm, load],
+    [editingId, editing, usuarios, closeForm, load],
   );
 
   const savePermisos = useCallback(
