@@ -1,3 +1,4 @@
+import "@/features/gps-fondo/task";
 import { GpsFondoHost } from "@/features/gps-fondo/host";
 import { InstalacionProvider, useInstalacionGate } from "@/features/instalacion";
 import { OfflineSyncHost } from "@/lib/offline";

@@ -4,7 +4,7 @@ import { clearGpsUser, publishFix, saveGpsUser } from "@/features/gps-fondo/publ
 import { useAuth } from "@/providers/auth-provider";
 import * as Location from "expo-location";
 import { useEffect, useRef } from "react";
-import { Platform } from "react-native";
+import { PermissionsAndroid, Platform } from "react-native";
 
 const RELOJ = {
   accuracy: Location.Accuracy.Balanced,
@@ -12,7 +12,7 @@ const RELOJ = {
   distanceInterval: 15,
 };
 
-const FONDO = {
+const FONDO: Location.LocationTaskOptions = {
   accuracy: Location.Accuracy.Balanced,
   timeInterval: 8000,
   distanceInterval: 15,
@@ -23,6 +23,7 @@ const FONDO = {
     notificationTitle: "BIOCLIM",
     notificationBody: "Ubicación activa en segundo plano",
     notificationColor: "#0B5340",
+    killServiceOnDestroy: false,
   },
 };
 
@@ -35,11 +36,21 @@ function publicar(pos: Location.LocationObject) {
   void publishFix(pos.coords.latitude, pos.coords.longitude, kmh(pos.coords.speed));
 }
 
-/** GPS de cualquier usuario logueado, también con la app en segundo plano. */
+async function pedirNotificaciones() {
+  if (Platform.OS !== "android" || Platform.Version < 33) return;
+  try {
+    await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+  } catch {
+    // Sin este permiso la notificación puede no verse, el servicio igual arranca.
+  }
+}
+
+/** GPS de cualquier usuario logueado, con notificación fija y segundo plano. */
 export function GpsFondoHost() {
   const { status, user } = useAuth();
   const watch = useRef<Location.LocationSubscription | number | null>(null);
   const pulso = useRef<ReturnType<typeof setInterval> | null>(null);
+  const guarda = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -71,6 +82,7 @@ export function GpsFondoHost() {
           granted: false,
         }));
         if (!fg.granted || !activo()) return;
+        await pedirNotificaciones();
         await Location.requestBackgroundPermissionsAsync().catch(() => null);
         if (!activo()) return;
         if (watch.current == null) {
@@ -85,6 +97,12 @@ export function GpsFondoHost() {
           }, 12000);
         }
         await arrancarFondo();
+        if (!guarda.current) {
+          guarda.current = setInterval(() => {
+            if (!activo()) return;
+            void arrancarFondo();
+          }, 20000);
+        }
       } catch {
         // Un fallo de GPS no puede tumbar la app.
       }
@@ -106,6 +124,10 @@ export function GpsFondoHost() {
     }
 
     async function parar() {
+      if (guarda.current) {
+        clearInterval(guarda.current);
+        guarda.current = null;
+      }
       await soltarReloj();
       cerrarCanal();
       await cortarServicio();
