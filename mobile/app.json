@@ -77,7 +77,9 @@
           "locationAlwaysAndWhenInUsePermission": "BIO CLIM sigue enviando tu ubicación con la app cerrada, la pantalla bloqueada o en otra aplicación.",
           "locationAlwaysPermission": "BIO CLIM sigue enviando tu ubicación con la app cerrada, la pantalla bloqueada o en otra aplicación.",
           "isAndroidBackgroundLocationEnabled": true,
-          "isIosBackgroundLocationEnabled": true
+          "isAndroidForegroundServiceEnabled": true,
+          "isIosBackgroundLocationEnabled": true,
+          "androidForegroundServiceIcon": "./assets/images/android-icon-monochrome.png"
         }
       ],
       [

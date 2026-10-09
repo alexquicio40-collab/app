@@ -4,7 +4,7 @@ import { clearGpsUser, publishFix, saveGpsUser } from "@/features/gps-fondo/publ
 import { useAuth } from "@/providers/auth-provider";
 import * as Location from "expo-location";
 import { useEffect, useRef } from "react";
-import { PermissionsAndroid, Platform } from "react-native";
+import { AppState, PermissionsAndroid, Platform } from "react-native";
 
 const RELOJ = {
   accuracy: Location.Accuracy.Balanced,
@@ -36,12 +36,38 @@ function publicar(pos: Location.LocationObject) {
   void publishFix(pos.coords.latitude, pos.coords.longitude, kmh(pos.coords.speed));
 }
 
-async function pedirNotificaciones() {
-  if (Platform.OS !== "android" || Platform.Version < 33) return;
+/** Permisos en el orden de la documentación de Expo Location. */
+async function pedirPermisos() {
+  const fg = await Location.requestForegroundPermissionsAsync().catch(() => ({ granted: false }));
+  if (!fg.granted) return false;
+  if (Platform.OS === "android" && Platform.Version >= 33) {
+    await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(() => null);
+  }
+  await Location.requestBackgroundPermissionsAsync().catch(() => null);
+  return true;
+}
+
+/**
+ * Arranque documentado: stop + start para que Android vuelva a mostrar la
+ * notificación (expo/expo#47024). Solo con la app en primer plano.
+ */
+async function arrancarFondo() {
+  if (Platform.OS === "web") return;
+  if (AppState.currentState !== "active") return;
+  const fg = await Location.getForegroundPermissionsAsync().catch(() => ({ granted: false }));
+  if (!fg.granted) return;
+  const activo = await Location.hasStartedLocationUpdatesAsync(GPS_TASK).catch(() => false);
+  if (activo) await Location.stopLocationUpdatesAsync(GPS_TASK).catch(() => undefined);
+  await Location.startLocationUpdatesAsync(GPS_TASK, FONDO);
+}
+
+async function cortarServicio() {
+  if (Platform.OS === "web") return;
   try {
-    await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+    const activo = await Location.hasStartedLocationUpdatesAsync(GPS_TASK).catch(() => false);
+    if (activo) await Location.stopLocationUpdatesAsync(GPS_TASK);
   } catch {
-    // Sin este permiso la notificación puede no verse, el servicio igual arranca.
+    // ignore
   }
 }
 
@@ -50,7 +76,6 @@ export function GpsFondoHost() {
   const { status, user } = useAuth();
   const watch = useRef<Location.LocationSubscription | number | null>(null);
   const pulso = useRef<ReturnType<typeof setInterval> | null>(null);
-  const guarda = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -63,9 +88,14 @@ export function GpsFondoHost() {
 
     let vivo = true;
     void arrancar(userId, () => vivo);
+    const app = AppState.addEventListener("change", (state) => {
+      if (!vivo || state !== "active") return;
+      void arrancarFondo().catch(() => undefined);
+    });
 
     return () => {
       vivo = false;
+      app.remove();
       void soltarReloj();
     };
 
@@ -78,13 +108,8 @@ export function GpsFondoHost() {
           arrancarWeb(activo);
           return;
         }
-        const fg = await Location.requestForegroundPermissionsAsync().catch(() => ({
-          granted: false,
-        }));
-        if (!fg.granted || !activo()) return;
-        await pedirNotificaciones();
-        await Location.requestBackgroundPermissionsAsync().catch(() => null);
-        if (!activo()) return;
+        const ok = await pedirPermisos();
+        if (!ok || !activo()) return;
         if (watch.current == null) {
           watch.current = await Location.watchPositionAsync(RELOJ, publicar);
         }
@@ -97,12 +122,6 @@ export function GpsFondoHost() {
           }, 12000);
         }
         await arrancarFondo();
-        if (!guarda.current) {
-          guarda.current = setInterval(() => {
-            if (!activo()) return;
-            void arrancarFondo();
-          }, 20000);
-        }
       } catch {
         // Un fallo de GPS no puede tumbar la app.
       }
@@ -124,10 +143,6 @@ export function GpsFondoHost() {
     }
 
     async function parar() {
-      if (guarda.current) {
-        clearInterval(guarda.current);
-        guarda.current = null;
-      }
       await soltarReloj();
       cerrarCanal();
       await cortarServicio();
@@ -150,24 +165,4 @@ export function GpsFondoHost() {
   }, [status, user?.id]);
 
   return null;
-}
-
-async function arrancarFondo() {
-  if (Platform.OS === "web") return;
-  try {
-    const activo = await Location.hasStartedLocationUpdatesAsync(GPS_TASK).catch(() => false);
-    if (!activo) await Location.startLocationUpdatesAsync(GPS_TASK, FONDO);
-  } catch {
-    // Si el servicio no arranca, el watch en primer plano sigue.
-  }
-}
-
-async function cortarServicio() {
-  if (Platform.OS === "web") return;
-  try {
-    const activo = await Location.hasStartedLocationUpdatesAsync(GPS_TASK).catch(() => false);
-    if (activo) await Location.stopLocationUpdatesAsync(GPS_TASK);
-  } catch {
-    // ignore
-  }
 }
