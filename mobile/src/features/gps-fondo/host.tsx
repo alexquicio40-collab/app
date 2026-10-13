@@ -1,4 +1,6 @@
 import { abrirCanal, cerrarCanal } from "@/features/gps-fondo/canal";
+import { mapaOcupado, onMapaOcupado } from "@/features/gps-fondo/mapa-ocupado";
+import { startServicioNativo, stopServicioNativo } from "@/features/gps-fondo/servicio";
 import { GPS_TASK } from "@/features/gps-fondo/task";
 import { clearGpsUser, publishFix, saveGpsUser } from "@/features/gps-fondo/publish";
 import { useAuth } from "@/providers/auth-provider";
@@ -6,27 +8,19 @@ import * as Location from "expo-location";
 import { useEffect, useRef } from "react";
 import { AppState, PermissionsAndroid, Platform } from "react-native";
 
+let tareaMigrada = false;
+
 const RELOJ = {
   accuracy: Location.Accuracy.Balanced,
   timeInterval: 8000,
   distanceInterval: 15,
 };
 
-const FONDO: Location.LocationTaskOptions = {
-  accuracy: Location.Accuracy.Balanced,
-  timeInterval: 8000,
-  distanceInterval: 15,
-  deferredUpdatesInterval: 8000,
-  pausesUpdatesAutomatically: false,
-  showsBackgroundLocationIndicator: true,
-  foregroundService: {
-    notificationTitle: "BIOCLIM",
-    notificationBody: "Ubicación activa en segundo plano",
-    notificationColor: "#0B5340",
-    killServiceOnDestroy: false,
-  },
-};
-
+/**
+ * Sin foregroundService: ese objeto arranca el LocationTaskService de Expo,
+ * que en Android 12–16 cierra la app con "BIOCLIM continúa fallando".
+ * La notificación la publica bioclim-location.
+ */
 function kmh(speed: number | null | undefined) {
   return Math.max(0, (speed ?? 0) * 3.6);
 }
@@ -48,19 +42,20 @@ async function pedirPermisos() {
 }
 
 /**
- * Solo con la app en primer plano. No se detiene el servicio antes de
- * arrancarlo: ese corte deja a Android esperando startForeground y muestra
- * "sigue fallando". Si la tarea ya existe, start vuelve a publicar la notificación.
+ * Un solo FGS: bioclim-location (como LocationUpdatesForegroundService).
+ * startLocationUpdatesAsync de Expo sigue armando LocationTaskService y
+ * Android 14–16 mata el proceso a ~60 s.
  */
 async function arrancarFondo() {
   if (Platform.OS === "web") return;
-  if (AppState.currentState !== "active") return;
+  if (AppState.currentState !== "active" || mapaOcupado()) return;
   const fg = await Location.getForegroundPermissionsAsync().catch(() => ({ granted: false }));
   if (!fg.granted) return;
-  await Location.startLocationUpdatesAsync(GPS_TASK, FONDO);
+  await cortarTarea();
+  await startServicioNativo();
 }
 
-async function cortarServicio() {
+async function cortarTarea() {
   if (Platform.OS === "web") return;
   try {
     const activo = await Location.hasStartedLocationUpdatesAsync(GPS_TASK).catch(() => false);
@@ -68,6 +63,12 @@ async function cortarServicio() {
   } catch {
     // ignore
   }
+  tareaMigrada = false;
+}
+
+async function cortarServicio() {
+  await cortarTarea();
+  await stopServicioNativo();
 }
 
 /** GPS de cualquier usuario logueado, con notificación fija y segundo plano. */
@@ -88,13 +89,23 @@ export function GpsFondoHost() {
     let vivo = true;
     void arrancar(userId, () => vivo);
     const app = AppState.addEventListener("change", (state) => {
-      if (!vivo || state !== "active") return;
+      if (!vivo || state !== "active" || mapaOcupado()) return;
       void arrancarFondo().catch(() => undefined);
+    });
+    const mapa = onMapaOcupado((ocupado) => {
+      if (!vivo) return;
+      if (ocupado) {
+        void soltarReloj();
+        void cortarServicio();
+        return;
+      }
+      void arrancar(userId, () => vivo);
     });
 
     return () => {
       vivo = false;
       app.remove();
+      mapa();
       void soltarReloj();
     };
 
@@ -109,12 +120,13 @@ export function GpsFondoHost() {
         }
         const ok = await pedirPermisos();
         if (!ok || !activo()) return;
+        if (mapaOcupado()) return;
         if (watch.current == null) {
           watch.current = await Location.watchPositionAsync(RELOJ, publicar);
         }
         if (!pulso.current) {
           pulso.current = setInterval(() => {
-            if (!activo()) return;
+            if (!activo() || mapaOcupado()) return;
             void Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
               .then(publicar)
               .catch(() => undefined);
@@ -127,6 +139,7 @@ export function GpsFondoHost() {
     }
 
     function arrancarWeb(activo: () => boolean) {
+      if (mapaOcupado()) return;
       if (typeof navigator === "undefined" || !navigator.geolocation || watch.current != null) {
         return;
       }

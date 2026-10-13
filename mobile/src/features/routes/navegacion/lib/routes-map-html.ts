@@ -1,4 +1,4 @@
-import { getGoogleMapsKey } from "@/features/map/lib/google-map";
+import { MAPS_RASTER_OPTION, leafletHead, leafletStart } from "@/features/map/lib/map-raster";
 
 /**
  * HTML del mapa de rutas sugeridas.
@@ -8,13 +8,12 @@ import { getGoogleMapsKey } from "@/features/map/lib/google-map";
  * - Click en polyline o tip → postMessage select-route
  */
 export function buildRoutesMapHtml() {
-  const key = getGoogleMapsKey();
-
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  ${leafletHead()}
   <style>
     html, body, #map { height: 100%; margin: 0; background: #E7EEEB; }
     .tip {
@@ -209,6 +208,7 @@ export function buildRoutesMapHtml() {
 
     window.initRoutesMap = function () {
       map = new google.maps.Map(document.getElementById('map'), {
+        ${MAPS_RASTER_OPTION},
         center: { lat: -12.0464, lng: -77.0428 },
         zoom: 12,
         disableDefaultUI: true,
@@ -235,7 +235,7 @@ export function buildRoutesMapHtml() {
       if (data.type === 'routes') window.updateRoutesMap(data);
     });
   </script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=${key}&v=weekly&callback=initRoutesMap" async></script>
+  ${leafletStart("initRoutesMap")}
 </body>
 </html>`;
 }

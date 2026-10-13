@@ -1,18 +1,25 @@
-import { getGoogleMapsKey } from "@/features/map/lib/google-map";
+import { MAPS_RASTER_OPTION, leafletHead, leafletStart } from "@/features/map/lib/map-raster";
 
 /**
  * Mapa de campo: rutas estables + seguimiento suave del marker/cámara.
  * No redibuja polylines en cada tick GPS (evita “rayado”).
  */
 export function buildCampoMapHtml() {
-  const key = getGoogleMapsKey();
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  ${leafletHead()}
   <style>
     html, body, #map { height: 100%; margin: 0; background: #E7EEEB; }
+    #compassRose {
+      position: absolute; top: 12px; right: 12px; z-index: 4;
+      width: 44px; height: 44px; pointer-events: none;
+      display: none; align-items: center; justify-content: center;
+    }
+    #compassRose.on { display: flex; }
+    #compassRose svg { width: 44px; height: 44px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.35)); }
     .tip {
       background: #FFFFFF; color: #0B1F1A; border-radius: 10px; padding: 6px 8px;
       box-shadow: 0 4px 14px rgba(8,61,48,0.22); border: 1.5px solid #D2DDD8;
@@ -28,6 +35,13 @@ export function buildCampoMapHtml() {
 </head>
 <body>
   <div id="map"></div>
+  <div id="compassRose" aria-hidden="true">
+    <svg viewBox="0 0 44 44">
+      <circle cx="22" cy="22" r="20" fill="#FFFFFF" stroke="#0B5340" stroke-width="2"/>
+      <path d="M22 6 L26 24 L22 21 L18 24 Z" fill="#B42318"/>
+      <text x="22" y="14" text-anchor="middle" font-size="8" font-weight="800" fill="#0B5340">N</text>
+    </svg>
+  </div>
   <script>
     var map = null, ready = false, pending = null;
     var meMarker = null, destMarker = null;
@@ -40,15 +54,28 @@ export function buildCampoMapHtml() {
     var lastDestKey = '';
     var lastTraveledKey = '';
     var lastIdleFit = '';
-    var followEnabled = true;
+    var lastFocusToken = 0;
+    var followEnabled = false;
+    var cameraHold = false;
     var trackingActive = false;
+    var compassOn = false;
+    var deviceHeading = null;
+    var horizon = null;
+    var lockedCourse = 0;
+    var courseCandidate = null;
+    var courseAt = 0;
+    var lastPan = null;
+    var TURN_MIN_DEG = 20;
+    var TURN_HOLD_MS = 400;
     var anim = null;
     var displayPos = null;
     var targetPos = null;
     var displayHeading = 0;
     var targetHeading = 0;
+    var accCircle = null;
     var PRIMARY = '#0B5340';
     var ALT = ['#5C8F7E', '#7FA898', '#A3C1B5'];
+    var MY_BLUE = '#1A73E8';
 
     function post(msg) {
       try {
@@ -76,12 +103,115 @@ export function buildCampoMapHtml() {
 
     function setFollow(on, snap) {
       followEnabled = !!on;
+      if (followEnabled) cameraHold = true;
       emitFollow();
       if (followEnabled) focusCar(!!snap);
     }
 
+    function paintRose(heading) {
+      var rose = document.getElementById('compassRose');
+      if (!rose) return;
+      rose.classList.toggle('on', compassOn);
+      rose.style.transform = 'rotate(' + (-Number(heading || 0)) + 'deg)';
+    }
+
+    function shortestDeg(from, to) {
+      return ((to - from + 540) % 360) - 180;
+    }
+
+    function wrapDeg(n) {
+      return ((Number(n) % 360) + 360) % 360;
+    }
+
+    function ensureHorizon() {
+      if (horizon || typeof createHorizonSmoother !== 'function') return horizon;
+      horizon = createHorizonSmoother(function (deg) {
+        if (map && map.setHeading) map.setHeading(deg);
+        paintRose(deg);
+      }, { tau: 0.72, maxDegS: 38, deadzone: 6 });
+      return horizon;
+    }
+
+    function desiredHorizon() {
+      if (compassOn && deviceHeading != null && !isNaN(Number(deviceHeading))) {
+        return wrapDeg(deviceHeading);
+      }
+      if (!compassOn && trackingActive && followEnabled) return wrapDeg(lockedCourse);
+      return 0;
+    }
+
+    function applyHorizon(snap) {
+      var api = ensureHorizon();
+      var next = desiredHorizon();
+      if (!api) {
+        if (map && map.setHeading) map.setHeading(next);
+        paintRose(next);
+        return;
+      }
+      if (snap) api.snap(next);
+      else api.aim(next);
+    }
+
+    function lockNavCourse(heading, force) {
+      var next = wrapDeg(heading);
+      if (force) {
+        lockedCourse = next;
+        courseCandidate = null;
+        courseAt = 0;
+        applyHorizon(true);
+        return;
+      }
+      if (!trackingActive || compassOn) return;
+      var delta = Math.abs(shortestDeg(lockedCourse, next));
+      if (delta < TURN_MIN_DEG) {
+        courseCandidate = null;
+        return;
+      }
+      var now = Date.now();
+      if (courseCandidate == null || Math.abs(shortestDeg(courseCandidate, next)) > 12) {
+        courseCandidate = next;
+        courseAt = now;
+        return;
+      }
+      if (now - courseAt < TURN_HOLD_MS) return;
+      lockedCourse = wrapDeg(courseCandidate);
+      courseCandidate = null;
+      applyHorizon(false);
+    }
+
+    function panFollow(pos) {
+      if (!map || !pos || (!followEnabled && !cameraHold)) return;
+      if (lastPan && metersApprox(lastPan, pos) < 2.4) return;
+      lastPan = { lat: pos.lat, lng: pos.lng };
+      map.panTo(pos);
+    }
+
+    function setCampoCompass(on, heading) {
+      var wasOn = compassOn;
+      compassOn = !!on;
+      if (heading != null && !isNaN(Number(heading))) deviceHeading = Number(heading);
+      if (!compassOn && wasOn) {
+        applyHorizon(true);
+        return;
+      }
+      applyHorizon(false);
+    }
+
     function recenterMe() {
+      cameraHold = true;
       setFollow(true, true);
+      lastPan = null;
+      if (map && map.getZoom() < 16) map.setZoom(17);
+      applyHorizon();
+    }
+
+    function goToStop(lat, lng) {
+      if (!map || !isFinite(Number(lat)) || !isFinite(Number(lng))) return;
+      followEnabled = false;
+      cameraHold = false;
+      emitFollow();
+      map.panTo({ lat: Number(lat), lng: Number(lng) });
+      if (map.getZoom() < 15) map.setZoom(16);
     }
 
     function routesKey(routes, selectedId, traveled) {
@@ -166,12 +296,18 @@ export function buildCampoMapHtml() {
       return overlay;
     }
 
-    function meIcon(tracking) {
+    function meIcon(tracking, heading) {
       if (tracking) {
+        var svg =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">' +
+          '<circle cx="14" cy="14" r="12.2" fill="#0B5340" stroke="#fff" stroke-width="2.2"/>' +
+          '<path d="M14 6 L19.4 20.2 L14 17 L8.6 20.2 Z" fill="#fff"/>' +
+          '</svg>';
         return {
-          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-          scale: 7, fillColor: '#0B5340', fillOpacity: 1,
-          strokeColor: '#FFFFFF', strokeWeight: 2, rotation: 0,
+          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+          scaledSize: new google.maps.Size(28, 28),
+          anchor: new google.maps.Point(14, 14),
+          rotation: Number(heading || 0),
         };
       }
       return {
@@ -181,12 +317,18 @@ export function buildCampoMapHtml() {
       };
     }
 
-    function ensureMeMarker(tracking) {
+    function ensureMeMarker(tracking, pos, heading) {
       var kind = tracking ? 'arrow' : 'dot';
       if (meMarker && meMarker.__kind === kind) return;
+      var at = pos || displayPos || targetPos;
       if (meMarker) { meMarker.setMap(null); meMarker = null; }
       meMarker = new google.maps.Marker({
-        map: map, title: 'Mi ubicación', zIndex: 60, icon: meIcon(tracking),
+        map: map,
+        position: at || { lat: -12.0464, lng: -77.0428 },
+        title: 'Mi ubicación',
+        zIndex: 60,
+        icon: meIcon(!!tracking, heading),
+        clickable: false,
       });
       meMarker.__kind = kind;
     }
@@ -325,64 +467,99 @@ export function buildCampoMapHtml() {
       return (a + diff * t + 360) % 360;
     }
 
+    function metersApprox(a, b) {
+      var dlat = (a.lat - b.lat) * 111320;
+      var dlng = (a.lng - b.lng) * 111320 * Math.cos(a.lat * Math.PI / 180);
+      return Math.sqrt(dlat * dlat + dlng * dlng);
+    }
+
     function tickAnim() {
       anim = null;
       if (!targetPos || !meMarker) return;
       if (!displayPos) displayPos = { lat: targetPos.lat, lng: targetPos.lng };
-      var t = 0.28;
-      displayPos = {
-        lat: lerp(displayPos.lat, targetPos.lat, t),
-        lng: lerp(displayPos.lng, targetPos.lng, t),
-      };
-      displayHeading = lerpAngle(displayHeading, targetHeading, 0.35);
+      if (metersApprox(displayPos, targetPos) > 40) {
+        displayPos = { lat: targetPos.lat, lng: targetPos.lng };
+        displayHeading = targetHeading;
+      } else {
+        displayPos = {
+          lat: lerp(displayPos.lat, targetPos.lat, 0.28),
+          lng: lerp(displayPos.lng, targetPos.lng, 0.28),
+        };
+        displayHeading = lerpAngle(displayHeading, targetHeading, 0.35);
+      }
       meMarker.setPosition(displayPos);
-      var icon = meMarker.getIcon();
-      if (icon && meMarker.__kind === 'arrow') {
-        icon.rotation = displayHeading;
-        meMarker.setIcon(icon);
+      if (meMarker.__kind === 'arrow') {
+        meMarker.setOptions({ rotation: compassOn ? 0 : displayHeading });
       }
-      if (followEnabled) {
-        map.panTo(displayPos);
-      }
-      var dx = Math.abs(displayPos.lat - targetPos.lat) + Math.abs(displayPos.lng - targetPos.lng);
-      if (dx > 0.000004) {
-        anim = requestAnimationFrame(tickAnim);
-      }
+      panFollow(displayPos);
+      if (trackingActive && !compassOn) lockNavCourse(displayHeading, false);
     }
 
-    function setMe(position, heading, tracking) {
+    function setAccuracy(position, accuracy) {
+      var radius = Number(accuracy);
+      if (!position || !Number.isFinite(radius) || radius < 4) {
+        if (accCircle) { accCircle.setMap(null); accCircle = null; }
+        return;
+      }
+      var pos = { lat: Number(position.lat), lng: Number(position.lng) };
+      var r = Math.max(8, Math.min(radius, 80));
+      if (!accCircle) {
+        accCircle = new google.maps.Circle({
+          map: map,
+          center: pos,
+          radius: r,
+          strokeColor: MY_BLUE,
+          strokeOpacity: 0.28,
+          strokeWeight: 1,
+          fillColor: MY_BLUE,
+          fillOpacity: 0.12,
+          clickable: false,
+        });
+        return;
+      }
+      accCircle.setCenter(pos);
+      accCircle.setRadius(r);
+    }
+
+    function setMe(position, heading, tracking, accuracy) {
       if (!position) {
         if (meMarker) { meMarker.setMap(null); meMarker = null; }
+        if (accCircle) { accCircle.setMap(null); accCircle = null; }
         displayPos = null;
         targetPos = null;
         trackingActive = false;
         return;
       }
-      ensureMeMarker(!!tracking);
-      if (tracking && !trackingActive) {
-        followEnabled = true;
-        emitFollow();
-      }
-      trackingActive = !!tracking;
       targetPos = { lat: Number(position.lat), lng: Number(position.lng) };
       targetHeading = Number(heading || 0);
+      var starting = tracking && !trackingActive;
+      if (starting) {
+        displayPos = { lat: targetPos.lat, lng: targetPos.lng };
+        displayHeading = targetHeading;
+        followEnabled = true;
+        cameraHold = true;
+        lastPan = null;
+        emitFollow();
+        lockNavCourse(targetHeading, true);
+      }
+      ensureMeMarker(!!tracking, targetPos, targetHeading);
+      trackingActive = !!tracking;
+      setAccuracy(tracking ? null : targetPos, tracking ? null : accuracy);
       if (!displayPos) {
         displayPos = { lat: targetPos.lat, lng: targetPos.lng };
         displayHeading = targetHeading;
-        meMarker.setPosition(displayPos);
-        var icon = meMarker.getIcon();
-        if (icon && meMarker.__kind === 'arrow') {
-          icon.rotation = displayHeading;
-          meMarker.setIcon(icon);
-        }
-        if (followEnabled) {
-          map.setCenter(displayPos);
-          map.setZoom(18);
-          if (map.setTilt) map.setTilt(0);
-          if (map.setHeading) map.setHeading(0);
-        }
       }
-      if (!anim) anim = requestAnimationFrame(tickAnim);
+      meMarker.setPosition(displayPos);
+      if (meMarker.__kind === 'arrow') {
+        meMarker.setOptions({ rotation: compassOn ? 0 : displayHeading });
+      }
+      if (starting) {
+        map.setCenter(displayPos);
+        lastPan = { lat: displayPos.lat, lng: displayPos.lng };
+        if (map.getZoom() < 16) map.setZoom(17);
+        if (map.setTilt) map.setTilt(0);
+      }
+      tickAnim();
     }
 
     function draw(payload) {
@@ -394,48 +571,84 @@ export function buildCampoMapHtml() {
       var heading = Number(payload.heading || 0);
       var selectedId = payload.selectedId;
       var routes = payload.routes || [];
+      var accuracy = payload.accuracy;
 
       var pins = payload.pins || [];
       var selectedPinId = payload.selectedPinId || null;
       var routeBounds = drawRoutes(routes, selectedId, payload.traveled || []);
       drawPins(pins, selectedPinId);
       ensureDestMarker(pins.length ? null : dest, payload.destColor);
-      setMe(position, heading, tracking);
+      setMe(position, heading, tracking, accuracy);
 
-      if (!tracking && routeBounds) {
+      if (tracking) {
+        lastIdleFit = '';
+        lastFocusToken = 0;
+        return;
+      }
+
+      var token = Number(payload.focusToken || 0);
+      if (token > 0 && token !== lastFocusToken) {
+        lastFocusToken = token;
+        var focusPin = null;
+        for (var i = 0; i < pins.length; i++) {
+          if (pins[i].id === selectedPinId) { focusPin = pins[i]; break; }
+        }
+        var focusAt = focusPin || dest;
+        if (focusAt) {
+          goToStop(focusAt.lat, focusAt.lng);
+          applyHorizon();
+          return;
+        }
+      }
+
+      var locked = cameraHold || followEnabled;
+      if (locked) {
+        applyHorizon();
+        return;
+      }
+
+      if (routeBounds) {
         if (map.setTilt) map.setTilt(0);
-        if (map.setHeading) map.setHeading(0);
+        applyHorizon();
         if (dest) routeBounds.extend(dest);
         if (position) routeBounds.extend(position);
         map.fitBounds(routeBounds, { top: 56, right: 40, bottom: 120, left: 40 });
-      } else if (!tracking && !routes.length) {
-        if (map.setTilt) map.setTilt(0);
-        if (map.setHeading) map.setHeading(0);
-        var idle = new google.maps.LatLngBounds();
-        var has = false;
-        pins.forEach(function (pin) { idle.extend({ lat: pin.lat, lng: pin.lng }); has = true; });
-        if (dest) { idle.extend(dest); has = true; }
-        if (position) { idle.extend(position); has = true; }
-        var idleKey = pins.map(function (p) { return p.id; }).join(',') +
-          (dest ? dest.lat + ',' + dest.lng : '') + (position ? ':me' : '');
-        if (has && idleKey !== lastIdleFit) {
-          lastIdleFit = idleKey;
-          if (pins.length + (dest ? 1 : 0) + (position ? 1 : 0) === 1) {
-            var only = pins[0] || dest || position;
-            map.setCenter({ lat: only.lat, lng: only.lng });
-            map.setZoom(14);
-          } else {
-            map.fitBounds(idle, 64);
-          }
+        return;
+      }
+
+      if (map.setTilt) map.setTilt(0);
+      applyHorizon();
+      var idle = new google.maps.LatLngBounds();
+      var has = false;
+      pins.forEach(function (pin) { idle.extend({ lat: pin.lat, lng: pin.lng }); has = true; });
+      if (dest) { idle.extend(dest); has = true; }
+      var idleKey = pins.map(function (p) { return p.id; }).join(',') +
+        (dest ? dest.lat + ',' + dest.lng : '');
+      if (has && idleKey !== lastIdleFit) {
+        lastIdleFit = idleKey;
+        if (pins.length + (dest ? 1 : 0) === 1) {
+          var only = pins[0] || dest;
+          map.setCenter({ lat: only.lat, lng: only.lng });
+          map.setZoom(14);
+        } else {
+          map.fitBounds(idle, 64);
         }
+        return;
+      }
+      if (!has && position && lastIdleFit !== 'me') {
+        lastIdleFit = 'me';
+        map.setCenter({ lat: position.lat, lng: position.lng });
+        map.setZoom(16);
       }
     }
 
     window.updateCampoMap = function (payload) { draw(payload); };
     window.recenterMe = recenterMe;
+    window.setCampoCompass = setCampoCompass;
 
     window.initCampoMap = function () {
       map = new google.maps.Map(document.getElementById('map'), {
+        ${MAPS_RASTER_OPTION},
         center: { lat: -12.0464, lng: -77.0428 },
         zoom: 13,
         disableDefaultUI: true,
@@ -447,8 +660,9 @@ export function buildCampoMapHtml() {
         ],
       });
       google.maps.event.addListener(map, 'dragstart', function () {
-        if (!followEnabled) return;
+        if (!followEnabled && !cameraHold) return;
         followEnabled = false;
+        cameraHold = false;
         emitFollow();
       });
       ready = true;
@@ -462,10 +676,14 @@ export function buildCampoMapHtml() {
       }
       if (!data || !data.type) return;
       if (data.type === 'recenter') { recenterMe(); return; }
+      if (data.type === 'compass') {
+        setCampoCompass(!!data.on, data.heading);
+        return;
+      }
       if (data.type === 'campo' || data.type === 'nav') window.updateCampoMap(data);
     });
   </script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=${key}&v=weekly&callback=initCampoMap" async></script>
+  ${leafletStart("initCampoMap")}
 </body>
 </html>`;
 }
@@ -476,4 +694,9 @@ export function campoMapUpdateScript(payload: unknown) {
 
 export function campoMapRecenterScript() {
   return `window.recenterMe && window.recenterMe(); true;`;
+}
+
+export function campoMapCompassScript(on: boolean, heading: number | null) {
+  const deg = heading == null || !Number.isFinite(heading) ? "null" : String(heading);
+  return `window.setCampoCompass && window.setCampoCompass(${on ? "true" : "false"}, ${deg}); true;`;
 }

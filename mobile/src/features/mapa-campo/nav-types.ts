@@ -25,10 +25,14 @@ export type CampoMapPayload = {
   tracking: boolean;
   position: LatLng | null;
   heading: number;
+  /** Radio GPS en metros (halo azul). */
+  accuracy?: number | null;
   dest: LatLng | null;
   destColor?: string | null;
   selectedId: string | null;
   selectedPinId?: string | null;
+  /** Cada toque de ruta/pin incrementa esto para enfocar el mapa. */
+  focusToken?: number;
   pins?: CampoMapPin[];
   routes: NavMapRoute[];
   /** Tramo ya recorrido (no se recalcula). */

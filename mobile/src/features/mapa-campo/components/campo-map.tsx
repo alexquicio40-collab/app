@@ -1,6 +1,9 @@
+import { CompassButton } from "@/features/map/components/compass-button";
 import { LocateButton } from "@/features/map/components/locate-button";
+import { requestCompassPermission, useCompassHeading } from "@/features/map/lib/use-compass-heading";
 import {
   buildCampoMapHtml,
+  campoMapCompassScript,
   campoMapRecenterScript,
   campoMapUpdateScript,
 } from "@/features/mapa-campo/lib/campo-map-html";
@@ -8,7 +11,8 @@ import type { CampoMapPayload, CampoMapPin } from "@/features/mapa-campo/nav-typ
 import type { LatLng } from "@/features/routes/navegacion/types";
 import { theme } from "@/lib/theme";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { Alert, Platform, StyleSheet, View } from "react-native";
+import { SafeMapWebView } from "@/features/map/lib/safe-map-webview";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 type CampoMapMessage = {
@@ -18,31 +22,30 @@ type CampoMapMessage = {
 };
 
 type CampoMapProps = {
-  /** Payload de navegación in-app (polylines + follow). */
   payload?: CampoMapPayload | null;
-  /** Fallback idle: destino seleccionado sin sesión de nav. */
   idleOrigin?: LatLng | null;
+  idleAccuracy?: number | null;
   idleDest?: LatLng | null;
   idleDestColor?: string | null;
   pins?: CampoMapPin[];
   selectedPinId?: string | null;
+  focusToken?: number;
   onSelectRoute?: (id: string) => void;
   onSelectPin?: (id: string) => void;
-  /** FAB para volver a centrar el carrito tras mover el mapa. */
-  showRecenter?: boolean;
   locateBottom?: number;
 };
 
 export function CampoMap({
   payload,
   idleOrigin,
+  idleAccuracy,
   idleDest,
   idleDestColor,
   pins,
   selectedPinId,
+  focusToken = 0,
   onSelectRoute,
   onSelectPin,
-  showRecenter = false,
   locateBottom = 16,
 }: CampoMapProps) {
   const html = useMemo(() => buildCampoMapHtml(), []);
@@ -55,6 +58,7 @@ export function CampoMap({
             tracking: false,
             position: idleOrigin ?? null,
             heading: 0,
+            accuracy: idleAccuracy ?? null,
             dest: idleDest ?? null,
             destColor: idleDestColor ?? null,
             selectedId: null,
@@ -63,12 +67,16 @@ export function CampoMap({
           };
     return {
       ...base,
+      accuracy: base.accuracy ?? idleAccuracy ?? null,
       pins: pins ?? base.pins ?? [],
       selectedPinId: selectedPinId ?? base.selectedPinId ?? null,
+      focusToken,
     };
-  }, [payload, idleOrigin, idleDest, idleDestColor, pins, selectedPinId]);
+  }, [payload, idleOrigin, idleAccuracy, idleDest, idleDestColor, pins, selectedPinId, focusToken]);
 
-  const [following, setFollowing] = useState(true);
+  const [following, setFollowing] = useState(false);
+  const [compassOn, setCompassOn] = useState(false);
+  const heading = useCompassHeading(compassOn);
   const webRef = useRef<WebView>(null);
   const frameRef = useRef<{
     contentWindow: { postMessage: (data: unknown, origin: string) => void } | null;
@@ -82,13 +90,25 @@ export function CampoMap({
     webRef.current?.injectJavaScript(campoMapUpdateScript(data));
   }, []);
 
+  const pushCompass = useCallback((on: boolean, deg: number | null) => {
+    if (Platform.OS === "web") {
+      frameRef.current?.contentWindow?.postMessage({ type: "compass", on, heading: deg }, "*");
+      return;
+    }
+    webRef.current?.injectJavaScript(campoMapCompassScript(on, deg));
+  }, []);
+
   useEffect(() => {
     push(effective);
   }, [effective, push]);
 
   useEffect(() => {
-    if (showRecenter) setFollowing(true);
-  }, [showRecenter]);
+    pushCompass(compassOn, heading);
+  }, [compassOn, heading, pushCompass]);
+
+  useEffect(() => {
+    if (effective.tracking) setFollowing(true);
+  }, [effective.tracking]);
 
   const recenter = useCallback(() => {
     setFollowing(true);
@@ -98,6 +118,21 @@ export function CampoMap({
     }
     webRef.current?.injectJavaScript(campoMapRecenterScript());
   }, []);
+
+  const toggleCompass = useCallback(() => {
+    void (async () => {
+      if (!compassOn) {
+        const ok = await requestCompassPermission();
+        if (!ok) {
+          const msg = "Activa el permiso de brújula para girar el mapa.";
+          if (Platform.OS === "web") window.alert(msg);
+          else Alert.alert("Brújula", msg);
+          return;
+        }
+      }
+      setCompassOn((value) => !value);
+    })();
+  }, [compassOn]);
 
   const handleSelect = useCallback(
     (raw: unknown) => {
@@ -127,11 +162,12 @@ export function CampoMap({
     }
   };
 
-  const locateFab = showRecenter ? (
-    <View style={[styles.locate, { bottom: locateBottom }]} pointerEvents="box-none">
+  const fabs = (
+    <View style={[styles.fabs, { bottom: locateBottom }]} pointerEvents="box-none">
       <LocateButton active={following} onPress={recenter} />
+      <CompassButton active={compassOn} onPress={toggleCompass} />
     </View>
-  ) : null;
+  );
 
   if (Platform.OS === "web") {
     return (
@@ -141,29 +177,34 @@ export function CampoMap({
           title="Mapa de campo"
           srcDoc={html}
           style={styles.frame}
-          onLoad={() => frameRef.current?.contentWindow?.postMessage(effective, "*")}
+          allow="geolocation; accelerometer; gyroscope; magnetometer"
+          onLoad={() => {
+            frameRef.current?.contentWindow?.postMessage(effective, "*");
+            frameRef.current?.contentWindow?.postMessage(
+              { type: "compass", on: compassOn, heading },
+              "*",
+            );
+          }}
         />
-        {locateFab}
+        {fabs}
       </View>
     );
   }
 
   return (
     <View style={styles.wrap}>
-      <WebView
+      <SafeMapWebView
         ref={webRef}
-        originWhitelist={["*"]}
-        source={{ html }}
+        source={{ html, baseUrl: "https://maps.googleapis.com" }}
         style={styles.map}
-        javaScriptEnabled
-        domStorageEnabled
-        geolocationEnabled
-        mixedContentMode="always"
         allowFileAccess
         onMessage={onMessage}
-        onLoadEnd={() => webRef.current?.injectJavaScript(campoMapUpdateScript(effective))}
+        onLoadEnd={() => {
+          webRef.current?.injectJavaScript(campoMapUpdateScript(effective));
+          webRef.current?.injectJavaScript(campoMapCompassScript(compassOn, heading));
+        }}
       />
-      {locateFab}
+      {fabs}
     </View>
   );
 }
@@ -172,9 +213,11 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: theme.colors.cream },
   map: { flex: 1, backgroundColor: theme.colors.cream },
   frame: { width: "100%", height: "100%", borderWidth: 0 } as never,
-  locate: {
+  fabs: {
     position: "absolute",
     right: 10,
     zIndex: 6,
+    gap: 8,
+    alignItems: "center",
   },
 });

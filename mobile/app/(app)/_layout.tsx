@@ -33,6 +33,7 @@ export default function AppLayout() {
         screenOptions={{
           headerShown: false,
           sceneStyle: { backgroundColor: theme.colors.bg },
+          freezeOnBlur: true,
         }}
       >
         <Tabs.Screen name="index" options={{ title: "Inicio" }} />

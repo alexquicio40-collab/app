@@ -1,4 +1,5 @@
 import { getGoogleMapsKey } from "@/features/map/lib/google-map";
+import { mapsJsSrc } from "@/features/map/lib/map-raster";
 import { fetchRestrictions } from "@/features/routes/assign/api";
 import { Platform } from "react-native";
 import {
@@ -180,7 +181,7 @@ function loadGoogleMapsJs(): Promise<void> {
     const script = document.createElement("script");
     script.dataset.bioclimMaps = "1";
     script.async = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(getGoogleMapsKey())}&v=weekly`;
+    script.src = mapsJsSrc(getGoogleMapsKey());
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("No se pudo cargar Google Maps"));
     document.head.appendChild(script);

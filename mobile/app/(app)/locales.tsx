@@ -10,6 +10,8 @@ import { LocalesSummary } from "@/features/locales/components/locales-summary";
 import { LocalesToolbar } from "@/features/locales/components/locales-toolbar";
 import { MetodosPagoManagerSheet } from "@/features/locales/components/metodos-pago-manager-sheet";
 import { useLocalesScreen } from "@/features/locales/hooks";
+import { canEditarLocal } from "@/features/locales/lib/permisos";
+import { useAuth } from "@/providers/auth-provider";
 import { theme } from "@/lib/theme";
 import { HeaderAction, IconCard } from "@/ui/header-action";
 import { ScreenHeader } from "@/ui/screen-header";
@@ -27,6 +29,7 @@ import {
 } from "react-native";
 
 export default function LocalesScreen() {
+  const { user } = useAuth();
   const screen = useLocalesScreen();
   const params = useLocalSearchParams<{ crear?: string }>();
   const bottomPad = useContentBottomPad(12);
@@ -67,11 +70,19 @@ export default function LocalesScreen() {
         local={item}
         canManage={screen.canManage}
         onOpen={() => screen.openLocal(item.id)}
-        onEdit={screen.canManage ? () => screen.openEdit(item.id) : undefined}
-        onDelete={screen.canManage ? () => void screen.removeLocal(item) : undefined}
+        onEdit={
+          screen.canManage && canEditarLocal(item, user?.rol)
+            ? () => screen.openEdit(item.id)
+            : undefined
+        }
+        onDelete={
+          screen.canManage && canEditarLocal(item, user?.rol)
+            ? () => void screen.removeLocal(item)
+            : undefined
+        }
       />
     ),
-    [screen],
+    [screen, user?.rol],
   );
 
   return (
@@ -204,7 +215,7 @@ export default function LocalesScreen() {
         canManage={screen.canManage}
         onClose={screen.closeLocal}
         onEdit={
-          screen.selected && screen.canManage
+          screen.selected && screen.canManage && canEditarLocal(screen.selected, user?.rol)
             ? () => {
                 const id = screen.selected!.id;
                 screen.closeLocal();
@@ -213,7 +224,9 @@ export default function LocalesScreen() {
             : undefined
         }
         onToggleCert={
-          screen.selected && screen.canManage
+          screen.selected &&
+          screen.canManage &&
+          canEditarLocal(screen.selected, user?.rol)
             ? () => void screen.toggleCertEstado(screen.selected!)
             : undefined
         }
@@ -226,6 +239,7 @@ export default function LocalesScreen() {
         saving={screen.mutating}
         ownerName={screen.ownerName}
         lockAsesor={screen.lockAsesor}
+        canRestrict={screen.canRestrict}
         onClose={screen.closeForm}
         onSave={screen.saveLocal}
       />

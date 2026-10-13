@@ -57,8 +57,18 @@ $utf8 = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText($appJsonPath, $appJson, $utf8)
 Write-Host "Versión $nextVersion · versionCode $nextCode"
 
+# App y caché nativa de cero: si se reutiliza android/, Gradle mezcla el FGS viejo.
+$androidDir = Join-Path $project "android"
+if (Test-Path $androidDir) {
+  cmd /c "rmdir /s /q `"$androidDir`""
+}
+foreach ($rel in @(".expo", "node_modules\.cache")) {
+  $dir = Join-Path $project $rel
+  if (Test-Path $dir) { cmd /c "rmdir /s /q `"$dir`"" }
+}
+
 Set-Location $project
-npx expo prebuild --platform android
+npx expo prebuild --platform android --clean
 if ($LASTEXITCODE -ne 0) { throw "expo prebuild terminó con código $LASTEXITCODE" }
 
 $cxx = Join-Path $shortRoot "android\app\.cxx"
@@ -82,7 +92,17 @@ foreach ($rel in $nativeCaches) {
 # CMake 3.22 entra en bucle con Ninja en Windows. El SDK tiene 3.30.5.
 $initScript = Join-Path $PSScriptRoot "pin-cmake.gradle"
 
+# Expo a veces cachea packageName=com.bioclim (nombre de la app) y el compile explota.
+foreach ($alink in @(
+  (Join-Path $shortRoot "android\build\generated\autolinking"),
+  (Join-Path $shortRoot "android\app\build\generated\autolinking")
+)) {
+  if (Test-Path $alink) { cmd /c "rmdir /s /q `"$alink`"" }
+}
+
 Set-Location (Join-Path $shortRoot "android")
+.\gradlew.bat clean --no-daemon --init-script $initScript
+if ($LASTEXITCODE -ne 0) { throw "Gradle clean terminó con código $LASTEXITCODE" }
 .\gradlew.bat assembleRelease --no-daemon --init-script $initScript "-PreactNativeArchitectures=armeabi-v7a,arm64-v8a" "-Pandroid.injected.signing.store.file=$keystore" "-Pandroid.injected.signing.store.password=$($cred.android.keystore.keystorePassword)" "-Pandroid.injected.signing.key.alias=$($cred.android.keystore.keyAlias)" "-Pandroid.injected.signing.key.password=$($cred.android.keystore.keyPassword)"
 if ($LASTEXITCODE -ne 0) { throw "Gradle terminó con código $LASTEXITCODE" }
 

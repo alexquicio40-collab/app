@@ -1,5 +1,5 @@
 import type { User } from "@/features/auth/types";
-import { isAdministrador, roleKey } from "@/lib/role-nav";
+import { isAdministrador, isAsesor, roleKey } from "@/lib/role-nav";
 
 export function seesAllUsers(rol?: string | null) {
   return isAdministrador(rol);
@@ -55,7 +55,7 @@ export function localesDelUsuario<
     const set = new Set(ids);
     return locales.filter((item) => item.id != null && set.has(String(item.id)));
   }
-  if (seesAllUsers(user.rol)) return locales;
+  if (seesAllUsers(user.rol) || isAsesor(user.rol)) return locales;
   return locales.filter((item) => matchAsesorTag(item.asesorBioClim, user));
 }
 

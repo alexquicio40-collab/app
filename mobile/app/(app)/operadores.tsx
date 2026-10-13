@@ -3,6 +3,7 @@ import { ActionsPanel } from "@/features/map/components/actions-panel";
 import { LiveMap, type LiveMapHandle } from "@/features/map/components/live-map";
 import { CompassButton } from "@/features/map/components/compass-button";
 import { LocateButton } from "@/features/map/components/locate-button";
+import { requestCompassPermission, useCompassHeading } from "@/features/map/lib/use-compass-heading";
 import { useMyLocation } from "@/features/map/lib/use-my-location";
 import { getAdminCoords } from "@/features/map/lib/admin-location";
 import {
@@ -28,6 +29,7 @@ export default function OperadoresScreen() {
   const [located, setLocated] = useState(false);
   const [compassOn, setCompassOn] = useState(false);
   const me = useMyLocation();
+  const heading = useCompassHeading(compassOn);
 
   useEffect(() => {
     if (!me) return;
@@ -82,6 +84,7 @@ export default function OperadoresScreen() {
           operators={screen.filtered}
           stops={screen.map.data.stops}
           selectedId={screen.map.selectedId}
+          heading={heading}
         />
 
         <View style={styles.left}>
@@ -110,8 +113,18 @@ export default function OperadoresScreen() {
           <CompassButton
             active={compassOn}
             onPress={() => {
-              live.current?.sendCmd("compass");
-              setCompassOn((value) => !value);
+              void (async () => {
+                if (!compassOn) {
+                  const ok = await requestCompassPermission();
+                  if (!ok) {
+                    if (Platform.OS === "web") window.alert("Activa el permiso de brújula para girar el mapa.");
+                    else Alert.alert("Brújula", "Activa el permiso de brújula para girar el mapa.");
+                    return;
+                  }
+                }
+                live.current?.sendCmd("compass");
+                setCompassOn((value) => !value);
+              })();
             }}
           />
         </View>

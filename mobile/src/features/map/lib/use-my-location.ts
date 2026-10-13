@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AdminCoords } from "./admin-location";
-import { watchPreciseFix } from "./precise-location";
+import { isBetterOrStableFix, watchPreciseFix, type PreciseFix } from "./precise-location";
 
 /** Posición actual en vivo. Sin GPS no inventa un punto. */
 export function useMyLocation(enabled = true) {
   const [coords, setCoords] = useState<AdminCoords | null>(null);
+  const lastRef = useRef<PreciseFix | null>(null);
 
   useEffect(() => {
     if (!enabled) {
+      lastRef.current = null;
       setCoords(null);
       return;
     }
@@ -17,6 +19,8 @@ export function useMyLocation(enabled = true) {
 
     void watchPreciseFix((fix) => {
       if (cancel) return;
+      if (!isBetterOrStableFix(lastRef.current, fix)) return;
+      lastRef.current = fix;
       setCoords({ lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy });
     })
       .then((handle) => {

@@ -9,6 +9,7 @@ import type { LocalItem } from "@/features/locales/types";
 import { theme } from "@/lib/theme";
 import { useEffect, useMemo, useRef } from "react";
 import { Platform, StyleSheet, View } from "react-native";
+import { SafeMapWebView } from "@/features/map/lib/safe-map-webview";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 type LocalesMapProps = {
@@ -26,6 +27,7 @@ function toPins(locales: LocalItem[]): LocalesMapPin[] {
       lat: item.latitud!,
       lng: item.longitud!,
       tone: normalizePrioridad(item.prioridad),
+      restringido: Boolean(item.restringido),
     }));
 }
 
@@ -35,9 +37,7 @@ export function LocalesMap({ locales, selectedId, onSelect }: LocalesMapProps) {
   const pins = useMemo(() => toPins(locales), [locales]);
   const payload = useMemo(() => ({ pins, selectedId, me }), [pins, selectedId, me]);
   const web = useRef<WebView>(null);
-  const frame = useRef<{ contentWindow: { postMessage: (data: unknown, origin: string) => void } | null } | null>(
-    null,
-  );
+  const frame = useRef<HTMLIFrameElement>(null);
   const payloadRef = useRef(payload);
   payloadRef.current = payload;
 
@@ -84,6 +84,7 @@ export function LocalesMap({ locales, selectedId, onSelect }: LocalesMapProps) {
           title="Mapa de locales"
           srcDoc={html}
           style={styles.frame}
+          allow="geolocation; accelerometer; gyroscope; magnetometer"
           onLoad={() => {
             setTimeout(() => post(payloadRef.current), 120);
           }}
@@ -94,16 +95,11 @@ export function LocalesMap({ locales, selectedId, onSelect }: LocalesMapProps) {
 
   return (
     <View style={styles.wrap}>
-      <WebView
+      <SafeMapWebView
         ref={web}
-        originWhitelist={["*"]}
         source={{ html, baseUrl: "https://maps.googleapis.com" }}
         style={styles.map}
-        javaScriptEnabled
-        domStorageEnabled
-        mixedContentMode="always"
         allowFileAccess
-        setSupportMultipleWindows={false}
         onMessage={onNativeMessage}
         onLoadEnd={() => {
           const inject = () => web.current?.injectJavaScript(localesMapUpdateScript(payloadRef.current));

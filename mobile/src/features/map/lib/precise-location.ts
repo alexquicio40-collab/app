@@ -9,11 +9,15 @@ export type PreciseFix = {
 };
 
 /** Lectura que ya no sirve: ~2 cuadras o más. */
-export const REJECT_ACCURACY_M = 90;
+export const REJECT_ACCURACY_M = 70;
 /** Objetivo al iniciar ruta / primer paint. */
-export const TARGET_ACCURACY_M = 18;
+export const TARGET_ACCURACY_M = 15;
 /** Aceptable si el GPS no afina más a tiempo. */
-export const ACCEPTABLE_ACCURACY_M = 35;
+export const ACCEPTABLE_ACCURACY_M = 28;
+/** Tope si el chip no baja de 28 m. */
+export const COARSE_CAP_M = 48;
+/** Espera al arrancar ruta: el primer fix suele ser red/Wi-Fi. */
+export const READ_FIX_TIMEOUT_MS = 14000;
 
 type WatchHandle = { remove: () => void };
 
@@ -52,6 +56,52 @@ export function isUsableFix(fix: PreciseFix, maxM = REJECT_ACCURACY_M) {
   return Number.isFinite(fix.lat) && Number.isFinite(fix.lng) && fix.accuracy <= maxM;
 }
 
+function metersBetween(a: PreciseFix, b: PreciseFix) {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Descarta saltos de red/Wi-Fi cuando ya hay un GPS más fino. */
+export function isBetterOrStableFix(prev: PreciseFix | null, next: PreciseFix) {
+  if (!isUsableFix(next, REJECT_ACCURACY_M)) return false;
+  if (!prev) return true;
+  if (next.accuracy <= prev.accuracy + 8) return true;
+  if (next.accuracy > prev.accuracy + 16 && metersBetween(prev, next) > 18) return false;
+  return metersBetween(prev, next) < 12;
+}
+
+/**
+ * El primer watchPosition suele salir 80–200 m (celda).
+ * Espera un GPS fino antes de pintar o arrancar ruta.
+ */
+function gateWatchFixes(onFix: (fix: PreciseFix) => void) {
+  let best: PreciseFix | null = null;
+  let armed = false;
+  const started = Date.now();
+
+  return (fix: PreciseFix) => {
+    if (!isBetterOrStableFix(best, fix)) return;
+    if (!best || fix.accuracy <= best.accuracy + 8) best = fix;
+
+    const wait = Date.now() - started;
+    if (!armed) {
+      const ready =
+        best.accuracy <= TARGET_ACCURACY_M ||
+        (wait >= 2500 && best.accuracy <= ACCEPTABLE_ACCURACY_M) ||
+        (wait >= 6000 && best.accuracy <= COARSE_CAP_M);
+      if (!ready) return;
+      armed = true;
+    }
+    onFix(best);
+  };
+}
+
 export async function ensureLocationPermission() {
   if (Platform.OS === "web") {
     return typeof navigator !== "undefined" && Boolean(navigator.geolocation);
@@ -68,7 +118,7 @@ export async function ensureLocationPermission() {
  * El primer `getCurrentPosition` suele salir 100–200 m corrido.
  */
 export async function readPreciseFix(opts?: { timeoutMs?: number }): Promise<PreciseFix> {
-  const timeoutMs = opts?.timeoutMs ?? 9000;
+  const timeoutMs = opts?.timeoutMs ?? READ_FIX_TIMEOUT_MS;
   if (!(await ensureLocationPermission())) {
     throw new Error("Activa el permiso de ubicación");
   }
@@ -106,7 +156,7 @@ function readBrowserFix(timeoutMs: number): Promise<PreciseFix> {
         }
       },
       (err) => {
-        if (best && isUsableFix(best, 80)) {
+        if (best && isUsableFix(best, COARSE_CAP_M)) {
           clearTimeout(timer);
           navigator.geolocation.clearWatch(watchId);
           resolve(best);
@@ -121,7 +171,7 @@ function readBrowserFix(timeoutMs: number): Promise<PreciseFix> {
 
     const timer = setTimeout(() => {
       navigator.geolocation.clearWatch(watchId);
-      if (best && isUsableFix(best, 80)) resolve(best);
+      if (best && isUsableFix(best, COARSE_CAP_M)) resolve(best);
       else reject(new Error("El GPS no afinó a tiempo"));
     }, timeoutMs);
   });
@@ -136,8 +186,8 @@ async function readNativeFix(timeoutMs: number): Promise<PreciseFix> {
 
   let best: PreciseFix | null = null;
   const last = await Location.getLastKnownPositionAsync({
-    maxAge: 6000,
-    requiredAccuracy: ACCEPTABLE_ACCURACY_M,
+    maxAge: 3500,
+    requiredAccuracy: TARGET_ACCURACY_M,
   }).catch(() => null);
   if (last) best = fromExpo(last.coords);
 
@@ -162,7 +212,7 @@ async function readNativeFix(timeoutMs: number): Promise<PreciseFix> {
     };
 
     const timer = setTimeout(() => {
-      if (best && isUsableFix(best, 80)) finish(best);
+      if (best && isUsableFix(best, COARSE_CAP_M)) finish(best);
       else fail("El GPS no afinó a tiempo");
     }, timeoutMs);
 
@@ -192,7 +242,7 @@ async function readNativeFix(timeoutMs: number): Promise<PreciseFix> {
         })
           .then((pos) => {
             const fix = fromExpo(pos.coords);
-            if (isUsableFix(fix, 80)) finish(fix);
+            if (isUsableFix(fix, COARSE_CAP_M)) finish(fix);
             else fail("La ubicación aún es imprecisa");
           })
           .catch(() => fail("No se pudo leer el GPS"));
@@ -207,10 +257,10 @@ function watchBrowser(
   if (typeof navigator === "undefined" || !navigator.geolocation) {
     throw new Error("Geolocalización no disponible");
   }
+  const emit = gateWatchFixes(onFix);
   const id = navigator.geolocation.watchPosition(
     (pos) => {
-      const fix = fromBrowser(pos.coords);
-      if (isUsableFix(fix)) onFix(fix);
+      emit(fromBrowser(pos.coords));
     },
     (err) => onError?.(new Error(err.message || "GPS")),
     { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 },
@@ -223,17 +273,17 @@ async function watchNative(
   onError?: (err: Error) => void,
 ): Promise<WatchHandle> {
   const Location = await import("expo-location");
+  const emit = gateWatchFixes(onFix);
   try {
     const sub = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 800,
-        distanceInterval: 1,
+        timeInterval: 400,
+        distanceInterval: 0,
         mayShowUserSettingsDialog: true,
       },
       (pos) => {
-        const fix = fromExpo(pos.coords);
-        if (isUsableFix(fix)) onFix(fix);
+        emit(fromExpo(pos.coords));
       },
     );
     return { remove: () => sub.remove() };

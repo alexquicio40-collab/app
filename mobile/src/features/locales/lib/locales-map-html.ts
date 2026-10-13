@@ -1,4 +1,4 @@
-import { getGoogleMapsKey } from "@/features/map/lib/google-map";
+import { MAPS_RASTER_OPTION, leafletHead, leafletStart } from "@/features/map/lib/map-raster";
 import { myLocationDotJs } from "@/features/map/lib/my-location-dot";
 import { LIMA } from "@/features/map/constants";
 
@@ -9,6 +9,7 @@ export type LocalesMapPin = {
   lng: number;
   /** alta = rojo · media = amarillo · baja = verde */
   tone: "alta" | "media" | "baja";
+  restringido?: boolean;
 };
 
 /**
@@ -16,8 +17,6 @@ export type LocalesMapPin = {
  * Importante: no tocar `google.*` hasta que cargue el script de Maps.
  */
 export function buildLocalesMapHtml() {
-  const key = getGoogleMapsKey();
-
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -31,6 +30,7 @@ export function buildLocalesMapHtml() {
     }
     #boot.hide { display: none; }
   </style>
+  ${leafletHead()}
 </head>
 <body>
   <div id="boot">Cargando mapa…</div>
@@ -104,6 +104,9 @@ export function buildLocalesMapHtml() {
       info.setContent(
         '<div style="font:700 12px system-ui,sans-serif;color:#0B1F1A;max-width:180px">' +
         String(pin.nombre).replace(/</g,'&lt;') +
+        (pin.restringido
+          ? '<div style="margin-top:4px;display:inline-block;padding:2px 6px;border-radius:6px;background:#FDECEC;color:#B42318;font-size:10px">Local restringido</div>'
+          : '') +
         '</div>'
       );
       info.open({ map: map, anchor: markers[pin.id] });
@@ -178,6 +181,7 @@ export function buildLocalesMapHtml() {
       if (boot) boot.className = 'hide';
 
       map = new google.maps.Map(document.getElementById('map'), {
+        ${MAPS_RASTER_OPTION},
         center: { lat: ${LIMA.lat}, lng: ${LIMA.lng} },
         zoom: 11,
         mapTypeControl: false,
@@ -230,7 +234,7 @@ export function buildLocalesMapHtml() {
       if (data.pins) window.updateLocalesMap(data);
     });
   </script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=${key}&v=weekly&callback=initLocalesMap" async defer></script>
+  ${leafletStart("initLocalesMap")}
 </body>
 </html>`;
 }

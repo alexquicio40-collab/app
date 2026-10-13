@@ -38,6 +38,7 @@ type LocalFormSheetProps = {
   saving?: boolean;
   ownerName?: string;
   lockAsesor?: boolean;
+  canRestrict?: boolean;
   onClose: () => void;
   onSave: (input: LocalFormInput) => Promise<void>;
 };
@@ -72,6 +73,7 @@ type FormState = {
   operadoresVenPrecio: boolean;
   metodosPagoIds: number[];
   prioridad: PrioridadProveedor;
+  restringido: boolean;
 };
 
 const emptyForm = (): FormState => ({
@@ -104,6 +106,7 @@ const emptyForm = (): FormState => ({
   operadoresVenPrecio: false,
   metodosPagoIds: [],
   prioridad: "media",
+  restringido: false,
 });
 
 export function LocalFormSheet({
@@ -113,6 +116,7 @@ export function LocalFormSheet({
   saving = false,
   ownerName = "",
   lockAsesor = false,
+  canRestrict = false,
   onClose,
   onSave,
 }: LocalFormSheetProps) {
@@ -191,6 +195,7 @@ export function LocalFormSheet({
       operadoresVenPrecio: local.operadoresVenPrecio,
       metodosPagoIds: local.metodosPago.map((m) => m.id),
       prioridad: normalizePrioridad(local.prioridad),
+      restringido: Boolean(local.restringido),
     });
     setShowMap(hasCoords);
     setError(null);
@@ -385,6 +390,7 @@ export function LocalFormSheet({
       precioGalonera: parseMoney(form.precioGaloneraText),
       operadoresVenPrecio: form.operadoresVenPrecio,
       prioridad: form.prioridad,
+      restringido: canRestrict ? form.restringido : false,
       metodosPagoIds: form.metodosPagoIds,
       pendingFotos,
       removedFotoIds,
@@ -652,6 +658,17 @@ export function LocalFormSheet({
               onChangeRemoved={setRemovedFotoIds}
             />
 
+            {canRestrict ? (
+              <Pressable
+                onPress={() => patch({ restringido: !form.restringido })}
+                style={[styles.toggle, form.restringido ? styles.restrictOn : null]}
+              >
+                <Text style={[styles.toggleText, form.restringido ? styles.restrictTextOn : null]}>
+                  {form.restringido ? "● Local restringido" : "○ Restringir local"}
+                </Text>
+              </Pressable>
+            ) : null}
+
             <Pressable
               onPress={() =>
                 patch({
@@ -880,8 +897,13 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.gold,
     backgroundColor: theme.colors.goldSoft,
   },
+  restrictOn: {
+    borderColor: theme.colors.danger,
+    backgroundColor: theme.colors.dangerSoft,
+  },
   toggleText: { color: theme.colors.muted, fontSize: 12, fontWeight: "700" },
   toggleTextOn: { color: theme.colors.gold },
+  restrictTextOn: { color: theme.colors.danger },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
   payChip: {
     paddingHorizontal: 8,

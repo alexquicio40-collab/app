@@ -1,4 +1,4 @@
-import { getGoogleMapsKey } from "@/features/map/lib/google-map";
+import { MAPS_RASTER_OPTION, leafletHead, leafletStart } from "@/features/map/lib/map-raster";
 import { LIMA } from "@/features/map/constants";
 
 /**
@@ -6,15 +6,13 @@ import { LIMA } from "@/features/map/constants";
  * No usa `google.*` hasta que cargue Maps.
  */
 export function buildLocalPickerMapHtml() {
-  const key = getGoogleMapsKey();
-
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  ${leafletHead()}
   <style>
-    html, body, #map { height: 100%; width: 100%; margin: 0; background: #E7EEEB; }
     #hint {
       position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 2;
       background: rgba(255,255,255,.92); border: 1px solid #D2DDD8; border-radius: 10px;
@@ -87,6 +85,7 @@ export function buildLocalPickerMapHtml() {
 
     window.initLocalPickerMap = function() {
       map = new google.maps.Map(document.getElementById('map'), {
+        ${MAPS_RASTER_OPTION},
         center: { lat: ${LIMA.lat}, lng: ${LIMA.lng} },
         zoom: 13,
         mapTypeControl: false,
@@ -128,7 +127,7 @@ export function buildLocalPickerMapHtml() {
       emit({ type: 'error', message: 'gm_authFailure' });
     };
   </script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=${key}&v=weekly&callback=initLocalPickerMap" async defer></script>
+  ${leafletStart("initLocalPickerMap")}
 </body>
 </html>`;
 }

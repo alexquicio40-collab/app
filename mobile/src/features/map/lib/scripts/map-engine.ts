@@ -1,3 +1,5 @@
+import { MAPS_RASTER_OPTION } from "../map-raster";
+
 /**
  * Runtime JS del mapa.
  * - Furgoneta 3D sólida (Car3D) + rotación plana
@@ -26,7 +28,7 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
     var compassOn = false;
     var lastMapHeading = 0;
     var deviceHeading = null;
-    var compassBound = false;
+    var horizon = null;
 
     var STYLE = [
       { featureType: "poi", stylers: [{ visibility: "off" }] },
@@ -422,7 +424,7 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
         var m = motion[id];
         var marker = operatorMarkers[id];
         if (!m || !marker) return;
-        var t = Math.min(1, (now - m.startedAt) / m.duration);
+        var t = 1;
         var e = easeOutCubic(t);
         var state = {
           id: Number(id),
@@ -440,11 +442,11 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
           m.fromHeading = m.toHeading;
         }
       });
-      rafId = active ? requestAnimationFrame(tickMotion) : 0;
+      rafId = 0;
     }
 
     function ensureAnim() {
-      if (!rafId) rafId = requestAnimationFrame(tickMotion);
+      tickMotion(Date.now());
     }
 
     function upsertOperator(op) {
@@ -520,13 +522,6 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
       ensureAnim();
     }
 
-    function headingFromEvent(event) {
-      if (!event) return null;
-      if (typeof event.webkitCompassHeading === "number") return event.webkitCompassHeading;
-      if (typeof event.alpha !== "number") return null;
-      return (360 - event.alpha + 360) % 360;
-    }
-
     function paintCompassRose(heading) {
       var rose = document.getElementById("compassRose");
       if (!rose) return;
@@ -534,40 +529,49 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
       rose.style.transform = "rotate(" + (-Number(heading || 0)) + "deg)";
     }
 
-    function applyMapHeading(heading) {
-      if (!map || !compassOn || heading == null || isNaN(heading)) return;
-      var next = (Number(heading) + 360) % 360;
-      if (Math.abs(next - lastMapHeading) < 2) return;
-      lastMapHeading = next;
-      if (map.setHeading) map.setHeading(next);
-      if (map.setTilt) map.setTilt(35);
-      paintCompassRose(next);
+    function ensureHorizon() {
+      if (horizon || typeof createHorizonSmoother !== "function") return horizon;
+      horizon = createHorizonSmoother(function (deg) {
+        lastMapHeading = deg;
+        if (map && map.setHeading) map.setHeading(deg);
+        paintCompassRose(deg);
+      });
+      return horizon;
     }
 
-    function bindDeviceCompass() {
-      if (compassBound) return;
-      compassBound = true;
-      var onOrient = function (event) {
-        var heading = headingFromEvent(event);
-        if (heading == null) return;
-        deviceHeading = heading;
-        applyMapHeading(heading);
-      };
-      window.addEventListener("deviceorientationabsolute", onOrient, true);
-      window.addEventListener("deviceorientation", onOrient, true);
+    function applyMapHeading(heading, snap) {
+      if (!map || !compassOn || heading == null || isNaN(heading)) return;
+      var next = ((Number(heading) % 360) + 360) % 360;
+      var api = ensureHorizon();
+      if (!api) {
+        lastMapHeading = next;
+        if (map.setHeading) map.setHeading(next);
+        paintCompassRose(next);
+        return;
+      }
+      if (snap) api.snap(next);
+      else api.aim(next);
     }
+
+    window.setDeviceHeading = function (h) {
+      if (h == null || isNaN(Number(h))) return;
+      deviceHeading = Number(h);
+      applyMapHeading(deviceHeading, false);
+    };
 
     function setCompass(on) {
       compassOn = Boolean(on);
-      bindDeviceCompass();
       paintCompassRose(lastMapHeading);
       if (!compassOn) {
+        var api = ensureHorizon();
+        if (api) api.snap(0);
+        else if (map && map.setHeading) map.setHeading(0);
         lastMapHeading = 0;
-        if (map && map.setHeading) map.setHeading(0);
         if (map && map.setTilt) map.setTilt(0);
+        paintCompassRose(0);
         return;
       }
-      if (deviceHeading != null) applyMapHeading(deviceHeading);
+      if (deviceHeading != null) applyMapHeading(deviceHeading, false);
     }
 
     function maybeFit(ops) {
@@ -629,12 +633,11 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
 
     window.initBioclimMap = function () {
       map = new google.maps.Map(document.getElementById("map"), {
+        ${MAPS_RASTER_OPTION},
         center: LIMA,
         zoom: 12,
         disableDefaultUI: true,
         gestureHandling: "greedy",
-        heading: 0,
-        tilt: 0,
         rotateControl: false,
         styles: STYLE,
         clickableIcons: false
@@ -653,6 +656,7 @@ export function buildMapEngineScript(limaLat: number, limaLng: number) {
       window.addEventListener("message", function (event) {
         if (!event.data) return;
         if (event.data.type === "live") window.updateLiveMap(event.data);
+        if (event.data.type === "heading") window.setDeviceHeading && window.setDeviceHeading(event.data.heading);
         if (event.data.type === "cmd") window.runMapCmd(event.data.action);
         if (event.data.type === "locate") {
           window.showMyLocation(event.data.lat, event.data.lng, event.data.accuracy, event.data.pan);

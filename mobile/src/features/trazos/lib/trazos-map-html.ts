@@ -1,13 +1,13 @@
 import { LIMA } from "@/features/map/constants";
-import { getGoogleMapsKey } from "@/features/map/lib/google-map";
+import { MAPS_RASTER_OPTION, leafletHead, leafletDynamicBoot } from "@/features/map/lib/map-raster";
 
 export function buildTrazosMapHtml() {
-  const key = getGoogleMapsKey();
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  ${leafletHead()}
   <style>
     html, body, #map { height: 100%; width: 100%; margin: 0; background: #E7EEEB; }
     #boot {
@@ -259,6 +259,7 @@ export function buildTrazosMapHtml() {
 
     function boot() {
       map = new google.maps.Map(document.getElementById('map'), {
+        ${MAPS_RASTER_OPTION},
         center: { lat: ${LIMA.lat}, lng: ${LIMA.lng} },
         zoom: 12,
         disableDefaultUI: true,
@@ -288,15 +289,7 @@ export function buildTrazosMapHtml() {
       if (map) apply(payload);
     };
 
-    if (window.google && window.google.maps) boot();
-    else {
-      var s = document.createElement('script');
-      s.src = 'https://maps.googleapis.com/maps/api/js?key=${key}';
-      s.async = true;
-      s.onload = boot;
-      s.onerror = function () { document.getElementById('boot').textContent = 'Error al cargar Maps'; };
-      document.head.appendChild(s);
-    }
+    ${leafletDynamicBoot("boot")}
   </script>
 </body>
 </html>`;

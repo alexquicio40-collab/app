@@ -3,6 +3,7 @@ import type { TrazoMapPayload } from "@/features/trazos/types";
 import { theme } from "@/lib/theme";
 import { useEffect, useMemo, useRef } from "react";
 import { Platform, StyleSheet, View } from "react-native";
+import { SafeMapWebView } from "@/features/map/lib/safe-map-webview";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 type TrazosMapProps = {
@@ -72,16 +73,11 @@ export function TrazosMap({ payload, onSelect }: TrazosMapProps) {
 
   return (
     <View style={styles.wrap}>
-      <WebView
+      <SafeMapWebView
         ref={web}
-        originWhitelist={["*"]}
         source={{ html, baseUrl: "https://maps.googleapis.com" }}
         style={styles.map}
-        javaScriptEnabled
-        domStorageEnabled
-        mixedContentMode="always"
         allowFileAccess
-        setSupportMultipleWindows={false}
         onMessage={onNativeMessage}
         onLoadEnd={() => {
           post(payloadRef.current);

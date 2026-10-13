@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@react-native-community/datetimepicker": "9.1.0",
+    "bioclim-location": "file:modules/bioclim-location",
     "expo": "~57.0.19",
     "expo-constants": "~57.0.17",
     "expo-document-picker": "~57.0.2",
@@ -54,8 +55,13 @@
   "private": true,
   "expo": {
     "autolinking": {
+      "searchPaths": [
+        "./modules"
+      ],
       "android": {
-        "buildFromSource": ["expo-location"]
+        "buildFromSource": [
+          "expo-location"
+        ]
       }
     }
   }

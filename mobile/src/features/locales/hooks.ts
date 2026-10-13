@@ -1,4 +1,7 @@
+import { canEditarLocal } from "./lib/permisos";
+import { loadRestringidos, rememberRestringido } from "./lib/restringidos-store";
 import { localesDelUsuario, seesAllUsers } from "@/lib/scope-user";
+import { isAdministrador } from "@/lib/role-nav";
 import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Platform } from "react-native";
@@ -66,11 +69,18 @@ export function useLocalesScreen() {
     setError(null);
     try {
       // Sin parsear fotos: listado/mapa listos mucho antes.
-      const rows = await fetchLocales({
-        force: mode === "refresh",
-        includeFotos: false,
-      });
-      setLocales(localesDelUsuario(rows, user));
+      const [rows, restrictedIds] = await Promise.all([
+        fetchLocales({
+          force: mode === "refresh",
+          includeFotos: false,
+        }),
+        loadRestringidos(),
+      ]);
+      const scoped = localesDelUsuario(rows, user).map((item) => ({
+        ...item,
+        restringido: item.restringido || restrictedIds.has(item.id),
+      }));
+      setLocales(scoped);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar los locales");
     } finally {
@@ -108,11 +118,16 @@ export function useLocalesScreen() {
 
   const openEdit = useCallback(
     (id: string) => {
+      const local = locales.find((item) => item.id === id);
+      if (local && !canEditarLocal(local, rol)) {
+        notify("Local restringido", "Puedes verlo, pero no editarlo.");
+        return;
+      }
       enrichLocal(id);
       setCreating(false);
       setEditingId(id);
     },
-    [enrichLocal],
+    [enrichLocal, locales, rol],
   );
 
   const filtered = useMemo(() => filterLocales(locales, filters), [locales, filters]);
@@ -160,8 +175,16 @@ export function useLocalesScreen() {
   const saveLocal = useCallback(
     async (input: LocalFormInput) => {
       const { pendingFotos = [], removedFotoIds = [], ...payload } = input;
+      if (editingId) {
+        const current = locales.find((item) => item.id === editingId);
+        if (current && !canEditarLocal(current, rol)) {
+          notify("Local restringido", "Puedes verlo, pero no editarlo.");
+          return;
+        }
+      }
       const stamped = {
         ...payload,
+        restringido: isAdministrador(rol) ? Boolean(payload.restringido) : false,
         asesorBioClim: seesAllUsers(rol)
           ? payload.asesorBioClim
           : user?.name || user?.username || payload.asesorBioClim,
@@ -179,6 +202,9 @@ export function useLocalesScreen() {
           }
         }
 
+        if (localId) {
+          await rememberRestringido(localId, Boolean(stamped.restringido));
+        }
         if (localId && (pendingFotos.length || removedFotoIds.length)) {
           await syncLocalFotos(localId, pendingFotos, removedFotoIds);
         }
@@ -194,11 +220,15 @@ export function useLocalesScreen() {
         setMutating(false);
       }
     },
-    [editingId, closeForm, load, rol, user],
+    [editingId, closeForm, load, rol, user, locales],
   );
 
   const removeLocal = useCallback(
     async (local: LocalItem) => {
+      if (!canEditarLocal(local, rol)) {
+        notify("Local restringido", "Puedes verlo, pero no editarlo.");
+        return;
+      }
       const ok = await confirmDelete(local.nombre);
       if (!ok) return;
       setMutating(true);
@@ -214,11 +244,15 @@ export function useLocalesScreen() {
         setMutating(false);
       }
     },
-    [],
+    [rol],
   );
 
   const toggleCertEstado = useCallback(async (local: LocalItem) => {
     if (!local.necesitaCertificacion) return;
+    if (!canEditarLocal(local, rol)) {
+      notify("Local restringido", "Puedes verlo, pero no editarlo.");
+      return;
+    }
     const next = local.estadoCertificacion === "pendiente" ? "ya emitido" : "pendiente";
     setMutating(true);
     try {
@@ -234,7 +268,7 @@ export function useLocalesScreen() {
     } finally {
       setMutating(false);
     }
-  }, []);
+  }, [rol]);
 
   const setCertFilter = useCallback((value: "necesita" | "no_necesita" | null) => {
     setFilters((prev) => ({ ...prev, certificacion: value }));
@@ -326,6 +360,7 @@ export function useLocalesScreen() {
     formOpen: creating || editingId != null,
     mutating,
     canManage,
+    canRestrict: isAdministrador(rol),
     ownerName: user?.name || user?.username || "",
     lockAsesor: !seesAllUsers(rol),
     metodosOpen,

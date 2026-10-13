@@ -4,6 +4,7 @@ import type { LiveOperator, LiveStop } from "@/features/map/types";
 import { theme } from "@/lib/theme";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import { Platform, StyleSheet, View } from "react-native";
+import { SafeMapWebView } from "@/features/map/lib/safe-map-webview";
 import { WebView } from "react-native-webview";
 
 export type LiveMapHandle = {
@@ -15,6 +16,7 @@ type LiveMapProps = {
   operators: LiveOperator[];
   stops: LiveStop[];
   selectedId: number | null;
+  heading?: number | null;
 };
 
 type LivePayload = {
@@ -66,7 +68,7 @@ function toPayload(operators: LiveOperator[], stops: LiveStop[], selectedId: num
 }
 
 export const LiveMap = forwardRef<LiveMapHandle, LiveMapProps>(function LiveMap(
-  { operators, stops, selectedId },
+  { operators, stops, selectedId, heading },
   ref,
 ) {
   const html = useMemo(() => buildGoogleMapHtml(), []);
@@ -119,6 +121,17 @@ export const LiveMap = forwardRef<LiveMapHandle, LiveMapProps>(function LiveMap(
     post(payload);
   }, [payload]);
 
+  useEffect(() => {
+    if (heading == null || !Number.isFinite(heading)) return;
+    if (Platform.OS === "web") {
+      frame.current?.contentWindow?.postMessage({ type: "heading", heading }, "*");
+      return;
+    }
+    web.current?.injectJavaScript(
+      `window.setDeviceHeading && window.setDeviceHeading(${Number(heading)}); true;`,
+    );
+  }, [heading]);
+
   if (Platform.OS === "web") {
     return (
       <View style={styles.wrap}>
@@ -127,7 +140,7 @@ export const LiveMap = forwardRef<LiveMapHandle, LiveMapProps>(function LiveMap(
           title="Mapa en vivo"
           srcDoc={html}
           style={styles.frame}
-          allow="geolocation"
+          allow="geolocation; accelerometer; gyroscope; magnetometer"
           onLoad={() => frame.current?.contentWindow?.postMessage(payload, "*")}
         />
       </View>
@@ -136,15 +149,10 @@ export const LiveMap = forwardRef<LiveMapHandle, LiveMapProps>(function LiveMap(
 
   return (
     <View style={styles.wrap}>
-      <WebView
+      <SafeMapWebView
         ref={web}
-        originWhitelist={["*"]}
-        source={{ html }}
+        source={{ html, baseUrl: "https://maps.googleapis.com" }}
         style={styles.map}
-        javaScriptEnabled
-        domStorageEnabled
-        geolocationEnabled
-        mixedContentMode="always"
         allowFileAccess
         onLoadEnd={() => web.current?.injectJavaScript(mapUpdateScript(payload))}
       />

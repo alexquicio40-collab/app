@@ -1,3 +1,4 @@
+import { esEmuladorAndroid } from "@/lib/emulador";
 import {
   createContext,
   useCallback,
@@ -24,6 +25,11 @@ export function LicenciaProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    if (esEmuladorAndroid()) {
+      setAutorizado(true);
+      setReady(true);
+      return;
+    }
     void dispositivoYaAutorizado().then((ok) => {
       if (cancelled) return;
       setAutorizado(ok);

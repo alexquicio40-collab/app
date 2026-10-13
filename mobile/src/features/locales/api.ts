@@ -137,6 +137,7 @@ export function parseLocal(
     // Listados: solo la portada (entrada). El resto se hidrata al abrir detalle.
     fotos: includeFotos ? parseFotos(row.fotos, id) : parseFirstFoto(row.fotos, id),
     prioridad: normalizePrioridad(text(row.prioridad)),
+    restringido: bool(row.restringido ?? row.local_restringido),
     createdAt: text(row.created_at, row.createdAt) || null,
   };
 }
@@ -174,6 +175,7 @@ function toBody(input: LocalFormInput) {
     operadores_ven_precio: input.operadoresVenPrecio ? 1 : 0,
     metodos_pago_ids: input.metodosPagoIds ?? [],
     prioridad: normalizePrioridad(input.prioridad),
+    restringido: input.restringido ? 1 : 0,
   };
 }
 

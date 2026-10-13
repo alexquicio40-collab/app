@@ -41,6 +41,11 @@ export function LocalCard({ local, canManage, onOpen, onEdit, onDelete }: LocalC
             </Text>
           </View>
         </View>
+        {local.restringido ? (
+          <View style={styles.restrictBadge}>
+            <Text style={styles.restrictBadgeText}>Local restringido</Text>
+          </View>
+        ) : null}
 
         {local.direccion ? (
           <Text style={styles.address} numberOfLines={2}>
@@ -70,7 +75,7 @@ export function LocalCard({ local, canManage, onOpen, onEdit, onDelete }: LocalC
         </View>
       </Pressable>
 
-      {canManage ? (
+      {onEdit || onDelete ? (
         <RouteActionBar>
           {onEdit ? (
             <ActionIconButton label="Editar" glyph="✎" tone="accent" onPress={onEdit} />
@@ -125,6 +130,18 @@ const styles = StyleSheet.create({
     maxWidth: 110,
   },
   badgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  restrictBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 7,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    backgroundColor: theme.colors.dangerSoft,
+  },
+  restrictBadgeText: {
+    color: theme.colors.danger,
     fontSize: 9,
     fontWeight: "800",
   },

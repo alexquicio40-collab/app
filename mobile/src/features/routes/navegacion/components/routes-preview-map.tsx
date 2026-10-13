@@ -12,6 +12,7 @@ import type { DirectionsResult, LatLng } from "@/features/routes/navegacion/type
 import { theme } from "@/lib/theme";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Platform, StyleSheet, View } from "react-native";
+import { SafeMapWebView } from "@/features/map/lib/safe-map-webview";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 type RoutesPreviewMapProps = {
@@ -144,14 +145,10 @@ export function RoutesPreviewMap({
 
   return (
     <View style={styles.wrap}>
-      <WebView
+      <SafeMapWebView
         ref={webRef}
-        originWhitelist={["*"]}
-        source={{ html }}
+        source={{ html, baseUrl: "https://maps.googleapis.com" }}
         style={styles.map}
-        javaScriptEnabled
-        domStorageEnabled
-        mixedContentMode="always"
         allowFileAccess
         onMessage={onMessage}
         onLoadEnd={() => webRef.current?.injectJavaScript(routesMapUpdateScript(payload))}

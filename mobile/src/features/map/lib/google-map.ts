@@ -1,4 +1,5 @@
 import { LIMA } from "../constants";
+import { leafletHead, leafletStart } from "./map-raster";
 import { CAR_3D_SCRIPT } from "./scripts/car-3d";
 import { buildMapEngineScript } from "./scripts/map-engine";
 
@@ -31,6 +32,7 @@ export function buildGoogleMapHtml() {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <style>${MAP_STYLES}</style>
+  ${leafletHead()}
 </head>
 <body>
   <div id="map"></div>
@@ -45,7 +47,7 @@ export function buildGoogleMapHtml() {
     ${CAR_3D_SCRIPT}
     ${buildMapEngineScript(LIMA.lat, LIMA.lng)}
   </script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=${KEY}&libraries=geometry&v=weekly&callback=initBioclimMap" async></script>
+  ${leafletStart("initBioclimMap")}
 </body>
 </html>`;
 }

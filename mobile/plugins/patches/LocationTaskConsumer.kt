@@ -44,6 +44,8 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
   private var mLocationRequest: LocationRequest? = null
   private var mLastReportedLocation: Location? = null
   private var mDeferredDistance = 0.0
+  private var mDeferredStart = false
+  private var mUpdatesStarted = false
   private val mDeferredLocations: MutableList<Location> = ArrayList()
 
   // Apps start in foreground state; lifecycle callbacks update this after initialization
@@ -59,13 +61,21 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
 
   override fun didRegister(task: TaskInterface) {
     mTask = task
-    startLocationUpdates()
-    maybeStartForegroundService()
+    // expo/expo#47595: tras una actualización o un reinicio, la tarea vuelve
+    // en segundo plano. Arrancar el servicio ahí es lo que cierra la app.
+    if (shouldUseForegroundService(task.options) && !AppForegroundedSingleton.isForegrounded) {
+      mDeferredStart = true
+      Log.w(TAG, "Location foreground service deferred until the app is foregrounded")
+      return
+    }
+    beginUpdates()
   }
 
   override fun didUnregister() {
     stopLocationUpdates()
     stopForegroundService()
+    mUpdatesStarted = false
+    mDeferredStart = false
     mTask = null
     mPendingIntent = null
     mLocationRequest = null
@@ -73,12 +83,24 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
 
   override fun setOptions(options: Map<String, Any>) {
     super.setOptions(options)
+    val task = mTask
+    if (task != null && shouldUseForegroundService(task.options) && !AppForegroundedSingleton.isForegrounded) {
+      mDeferredStart = true
+      return
+    }
+    if (mUpdatesStarted) {
+      stopLocationUpdates()
+      mUpdatesStarted = false
+    }
+    beginUpdates()
+  }
 
-    // Restart location updates
-    stopLocationUpdates()
-    startLocationUpdates()
-
-    // Restart foreground service if its option has changed.
+  private fun beginUpdates() {
+    mDeferredStart = false
+    if (!mUpdatesStarted) {
+      startLocationUpdates()
+      mUpdatesStarted = true
+    }
     maybeStartForegroundService()
   }
 
@@ -245,18 +267,6 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
           mService = bound
           if (bound == null) return
           bound.setParentContext(context)
-          try {
-            bound.startForeground(serviceOptions)
-          } catch (e: Exception) {
-            Log.w(TAG, "Foreground location task could not enter the foreground", e)
-            bound.stop()
-            mService = null
-            try {
-              context.unbindService(this)
-            } catch (_: Exception) {
-            }
-            if (mConnection === this) mConnection = null
-          }
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
@@ -272,13 +282,6 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
       } catch (e: Exception) {
         Log.w(TAG, "Foreground location task could not bind", e)
         mConnection = null
-      }
-    } else {
-      try {
-        mService?.startForeground(options.getArguments(FOREGROUND_SERVICE_KEY).toBundle())
-      } catch (e: Exception) {
-        Log.w(TAG, "Foreground location task could not be restarted", e)
-        stopForegroundService()
       }
     }
   }
@@ -404,8 +407,11 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
   override fun onHostResume() {
     mIsHostPaused = false
     maybeReportDeferredLocations()
-    // Al volver a primer plano se reintenta la notificación. En Samsung el
-    // proceso sobrevive al cierre y setOptions no la vuelve a mostrar.
+    val task = mTask
+    if (task != null && (mDeferredStart || mService == null) && shouldUseForegroundService(task.options)) {
+      beginUpdates()
+      return
+    }
     maybeStartForegroundService()
   }
 

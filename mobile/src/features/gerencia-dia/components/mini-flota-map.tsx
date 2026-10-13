@@ -1,6 +1,7 @@
 import { useLiveMap } from "@/features/map/hooks";
 import { useEffect, useMemo, useRef } from "react";
 import { Platform, StyleSheet, View } from "react-native";
+import { SafeMapWebView } from "@/features/map/lib/safe-map-webview";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { buildMiniFlotaHtml, miniFlotaUpdateScript, type MiniFlotaPin } from "../lib/mini-flota-html";
 import type { CamionRendimiento } from "../types";
@@ -90,16 +91,11 @@ export function MiniFlotaMap({ camiones }: MiniFlotaMapProps) {
 
   return (
     <View style={styles.wrap}>
-      <WebView
+      <SafeMapWebView
         ref={web}
-        originWhitelist={["*"]}
         source={{ html, baseUrl: "https://maps.googleapis.com" }}
         style={styles.map}
-        javaScriptEnabled
-        domStorageEnabled
-        mixedContentMode="always"
         allowFileAccess
-        setSupportMultipleWindows={false}
         onMessage={onNativeMessage}
         onLoadEnd={() => {
           const inject = () => web.current?.injectJavaScript(miniFlotaUpdateScript(payloadRef.current));

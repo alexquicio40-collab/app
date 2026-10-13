@@ -5,6 +5,7 @@ import {
 import { theme } from "@/lib/theme";
 import { useEffect, useMemo, useRef } from "react";
 import { Platform, StyleSheet, View } from "react-native";
+import { SafeMapWebView } from "@/features/map/lib/safe-map-webview";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 type LocalPickerMapProps = {
@@ -97,17 +98,11 @@ export function LocalPickerMap({ lat, lng, onPick }: LocalPickerMapProps) {
 
   return (
     <View style={styles.wrap}>
-      <WebView
+      <SafeMapWebView
         ref={web}
-        originWhitelist={["*"]}
         source={{ html, baseUrl: "https://maps.googleapis.com" }}
         style={styles.map}
-        javaScriptEnabled
-        domStorageEnabled
-        mixedContentMode="always"
         allowFileAccess
-        setSupportMultipleWindows={false}
-        nestedScrollEnabled
         onMessage={onNativeMessage}
         onLoadEnd={() => {
           const c = coordsRef.current;

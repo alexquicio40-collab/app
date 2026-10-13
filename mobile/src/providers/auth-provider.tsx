@@ -1,4 +1,5 @@
 import { hydrateUserScope, logoutRequest, meRequest } from "@/features/auth/api";
+import { esEmuladorAndroid } from "@/lib/emulador";
 import { marcarDispositivoAutorizado } from "@/features/sesiones/lib/dispositivo";
 import type { AuthResult, User } from "@/features/auth/types";
 import { hayInternet } from "@/lib/red";
@@ -44,6 +45,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
+        if (esEmuladorAndroid()) {
+          if (!cancelled) {
+            setUser({
+              id: 1,
+              name: "Emulador",
+              username: "emulador",
+              rol: "administrador",
+            });
+            setStatus("authenticated");
+          }
+          return;
+        }
         const userId = await getAccessToken();
         if (!userId) {
           if (!cancelled) setStatus("guest");
@@ -94,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setSessionClosedHandler(() => {
+      if (esEmuladorAndroid()) return;
       void clearTokens().then(() => {
         setUser(null);
         setStatus("guest");
@@ -104,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
-      if (state !== "active") return;
+      if (state !== "active" || esEmuladorAndroid()) return;
       void (async () => {
         if (await hayInternet()) {
           if (status !== "authenticated") return;
@@ -127,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (status !== "authenticated") return;
     const ping = async () => {
+      if (esEmuladorAndroid()) return;
       if (!(await hayInternet())) return;
       try {
         await meRequest();

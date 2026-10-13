@@ -1,4 +1,4 @@
-import { getGoogleMapsKey } from "@/features/map/lib/google-map";
+import { MAPS_RASTER_OPTION, leafletHead, leafletStart } from "@/features/map/lib/map-raster";
 import { LIMA } from "@/features/map/constants";
 
 export type MiniFlotaPin = {
@@ -10,12 +10,12 @@ export type MiniFlotaPin = {
 };
 
 export function buildMiniFlotaHtml() {
-  const key = getGoogleMapsKey();
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  ${leafletHead()}
   <style>
     html, body, #map { height: 100%; width: 100%; margin: 0; background: #EAF3ED; }
     #boot {
@@ -131,6 +131,7 @@ export function buildMiniFlotaHtml() {
 
     window.initMiniFlota = function () {
       map = new google.maps.Map(document.getElementById('map'), {
+        ${MAPS_RASTER_OPTION},
         center: { lat: ${LIMA.lat}, lng: ${LIMA.lng} },
         zoom: 11,
         disableDefaultUI: true,
@@ -149,7 +150,7 @@ export function buildMiniFlotaHtml() {
       if (pending) apply(pending);
     };
   </script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=${key}&v=weekly&callback=initMiniFlota" async defer></script>
+  ${leafletStart("initMiniFlota")}
 </body>
 </html>`;
 }

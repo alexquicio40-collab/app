@@ -1,4 +1,5 @@
 import { getGoogleMapsKey } from "@/features/map/lib/google-map";
+import { mapsJsSrc } from "@/features/map/lib/map-raster";
 import { decodePolyline } from "@/features/routes/navegacion/lib/format";
 import { Platform } from "react-native";
 import { metros } from "./geo";
@@ -28,7 +29,7 @@ function loadMaps(): Promise<void> {
     const script = document.createElement("script");
     script.dataset.trazosMaps = "1";
     script.async = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(getGoogleMapsKey())}&v=weekly`;
+    script.src = mapsJsSrc(getGoogleMapsKey());
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("No se pudo cargar Maps"));
     document.head.appendChild(script);

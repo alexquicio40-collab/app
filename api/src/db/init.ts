@@ -53,6 +53,14 @@ async function init() {
     ) ENGINE=InnoDB
   `);
 
+  try {
+    await db.query(
+      "ALTER TABLE locales ADD COLUMN restringido TINYINT(1) NOT NULL DEFAULT 0",
+    );
+  } catch {
+    // Ya existe o la tabla no está en este esquema.
+  }
+
   await db.end();
   console.log(`Base ${env.DB_NAME} lista (tabla usuarios).`);
 }

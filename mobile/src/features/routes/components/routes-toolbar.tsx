@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type RoutesToolbarProps = {
   filters: RoutesFilters;
@@ -164,39 +165,52 @@ function DateRangeChip({
   hasta: string | null;
   onChange: (desde: string | null, hasta: string | null) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const insets = useSafeAreaInsets();
+  const [picking, setPicking] = useState<"desde" | "hasta" | null>(null);
   const [draftDesde, setDraftDesde] = useState(desde);
   const [draftHasta, setDraftHasta] = useState(hasta);
-  const [picking, setPicking] = useState<"desde" | "hasta" | null>(null);
+  const sheetOpen = Platform.OS !== "android" && picking != null;
+  const bottomSafe = (Platform.OS === "android" ? Math.max(insets.bottom, 28) : Math.max(insets.bottom, 16)) + 12;
 
   const active = Boolean(desde || hasta);
   const label = formatRangeLabel(desde, hasta);
 
-  const openSheet = () => {
+  const startPick = () => {
     setDraftDesde(desde);
     setDraftHasta(hasta);
     setPicking("desde");
-    setOpen(true);
   };
 
-  const apply = () => {
-    let nextDesde = draftDesde;
-    let nextHasta = draftHasta;
-    if (nextDesde && nextHasta && nextDesde > nextHasta) {
-      [nextDesde, nextHasta] = [nextHasta, nextDesde];
+  const closePick = () => setPicking(null);
+
+  const commit = (nextDesde: string | null, nextHasta: string | null) => {
+    let a = nextDesde;
+    let b = nextHasta;
+    if (a && b && a > b) [a, b] = [b, a];
+    onChange(a, b);
+    setPicking(null);
+  };
+
+  const applyDraft = () => commit(draftDesde, draftHasta || draftDesde);
+
+  const onAndroidPick = (event: DateTimePickerEvent, date?: Date) => {
+    const step = picking;
+    setPicking(null);
+    if (event.type === "dismissed" || !date) {
+      if (step === "hasta" && draftDesde) commit(draftDesde, draftDesde);
+      return;
     }
-    onChange(nextDesde, nextHasta);
-    setOpen(false);
+    const key = toIsoDay(date);
+    if (step === "desde") {
+      setDraftDesde(key);
+      setTimeout(() => setPicking("hasta"), 180);
+      return;
+    }
+    commit(draftDesde ?? key, key);
   };
 
-  const setToday = () => {
-    const today = limaDate();
-    setDraftDesde(today);
-    setDraftHasta(today);
-  };
-
-  const onPick = (event: DateTimePickerEvent, date?: Date) => {
-    if (event.type === "dismissed" || !date) return;
+  const onIosPick = (_event: DateTimePickerEvent, date?: Date) => {
+    if (!date) return;
     const key = toIsoDay(date);
     if (picking === "desde") setDraftDesde(key);
     if (picking === "hasta") setDraftHasta(key);
@@ -207,44 +221,65 @@ function DateRangeChip({
       <FilterChip
         label={label}
         active={active}
-        onPress={openSheet}
+        onPress={startPick}
         onClear={() => onChange(null, null)}
       />
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+      {Platform.OS === "android" && picking ? (
+        <DateTimePicker
+          value={parseIsoDay(picking === "desde" ? draftDesde ?? desde : draftHasta ?? draftDesde, limaDate())}
+          mode="date"
+          display="default"
+          onChange={onAndroidPick}
+        />
+      ) : null}
+
+      <Modal visible={sheetOpen} transparent animationType="fade" onRequestClose={closePick}>
         <View style={styles.backdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
-          <View style={styles.rangeSheet}>
-            <Text style={styles.sheetTitle}>Rango de fechas</Text>
-
+          <Pressable style={StyleSheet.absoluteFill} onPress={closePick} />
+          <View style={[styles.rangeSheet, { paddingBottom: bottomSafe }]}>
+            <Text style={styles.sheetTitle}>Fecha</Text>
             <View style={styles.rangeRow}>
-              <DateField label="Desde" value={draftDesde} onPress={() => setPicking("desde")} />
-              <DateField label="Hasta" value={draftHasta} onPress={() => setPicking("hasta")} />
+              <DateField
+                label="Desde"
+                value={draftDesde}
+                active={picking === "desde"}
+                onPress={() => setPicking("desde")}
+              />
+              <DateField
+                label="Hasta"
+                value={draftHasta}
+                active={picking === "hasta"}
+                onPress={() => setPicking("hasta")}
+              />
             </View>
-
             {Platform.OS === "web" ? (
               <View style={styles.webDates}>
                 <WebDateInput label="Desde" value={draftDesde} onChange={setDraftDesde} />
                 <WebDateInput label="Hasta" value={draftHasta} onChange={setDraftHasta} />
               </View>
-            ) : null}
-
-            {Platform.OS !== "web" ? (
+            ) : (
               <View style={styles.calendarBox}>
                 <DateTimePicker
                   value={parseIsoDay(picking === "desde" ? draftDesde : draftHasta, limaDate())}
                   mode="date"
-                  display={Platform.OS === "ios" ? "inline" : "calendar"}
-                  onChange={onPick}
+                  display="spinner"
+                  onChange={onIosPick}
                 />
               </View>
-            ) : null}
-
+            )}
             <View style={styles.rangeActions}>
-              <Pressable onPress={setToday} style={styles.ghostBtn}>
+              <Pressable
+                onPress={() => {
+                  const today = limaDate();
+                  setDraftDesde(today);
+                  setDraftHasta(today);
+                }}
+                style={styles.ghostBtn}
+              >
                 <Text style={styles.ghostText}>Hoy</Text>
               </Pressable>
-              <Pressable onPress={apply} style={styles.applyBtn}>
+              <Pressable onPress={applyDraft} style={styles.applyBtn}>
                 <Text style={styles.applyText}>Aplicar</Text>
               </Pressable>
             </View>
@@ -258,15 +293,17 @@ function DateRangeChip({
 function DateField({
   label,
   value,
+  active,
   onPress,
 }: {
   label: string;
   value: string | null;
+  active?: boolean;
   onPress: () => void;
 }) {
   if (Platform.OS === "web") return null;
   return (
-    <Pressable onPress={onPress} style={styles.dateField}>
+    <Pressable onPress={onPress} style={[styles.dateField, active ? styles.dateFieldOn : null]}>
       <Text style={styles.dateLabel}>{label}</Text>
       <Text style={styles.dateValue}>{value ? formatDayMonth(value) : "Elegir"}</Text>
     </Pressable>
@@ -439,12 +476,10 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 18,
     paddingTop: 14,
     paddingHorizontal: 14,
-    paddingBottom: 24,
     gap: 12,
-    maxHeight: "92%",
+    maxHeight: "88%",
   },
   calendarBox: {
-    minHeight: 320,
     alignItems: "center",
     overflow: "hidden",
   },
@@ -467,6 +502,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 2,
+  },
+  dateFieldOn: {
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentSoft,
   },
   dateLabel: {
     color: theme.colors.muted,

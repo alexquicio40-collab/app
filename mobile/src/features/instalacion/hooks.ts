@@ -1,3 +1,4 @@
+import { esEmuladorAndroid } from "@/lib/emulador";
 import {
   createContext,
   createElement,
@@ -47,7 +48,7 @@ export function InstalacionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const done = await isInstalacionDone().catch(() => false);
+      const done = esEmuladorAndroid() || (await isInstalacionDone().catch(() => false));
       if (!alive) return;
       setCompleted(done);
       setReady(true);

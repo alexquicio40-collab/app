@@ -44,6 +44,7 @@ export function useMapaCampo() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const me = useMyLocation();
   const origin = me ? { lat: me.lat, lng: me.lng } : null;
+  const originAccuracy = me?.accuracy ?? null;
   const [panelOpen, setPanelOpen] = useState(false);
   const [live, setLive] = useState(false);
   const [fecha, setFecha] = useState(() => limaDate());
@@ -172,6 +173,7 @@ export function useMapaCampo() {
     selectedId,
     setSelectedId,
     origin,
+    originAccuracy,
     dest,
     panelOpen,
     setPanelOpen,

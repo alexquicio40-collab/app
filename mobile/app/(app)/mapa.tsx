@@ -23,7 +23,7 @@ import { RutaDetalleSheet } from "@/features/mapa-campo/components/ruta-detalle-
 import { deleteRoute } from "@/features/routes/api";
 import type { RouteItem } from "@/features/routes/types";
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 /**
  * Mapa de campo del operador (Flutter MapaScreen).
@@ -39,6 +39,12 @@ export default function MapaScreen() {
   });
   const bottomPad = useContentBottomPad(8);
   const [detail, setDetail] = useState<RouteItem | null>(null);
+  const [pinFocusToken, setPinFocusToken] = useState(0);
+
+  const selectCampoPin = useCallback((id: string) => {
+    campo.setSelectedId(id);
+    setPinFocusToken((n) => n + 1);
+  }, [campo.setSelectedId]);
 
   useEffect(() => {
     setDetail((prev) => {
@@ -116,13 +122,14 @@ export default function MapaScreen() {
           <CampoMap
             payload={nav.mapPayload}
             idleOrigin={nav.active ? null : campo.origin}
+            idleAccuracy={nav.active ? null : campo.originAccuracy}
             idleDest={campo.dest}
             idleDestColor={campo.selected ? prioridadMeta(campo.selected.prioridad).color : null}
             pins={campo.pins}
             selectedPinId={nav.active ? nav.routeItem?.id ?? campo.selectedId : campo.selectedId}
+            focusToken={nav.active ? 0 : pinFocusToken}
             onSelectRoute={nav.selectAlternative}
-            onSelectPin={campo.setSelectedId}
-            showRecenter={nav.active && !nav.arrived}
+            onSelectPin={selectCampoPin}
             locateBottom={bottomPad + 58}
           />
         )}
@@ -194,9 +201,9 @@ export default function MapaScreen() {
                 selectedId={campo.selectedId}
                 expanded={campo.panelOpen}
                 onToggle={() => campo.setPanelOpen((v) => !v)}
-                onSelect={campo.setSelectedId}
+                onSelect={selectCampoPin}
                 onOpen={(route) => {
-                  campo.setSelectedId(route.id);
+                  selectCampoPin(route.id);
                   setDetail(route);
                 }}
                 onDelete={quitarNoRecolectado}

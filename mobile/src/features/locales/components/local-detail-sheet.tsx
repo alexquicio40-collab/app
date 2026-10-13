@@ -59,6 +59,11 @@ export function LocalDetailSheet({
               <Text style={styles.cert}>
                 {certLabel(local.necesitaCertificacion, local.estadoCertificacion)}
               </Text>
+              {local.restringido ? (
+                <View style={styles.restrictBadge}>
+                  <Text style={styles.restrictBadgeText}>Local restringido</Text>
+                </View>
+              ) : null}
             </View>
             <Pressable onPress={onClose} style={styles.close}>
               <Text style={styles.closeText}>Cerrar</Text>
@@ -266,6 +271,15 @@ const styles = StyleSheet.create({
   },
   title: { color: theme.colors.ink, fontSize: 17, fontWeight: "800" },
   cert: { color: theme.colors.accent, fontSize: 12, fontWeight: "700" },
+  restrictBadge: {
+    alignSelf: "flex-start",
+    marginTop: 4,
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: theme.colors.dangerSoft,
+  },
+  restrictBadgeText: { color: theme.colors.danger, fontSize: 10, fontWeight: "800" },
   close: {
     paddingHorizontal: 10,
     paddingVertical: 6,

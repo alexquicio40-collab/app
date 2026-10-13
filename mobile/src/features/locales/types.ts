@@ -51,6 +51,7 @@ export type LocalItem = {
   metodosPago: { id: number; nombre: string }[];
   fotos: LocalFoto[];
   prioridad: "alta" | "media" | "baja";
+  restringido: boolean;
   createdAt: string | null;
 };
 
@@ -84,6 +85,7 @@ export type LocalFormInput = {
   operadoresVenPrecio?: boolean;
   metodosPagoIds?: number[];
   prioridad?: "alta" | "media" | "baja";
+  restringido?: boolean;
   pendingFotos?: PendingLocalFoto[];
   removedFotoIds?: string[];
 };

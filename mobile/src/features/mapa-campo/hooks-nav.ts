@@ -122,7 +122,7 @@ async function readPosition(): Promise<{ origin: LatLng; heading: number; mocked
   }
 
   try {
-    const fix = await readPreciseFix();
+    const fix = await readPreciseFix({ timeoutMs: 14000 });
     return {
       origin: { lat: fix.lat, lng: fix.lng },
       heading: fix.heading ?? 0,
@@ -301,7 +301,7 @@ export function useCampoNav() {
       let heading = moveHeading ?? 0;
       let remaining = 0;
       let offRoute = false;
-      const canSnap = accuracy == null || accuracy <= 25;
+      const canSnap = accuracy == null || accuracy <= 20;
 
       if (path.length >= 2) {
         const snap = snapToPolyline(raw, path);
