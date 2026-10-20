@@ -136,6 +136,10 @@ export function parseLocal(
     precioBalde: parseMoney(row.precio_balde ?? row.precioBalde),
     precioGalonera: parseMoney(row.precio_galonera ?? row.precioGalonera),
     operadoresVenPrecio: bool(row.operadores_ven_precio ?? row.operadoresVenPrecio),
+    operadoresVenTelefono:
+      row.operadores_ven_telefono == null && row.operadoresVenTelefono == null
+        ? true
+        : bool(row.operadores_ven_telefono ?? row.operadoresVenTelefono),
     frecuencias: parseFrecuencias(row.frecuencias_asignacion),
     metodosPago: parseMetodos(row.metodos_pago),
     fotos: includeFotos
@@ -180,6 +184,7 @@ function toBody(input: LocalFormInput) {
     precio_balde: input.precioBalde ?? null,
     precio_galonera: input.precioGalonera ?? null,
     operadores_ven_precio: input.operadoresVenPrecio ? 1 : 0,
+    operadores_ven_telefono: input.operadoresVenTelefono === false ? 0 : 1,
     metodos_pago_ids: input.metodosPagoIds ?? [],
     prioridad: normalizePrioridad(input.prioridad),
     restringido: input.restringido ? 1 : 0,
@@ -206,7 +211,9 @@ export async function fetchLocales(opts?: {
     return localesListCache.items;
   }
 
-  const payload = await api<unknown>("/api/locales");
+  const payload = await api<unknown>(
+    includeFotos ? "/api/locales" : "/api/locales?fotos=portada",
+  );
   const raw = new Map<string, UnknownRecord>();
   const items: LocalItem[] = [];
   for (const row of asRows(payload, "locales")) {
@@ -251,6 +258,15 @@ export function hydrateLocalFotos(local: LocalItem): LocalItem {
   const raw = rawLocalesById.get(local.id);
   if (!raw) return local;
   return parseLocal(raw, { includeFotos: true }) ?? local;
+}
+
+export async function fetchLocalById(id: string): Promise<LocalItem | null> {
+  const payload = await api<unknown>(`/api/locales/${id}`);
+  const row = isRecord(payload) && isRecord(payload.local) ? payload.local : null;
+  if (!row) return null;
+  const item = parseLocal(row, { includeFotos: true });
+  if (item) rawLocalesById.set(item.id, row);
+  return item;
 }
 
 export function invalidateLocalesCaches() {
@@ -302,7 +318,7 @@ export async function fetchLocalesLite(opts?: {
     }));
   }
 
-  const payload = await api<unknown>("/api/locales");
+  const payload = await api<unknown>("/api/locales?fotos=portada");
   const items: LocalLiteCached[] = asRows(payload, "locales")
     .map((row) => {
       const id = text(row.id);

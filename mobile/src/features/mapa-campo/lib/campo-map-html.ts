@@ -13,7 +13,8 @@ export function buildCampoMapHtml() {
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   ${leafletHead()}
   <style>
-    html, body, #stage, #map { height: 100%; width: 100%; margin: 0; background: #E7EEEB; }
+    html, body { height: 100%; width: 100%; margin: 0; overflow: hidden; background: #E7EEEB; }
+    #stage, #map { position: absolute; inset: 0; height: 100%; width: 100%; }
     #compassRose {
       position: absolute; top: 12px; right: 12px; z-index: 4;
       width: 44px; height: 44px; pointer-events: none;

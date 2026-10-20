@@ -210,8 +210,8 @@ export function CampoMap({
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: theme.colors.cream },
-  map: { flex: 1, backgroundColor: theme.colors.cream },
+  wrap: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.colors.cream },
+  map: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.colors.cream },
   frame: { width: "100%", height: "100%", borderWidth: 0 } as never,
   fabs: {
     position: "absolute",

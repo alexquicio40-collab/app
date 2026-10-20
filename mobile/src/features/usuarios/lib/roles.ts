@@ -23,7 +23,27 @@ export function esRolCampo(rol?: string | null) {
 }
 
 export function rolLabel(rol: string) {
+  const key = (rol ?? "").toLowerCase();
+  if (key === "conductor") return "Chofer";
   return ROL_OPTIONS.find((item) => item.value === rol)?.label ?? (rol || "—");
+}
+
+export function vinculoOptions(
+  usuarios: { id: string; nombre: string; rol: string; activo: boolean }[],
+  currentId?: string | null,
+) {
+  const skip = currentId ? String(currentId) : "";
+  return usuarios
+    .filter((item) => esRolCampo(item.rol) && item.activo && String(item.id) !== skip)
+    .sort((a, b) => {
+      const byRol = rolLabel(a.rol).localeCompare(rolLabel(b.rol), "es");
+      if (byRol) return byRol;
+      return a.nombre.localeCompare(b.nombre, "es");
+    })
+    .map((item) => ({
+      value: item.id,
+      label: `${rolLabel(item.rol)} · ${item.nombre}`,
+    }));
 }
 
 export function rolTone(rol: string): string {

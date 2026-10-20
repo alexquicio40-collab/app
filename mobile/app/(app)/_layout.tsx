@@ -43,17 +43,17 @@ export default function AppLayout() {
         />
         <Tabs.Screen
           name="mapa"
-          options={{ title: "Mapa", href: showMapa ? undefined : null }}
+          options={{ title: "Mapa", href: showMapa ? undefined : null, freezeOnBlur: false }}
         />
         <Tabs.Screen name="rutas" options={{ title: "Rutas" }} />
         <Tabs.Screen name="modulos" options={{ title: "Módulos" }} />
-        <Tabs.Screen name="locales" options={{ href: null }} />
+        <Tabs.Screen name="locales" options={{ href: null, freezeOnBlur: false }} />
         <Tabs.Screen name="rutas-mapa" options={{ href: null }} />
         <Tabs.Screen name="usuarios" options={{ href: null }} />
         <Tabs.Screen name="sesiones" options={{ href: null }} />
         <Tabs.Screen name="conductores" options={{ href: null }} />
         <Tabs.Screen name="planta" options={{ href: null }} />
-        <Tabs.Screen name="certificados" options={{ href: null }} />
+        <Tabs.Screen name="certificados" options={{ href: null, freezeOnBlur: false }} />
         <Tabs.Screen name="pagos" options={{ href: null }} />
         <Tabs.Screen name="reportes-kpi" options={{ href: null }} />
         <Tabs.Screen name="reportes" options={{ href: null }} />

@@ -13,6 +13,7 @@ import {
   extractCreatedLocalId,
   fetchLocales,
   fetchMetodosPago,
+  fetchLocalById,
   hydrateLocalFotos,
   invalidateLocalesCaches,
   peekLocalesCache,
@@ -127,6 +128,12 @@ export function useLocalesScreen() {
     setLocales((prev) =>
       prev.map((item) => (item.id === id ? hydrateLocalFotos(item) : item)),
     );
+    void fetchLocalById(id)
+      .then((full) => {
+        if (!full) return;
+        setLocales((prev) => prev.map((item) => (item.id === id ? full : item)));
+      })
+      .catch(() => undefined);
   }, []);
 
   const openLocal = useCallback(

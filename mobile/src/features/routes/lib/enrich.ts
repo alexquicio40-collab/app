@@ -21,7 +21,10 @@ export function enrichRouteWithLocal(route: RouteItem, local?: LocalItem | null)
       ? route.metodosPago
       : local.metodosPago.map((item) => ({ id: item.id, nombre: item.nombre })),
     encargadoNombre: route.encargadoNombre || local.encargadoNombre,
-    encargadoTelefono: route.encargadoTelefono || local.encargadoTelefono,
+    encargadoTelefono:
+      local.operadoresVenTelefono === false
+        ? route.encargadoTelefono
+        : route.encargadoTelefono || local.encargadoTelefono,
     horarioEntrada: route.horarioEntrada || local.horarioEntrada,
     asesorBioClim: route.asesorBioClim || local.asesorBioClim,
     telefonoAsesor: route.telefonoAsesor || local.telefonoAsesor,

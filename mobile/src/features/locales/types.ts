@@ -47,6 +47,7 @@ export type LocalItem = {
   precioBalde: number | null;
   precioGalonera: number | null;
   operadoresVenPrecio: boolean;
+  operadoresVenTelefono: boolean;
   frecuencias: string[];
   metodosPago: { id: number; nombre: string }[];
   fotos: LocalFoto[];
@@ -83,6 +84,7 @@ export type LocalFormInput = {
   precioBalde?: number | null;
   precioGalonera?: number | null;
   operadoresVenPrecio?: boolean;
+  operadoresVenTelefono?: boolean;
   metodosPagoIds?: number[];
   prioridad?: "alta" | "media" | "baja";
   restringido?: boolean;

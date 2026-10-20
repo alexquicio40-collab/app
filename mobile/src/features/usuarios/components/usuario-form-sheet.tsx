@@ -1,5 +1,5 @@
 import { checkUsuarioExists, defaultFormFromUser } from "@/features/usuarios/api";
-import { esRolCampo, FINALIZACION_FLAGS, ROL_OPTIONS } from "@/features/usuarios/lib/roles";
+import { esRolCampo, FINALIZACION_FLAGS, ROL_OPTIONS, vinculoOptions } from "@/features/usuarios/lib/roles";
 import type { UsuarioFormInput, UsuarioItem } from "@/features/usuarios/types";
 import {
   FieldLabel,
@@ -112,10 +112,7 @@ export function UsuarioFormSheet({
   if (!open) return null;
 
   const isCampo = esRolCampo(form.rol);
-  const vinculoRol = form.rol === "chofer" ? "operador" : "chofer";
-  const vinculoOptions = usuarios
-    .filter((item) => item.id !== user?.id && item.rol === vinculoRol && item.activo)
-    .map((item) => ({ value: item.id, label: item.nombre }));
+  const vinculoLista = vinculoOptions(usuarios, user?.id);
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -184,10 +181,11 @@ export function UsuarioFormSheet({
 
             {isCampo ? (
               <SelectField
-                label={form.rol === "chofer" ? "Vincular con operador" : "Vincular con chofer"}
+                label="Vincular operador o chofer"
                 value={form.vinculadoUsuarioId ?? ""}
-                placeholder={form.rol === "chofer" ? "Operador…" : "Chofer…"}
-                options={vinculoOptions}
+                placeholder="Seleccionar…"
+                searchable
+                options={vinculoLista}
                 onChange={(vinculadoUsuarioId) =>
                   patch({ vinculadoUsuarioId: vinculadoUsuarioId ?? "" })
                 }

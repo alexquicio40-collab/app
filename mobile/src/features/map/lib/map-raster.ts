@@ -25,14 +25,16 @@ export function mapsJsSrc(key: string, callback?: string, libraries?: string) {
 export function leafletHead() {
   return `<link rel="stylesheet" href="${LEAFLET_CSS}"/>
 <style>
-  html, body, #map, .leaflet-container { height: 100%; width: 100%; margin: 0; background: #E7EEEB; }
+  html, body { height: 100%; width: 100%; margin: 0; overflow: hidden; background: #E7EEEB; }
+  #map, .leaflet-container { height: 100%; width: 100%; margin: 0; background: #E7EEEB; }
   .gm-label { background: #fff; border: 1px solid #D2DDD8; border-radius: 6px; padding: 1px 6px; font: 700 11px system-ui, sans-serif; color: #14261F; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-  .gm-nav-stage { height: 100%; width: 100%; overflow: hidden; perspective-origin: 50% 88%; }
-  .gm-nav-stage.gm-nav-on { perspective: 1280px; }
+  .gm-nav-stage { position: absolute; inset: 0; overflow: hidden; perspective-origin: 50% 100%; }
+  .gm-nav-stage.gm-nav-on { perspective: 980px; }
   .gm-nav-stage.gm-nav-on .leaflet-container {
-    transform: rotateX(var(--gm-tilt, 50deg)) scale(1.34);
-    transform-origin: 50% 80%;
-    transition: transform 0.38s ease-out;
+    transform: rotateX(var(--gm-tilt, 50deg)) scale(1.78);
+    transform-origin: 50% 100%;
+    transition: transform 0.28s ease-out;
+    will-change: transform;
   }
 </style>`;
 }
@@ -418,10 +420,14 @@ google.maps.Map.prototype.setTilt = function (deg) {
   if (n < 0.5) {
     stage.classList.remove("gm-nav-on");
     stage.style.removeProperty("--gm-tilt");
-    return;
+  } else {
+    stage.classList.add("gm-nav-on");
+    stage.style.setProperty("--gm-tilt", n + "deg");
   }
-  stage.classList.add("gm-nav-on");
-  stage.style.setProperty("--gm-tilt", n + "deg");
+  var self = this;
+  if (self._L && self._L.invalidateSize) {
+    setTimeout(function () { try { self._L.invalidateSize(); } catch (e) {} }, 40);
+  }
 };
 google.maps.Map.prototype.getTilt = function () { return this._tilt || 0; };
 google.maps.Map.prototype.moveCamera = function (cam) {

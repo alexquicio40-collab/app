@@ -142,7 +142,14 @@ export function LocalDetailSheet({
 
             <Section title="Contacto">
               <Pair label="Encargado" value={local.encargadoNombre || "—"} />
-              <Pair label="Teléfono" value={local.encargadoTelefono || "—"} />
+              <Pair
+                label={
+                  canManage && !local.operadoresVenTelefono
+                    ? "Teléfono · oculto campo"
+                    : "Teléfono"
+                }
+                value={local.encargadoTelefono || "—"}
+              />
               <Pair label="Horario proveedores" value={local.horarioEntrada || "—"} />
             </Section>
 

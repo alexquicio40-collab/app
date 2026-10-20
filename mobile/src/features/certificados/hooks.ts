@@ -1,5 +1,5 @@
-import { fetchLocales } from "@/features/locales/api";
-import { localesDelUsuario, matchAsesorTag, seesAllUsers } from "@/lib/scope-user";
+import { matchAsesorTag, seesAllUsers } from "@/lib/scope-user";
+import { isAsesor } from "@/lib/role-nav";
 import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Linking, Platform } from "react-native";
@@ -71,7 +71,7 @@ export function useCertificadosScreen() {
   const canAccess = rol === "administrador" || rol === "asesor";
   const canDeleteHistorial = rol === "administrador";
   const canUpload = canAccess;
-  const allUsers = seesAllUsers(rol);
+  const allUsers = seesAllUsers(rol) || isAsesor(rol);
 
   const [tab, setTab] = useState<CertificadoTab>("pendientes");
   const [pendientes, setPendientes] = useState<CertificadoPendiente[]>([]);
@@ -103,32 +103,21 @@ export function useCertificadosScreen() {
     else if (mode === "refresh") setRefreshing(true);
     setError(null);
     try {
-      const [pendRows, histRows, locales] = await Promise.all([
+      const [pendRows, histRows] = await Promise.all([
         fetchPendientes(pendFiltersRef.current),
         fetchHistorial({
           fechaDesde: histFiltersRef.current.fechaDesde,
           fechaHasta: histFiltersRef.current.fechaHasta,
         }),
-        allUsers ? Promise.resolve([]) : fetchLocales({ includeFotos: false }).catch(() => []),
       ]);
-      const mine = allUsers ? [] : localesDelUsuario(locales, user);
-      const ids = new Set(mine.map((item) => item.id));
-      const nombres = new Set(mine.map((item) => item.nombre.trim().toLowerCase()));
       const pendScoped = allUsers
         ? pendRows
-        : pendRows.filter(
-            (item) =>
-              matchAsesorTag(item.asesorBioClim, user) ||
-              ids.has(item.id) ||
-              nombres.has(item.nombre.trim().toLowerCase()),
-          );
+        : pendRows.filter((item) => matchAsesorTag(item.asesorBioClim, user));
       const histScoped = allUsers
         ? histRows
         : histRows.filter(
             (item) =>
               (item.usuarioId && user?.id != null && String(item.usuarioId) === String(user.id)) ||
-              (item.localId ? ids.has(item.localId) : false) ||
-              nombres.has(item.localNombre.trim().toLowerCase()) ||
               matchAsesorTag(item.usuarioNombre, user),
           );
       setPendientes(pendScoped);

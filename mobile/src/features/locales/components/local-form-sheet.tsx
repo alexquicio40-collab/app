@@ -71,6 +71,7 @@ type FormState = {
   precioBaldeText: string;
   precioGaloneraText: string;
   operadoresVenPrecio: boolean;
+  operadoresVenTelefono: boolean;
   metodosPagoIds: number[];
   prioridad: PrioridadProveedor;
   restringido: boolean;
@@ -104,6 +105,7 @@ const emptyForm = (): FormState => ({
   precioBaldeText: "",
   precioGaloneraText: "",
   operadoresVenPrecio: false,
+  operadoresVenTelefono: true,
   metodosPagoIds: [],
   prioridad: "media",
   restringido: false,
@@ -193,6 +195,7 @@ export function LocalFormSheet({
       precioBaldeText: moneyText(local.precioBalde),
       precioGaloneraText: moneyText(local.precioGalonera),
       operadoresVenPrecio: local.operadoresVenPrecio,
+      operadoresVenTelefono: local.operadoresVenTelefono !== false,
       metodosPagoIds: local.metodosPago.map((m) => m.id),
       prioridad: normalizePrioridad(local.prioridad),
       restringido: Boolean(local.restringido),
@@ -389,6 +392,7 @@ export function LocalFormSheet({
       precioBalde: parseMoney(form.precioBaldeText),
       precioGalonera: parseMoney(form.precioGaloneraText),
       operadoresVenPrecio: form.operadoresVenPrecio,
+      operadoresVenTelefono: form.operadoresVenTelefono,
       prioridad: form.prioridad,
       restringido: canRestrict ? form.restringido : false,
       metodosPagoIds: form.metodosPagoIds,
@@ -595,6 +599,19 @@ export function LocalFormSheet({
                 />
               </View>
             </FieldRow>
+
+            <Pressable
+              onPress={() => patch({ operadoresVenTelefono: !form.operadoresVenTelefono })}
+              style={[styles.toggle, form.operadoresVenTelefono ? styles.toggleOn : null]}
+            >
+              <Text
+                style={[styles.toggleText, form.operadoresVenTelefono ? styles.toggleTextOn : null]}
+              >
+                {form.operadoresVenTelefono
+                  ? "● Chofer y operador ven el celular"
+                  : "○ Chofer y operador no ven el celular"}
+              </Text>
+            </Pressable>
 
             <View style={styles.field}>
               <FieldLabel>Prioridad</FieldLabel>
