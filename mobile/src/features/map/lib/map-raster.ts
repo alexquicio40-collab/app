@@ -27,6 +27,13 @@ export function leafletHead() {
 <style>
   html, body, #map, .leaflet-container { height: 100%; width: 100%; margin: 0; background: #E7EEEB; }
   .gm-label { background: #fff; border: 1px solid #D2DDD8; border-radius: 6px; padding: 1px 6px; font: 700 11px system-ui, sans-serif; color: #14261F; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .gm-nav-stage { height: 100%; width: 100%; overflow: hidden; perspective-origin: 50% 88%; }
+  .gm-nav-stage.gm-nav-on { perspective: 1280px; }
+  .gm-nav-stage.gm-nav-on .leaflet-container {
+    transform: rotateX(var(--gm-tilt, 50deg)) scale(1.34);
+    transform-origin: 50% 80%;
+    transition: transform 0.38s ease-out;
+  }
 </style>`;
 }
 
@@ -325,6 +332,7 @@ google.maps.Map = function (el, opts) {
     bearing: 0
   });
   this._heading = 0;
+  this._tilt = 0;
   this._road.addTo(this._L);
   var self = this;
   var fellBack = false;
@@ -393,14 +401,44 @@ google.maps.Map.prototype.setHeading = function (deg) {
     try { this._L.setBearing(n); return; } catch (e) {}
   }
   var pane = this._L && this._L.getPane && this._L.getPane("mapPane");
-  var el = pane || (this._L && this._L.getContainer());
-  if (!el) return;
-  el.style.transformOrigin = "50% 50%";
-  el.style.transition = "none";
-  el.style.transform = n ? "rotate(" + (-n) + "deg)" : "";
+  if (!pane) return;
+  pane.style.transformOrigin = "50% 50%";
+  pane.style.transition = "none";
+  pane.style.transform = n ? "rotate(" + (-n) + "deg)" : "";
 };
 google.maps.Map.prototype.getHeading = function () { return this._heading || 0; };
-google.maps.Map.prototype.setTilt = function () {};
+google.maps.Map.prototype.setTilt = function (deg) {
+  var n = Math.max(0, Math.min(67, Number(deg) || 0));
+  if (this._tilt != null && Math.abs(this._tilt - n) < 0.35) return;
+  this._tilt = n;
+  var el = this._L && this._L.getContainer();
+  if (!el) return;
+  var stage = el.closest ? el.closest(".gm-nav-stage") : el.parentElement;
+  if (!stage) return;
+  if (n < 0.5) {
+    stage.classList.remove("gm-nav-on");
+    stage.style.removeProperty("--gm-tilt");
+    return;
+  }
+  stage.classList.add("gm-nav-on");
+  stage.style.setProperty("--gm-tilt", n + "deg");
+};
+google.maps.Map.prototype.getTilt = function () { return this._tilt || 0; };
+google.maps.Map.prototype.moveCamera = function (cam) {
+  cam = cam || {};
+  if (cam.tilt != null) this.setTilt(cam.tilt);
+  if (cam.heading != null) this.setHeading(cam.heading);
+  if (cam.center && cam.zoom != null) {
+    var ll = gmLL(cam.center);
+    if (ll) this._L.setView(ll, cam.zoom, { animate: !cam.snap });
+    return;
+  }
+  if (cam.center) {
+    if (cam.snap) this.setCenter(cam.center);
+    else this.panTo(cam.center);
+  }
+  if (cam.zoom != null) this.setZoom(cam.zoom);
+};
 
 google.maps.event = {
   addListener: function (target, ev, fn) {

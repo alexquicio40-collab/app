@@ -25,6 +25,8 @@ export type CampoMapPayload = {
   tracking: boolean;
   position: LatLng | null;
   heading: number;
+  /** Velocidad GPS (m/s) para zoom / look-ahead de cámara. */
+  speedMps?: number | null;
   /** Radio GPS en metros (halo azul). */
   accuracy?: number | null;
   dest: LatLng | null;
@@ -51,6 +53,7 @@ export type CampoNavState = {
   selected: SuggestedRoute | null;
   position: LatLng | null;
   heading: number;
+  speedMps: number;
   remainingMeters: number;
   etaSeconds: number;
   vehicleType: string | null;

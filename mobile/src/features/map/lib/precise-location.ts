@@ -18,6 +18,8 @@ export const ACCEPTABLE_ACCURACY_M = 28;
 export const COARSE_CAP_M = 48;
 /** Espera al arrancar ruta: el primer fix suele ser red/Wi-Fi. */
 export const READ_FIX_TIMEOUT_MS = 14000;
+/** Cadencia del watch: 0 = tan rápido como el chip (sin espera de 2–3 s). */
+export const WATCH_INTERVAL_MS = 0;
 
 type WatchHandle = { remove: () => void };
 
@@ -67,38 +69,30 @@ function metersBetween(a: PreciseFix, b: PreciseFix) {
   return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-/** Descarta saltos de red/Wi-Fi cuando ya hay un GPS más fino. */
-export function isBetterOrStableFix(prev: PreciseFix | null, next: PreciseFix) {
+/**
+ * En seguimiento: publica el último GPS usable.
+ * No se queda pegado al “mejor” fix viejo (eso retrasa 2–3 s y raya el punto).
+ * Solo corta saltos imposibles de red/Wi-Fi.
+ */
+export function isLiveFix(prev: PreciseFix | null, next: PreciseFix) {
   if (!isUsableFix(next, REJECT_ACCURACY_M)) return false;
   if (!prev) return true;
-  if (next.accuracy <= prev.accuracy + 8) return true;
-  if (next.accuracy > prev.accuracy + 16 && metersBetween(prev, next) > 18) return false;
-  return metersBetween(prev, next) < 12;
+  const dist = metersBetween(prev, next);
+  if (next.accuracy >= 50 && dist > 90 && next.accuracy > prev.accuracy + 25) return false;
+  return true;
 }
 
-/**
- * El primer watchPosition suele salir 80–200 m (celda).
- * Espera un GPS fino antes de pintar o arrancar ruta.
- */
-function gateWatchFixes(onFix: (fix: PreciseFix) => void) {
-  let best: PreciseFix | null = null;
-  let armed = false;
-  const started = Date.now();
+/** @deprecated alias de isLiveFix — el idle y el watch usan el mismo criterio. */
+export function isBetterOrStableFix(prev: PreciseFix | null, next: PreciseFix) {
+  return isLiveFix(prev, next);
+}
 
+function streamWatchFixes(onFix: (fix: PreciseFix) => void) {
+  let last: PreciseFix | null = null;
   return (fix: PreciseFix) => {
-    if (!isBetterOrStableFix(best, fix)) return;
-    if (!best || fix.accuracy <= best.accuracy + 8) best = fix;
-
-    const wait = Date.now() - started;
-    if (!armed) {
-      const ready =
-        best.accuracy <= TARGET_ACCURACY_M ||
-        (wait >= 2500 && best.accuracy <= ACCEPTABLE_ACCURACY_M) ||
-        (wait >= 6000 && best.accuracy <= COARSE_CAP_M);
-      if (!ready) return;
-      armed = true;
-    }
-    onFix(best);
+    if (!isLiveFix(last, fix)) return;
+    last = fix;
+    onFix(fix);
   };
 }
 
@@ -219,7 +213,7 @@ async function readNativeFix(timeoutMs: number): Promise<PreciseFix> {
     void Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 350,
+        timeInterval: WATCH_INTERVAL_MS,
         distanceInterval: 0,
         mayShowUserSettingsDialog: true,
       },
@@ -257,7 +251,7 @@ function watchBrowser(
   if (typeof navigator === "undefined" || !navigator.geolocation) {
     throw new Error("Geolocalización no disponible");
   }
-  const emit = gateWatchFixes(onFix);
+  const emit = streamWatchFixes(onFix);
   const id = navigator.geolocation.watchPosition(
     (pos) => {
       emit(fromBrowser(pos.coords));
@@ -273,12 +267,12 @@ async function watchNative(
   onError?: (err: Error) => void,
 ): Promise<WatchHandle> {
   const Location = await import("expo-location");
-  const emit = gateWatchFixes(onFix);
+  const emit = streamWatchFixes(onFix);
   try {
     const sub = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.BestForNavigation,
-        timeInterval: 400,
+        timeInterval: WATCH_INTERVAL_MS,
         distanceInterval: 0,
         mayShowUserSettingsDialog: true,
       },

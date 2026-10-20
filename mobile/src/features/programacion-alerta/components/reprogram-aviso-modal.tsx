@@ -1,14 +1,13 @@
+import { DayCalendarField } from "@/features/routes/components/day-calendar-field";
 import { fetchRutasReprogramadas, updateRoute } from "@/features/routes/api";
 import type { RouteItem } from "@/features/routes/types";
 import { limaDate } from "@/lib/api";
 import { theme } from "@/lib/theme";
 import { useAuth } from "@/providers/auth-provider";
-import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
-import { createElement, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,20 +18,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const ROLES = new Set(["administrador", "asesor"]);
 
-function toIsoDay(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function parseIsoDay(value: string | null) {
-  const key = value || limaDate();
-  const [y, m, d] = key.split("-").map(Number);
-  if (!y || !m || !d) return new Date();
-  return new Date(y, m - 1, d);
-}
-
 export function ReprogramAviso() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -41,7 +26,6 @@ export function ReprogramAviso() {
   const [items, setItems] = useState<RouteItem[]>([]);
   const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [pickingId, setPickingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,12 +77,6 @@ export function ReprogramAviso() {
     }
   };
 
-  const onPick = (event: DateTimePickerEvent, date?: Date) => {
-    if (Platform.OS === "android") setPickingId(null);
-    if (event.type === "dismissed" || !date || !pickingId) return;
-    setDrafts((prev) => ({ ...prev, [pickingId]: toIsoDay(date) }));
-  };
-
   if (!open || !items.length) return null;
 
   const titulo =
@@ -112,7 +90,7 @@ export function ReprogramAviso() {
           <Text style={styles.title}>{titulo}</Text>
           <Text style={styles.hint}>Elige la nueva fecha y guárdala desde este aviso.</Text>
           <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-            {items.map((item) => (
+            {items.map((item, index) => (
               <View key={item.id} style={styles.item}>
                 <Text style={styles.local} numberOfLines={2}>
                   {item.localNombre || "Local"}
@@ -121,25 +99,11 @@ export function ReprogramAviso() {
                   {item.conductorNombre || "Operador"}
                   {item.fechaAsignacion ? ` · ${item.fechaAsignacion}` : ""}
                 </Text>
-                {Platform.OS === "web" ? (
-                  createElement("input", {
-                    type: "date",
-                    value: drafts[item.id] ?? limaDate(),
-                    onChange: (e: { target: { value: string } }) =>
-                      setDrafts((prev) => ({ ...prev, [item.id]: e.target.value })),
-                    style: {
-                      height: 36,
-                      borderRadius: 8,
-                      border: `1.5px solid ${theme.colors.line}`,
-                      padding: "0 10px",
-                      fontWeight: 700,
-                    },
-                  })
-                ) : (
-                  <Pressable onPress={() => setPickingId(item.id)} style={styles.dateBtn}>
-                    <Text style={styles.dateText}>{drafts[item.id] || "Elegir fecha"}</Text>
-                  </Pressable>
-                )}
+                <DayCalendarField
+                  value={drafts[item.id] ?? limaDate()}
+                  onChange={(fecha) => setDrafts((prev) => ({ ...prev, [item.id]: fecha }))}
+                  autoOpen={index === 0}
+                />
                 <Pressable
                   onPress={() => void saveFecha(item)}
                   disabled={savingId === item.id}
@@ -154,14 +118,6 @@ export function ReprogramAviso() {
               </View>
             ))}
           </ScrollView>
-          {pickingId && Platform.OS !== "web" ? (
-            <DateTimePicker
-              value={parseIsoDay(drafts[pickingId])}
-              mode="date"
-              display={Platform.OS === "ios" ? "inline" : "calendar"}
-              onChange={onPick}
-            />
-          ) : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <Pressable onPress={() => setOpen(false)} style={styles.later}>
             <Text style={styles.laterText}>Más tarde</Text>
@@ -209,16 +165,6 @@ const styles = StyleSheet.create({
   },
   local: { color: theme.colors.ink, fontSize: 14, fontWeight: "800" },
   meta: { color: theme.colors.muted, fontSize: 12, fontWeight: "600" },
-  dateBtn: {
-    height: 36,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: theme.colors.line,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.surface,
-  },
-  dateText: { color: theme.colors.ink, fontSize: 13, fontWeight: "800" },
   save: {
     height: 38,
     borderRadius: 10,

@@ -1,4 +1,5 @@
 import { LIMA_DISTRITOS } from "@/features/routes/lib/format";
+import { normName } from "@/lib/scope-user";
 import { normalizePrioridad } from "./prioridad";
 import type { LocalItem, LocalesCounts, LocalesFilters } from "../types";
 
@@ -43,17 +44,22 @@ function matchesCert(local: LocalItem, filter: string | null) {
   return true;
 }
 
+function matchesSearch(local: LocalItem, query: string) {
+  const q = normName(query);
+  if (!q) return true;
+  const hay = normName(
+    [local.nombre, local.razonSocial, local.direccion, local.ruc, local.encargadoNombre].join(" "),
+  );
+  if (hay.includes(q)) return true;
+  return q.split(" ").filter((part) => part.length >= 2).every((part) => hay.includes(part));
+}
+
 export function filterLocales(locales: LocalItem[], filters: LocalesFilters) {
-  const query = filters.search.trim().toLowerCase();
+  const query = filters.search.trim();
 
   return locales
     .filter((local) => {
-      const matchSearch =
-        !query ||
-        local.nombre.toLowerCase().includes(query) ||
-        local.direccion.toLowerCase().includes(query) ||
-        local.ruc.includes(query) ||
-        local.encargadoNombre.toLowerCase().includes(query);
+      const matchSearch = matchesSearch(local, query);
 
       const matchDistrito =
         !filters.distrito ||

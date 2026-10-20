@@ -11,6 +11,9 @@ import {
   shouldAcceptMove,
   slicePathBehind,
   snapToPolyline,
+  stabilizeStraightMove,
+  VIBE_CORRIDOR_M,
+  type LockedPose,
 } from "@/features/mapa-campo/lib/geo-nav";
 import {
   headingToward,
@@ -65,6 +68,7 @@ function toPayload(
   selectedId: string | null,
   traveled: LatLng[],
   destColor?: string | null,
+  speedMps?: number | null,
 ): CampoMapPayload {
   const routes = result ? [result.best, ...result.alternatives.slice(0, 3)] : [];
   const activeSeconds =
@@ -77,6 +81,7 @@ function toPayload(
     tracking,
     position,
     heading,
+    speedMps: speedMps ?? 0,
     dest,
     destColor: destColor ?? null,
     selectedId,
@@ -110,6 +115,7 @@ const IDLE: Omit<CampoNavState, "selected"> = {
   selectedId: null,
   position: null,
   heading: 0,
+  speedMps: 0,
   remainingMeters: 0,
   etaSeconds: 0,
   vehicleType: null,
@@ -155,6 +161,7 @@ export function useCampoNav() {
   const lastRawRef = useRef<LatLng | null>(null);
   const lastPosAtRef = useRef(0);
   const lastOnRouteRef = useRef<LatLng | null>(null);
+  const stablePoseRef = useRef<LockedPose | null>(null);
   /** Recorrido atrás (congelado al recalcular). */
   const traveledRef = useRef<LatLng[]>([]);
   /** Base fija en el momento del desvío (no se pisa). */
@@ -181,6 +188,7 @@ export function useCampoNav() {
     lastRawRef.current = null;
     lastPosAtRef.current = 0;
     lastOnRouteRef.current = null;
+    stablePoseRef.current = null;
     lastRecalcRef.current = 0;
     recalcBusyRef.current = false;
     pendingRecalcRef.current = null;
@@ -238,6 +246,7 @@ export function useCampoNav() {
         selectedId: pick.id,
         position: onRoad,
         heading: roadHeading,
+        speedMps: prev.speedMps ?? 0,
         remainingMeters: remaining,
         etaSeconds: Math.round(pick.durationSeconds * speedFactor),
       }));
@@ -301,7 +310,7 @@ export function useCampoNav() {
       let heading = moveHeading ?? 0;
       let remaining = 0;
       let offRoute = false;
-      const canSnap = accuracy == null || accuracy <= 20;
+      const canSnap = accuracy == null || accuracy <= 40;
 
       if (path.length >= 2) {
         const snap = snapToPolyline(raw, path);
@@ -313,29 +322,51 @@ export function useCampoNav() {
           movedMeters,
           speedMps: coords.speed,
         });
-        if (!offRoute && canSnap && snap.dist <= SNAP_METERS) {
-          position = snap.point;
-          heading = moveHeading ?? snap.heading;
+        const onCorridor = !offRoute && canSnap && snap.dist <= Math.max(SNAP_METERS, VIBE_CORRIDOR_M);
+        if (onCorridor) {
+          const stable = stabilizeStraightMove(
+            stablePoseRef.current,
+            snap.point,
+            snap.heading,
+            coords.speed,
+          );
+          position = stable.pose.position;
+          heading = stable.pose.heading;
+          if (stable.moved) stablePoseRef.current = stable.pose;
           lastOnRouteRef.current = position;
-          const progress = slicePathBehind(path, snap);
-          const base = traveledBaseRef.current;
-          const behind =
-            base.length >= 1
-              ? (() => {
-                  const head = base.slice();
-                  const junction = progress[0] ?? position;
-                  const last = head[head.length - 1];
-                  if (!last || haversineMeters(last, junction) > 2) head.push(junction);
-                  const rest = progress.slice(1);
-                  return [...head, ...rest];
-                })()
-              : progress;
-          traveledRef.current = behind;
-          setTraveled(behind);
-        } else {
+          const progressSnap = snapToPolyline(position, path);
+          remaining = progressSnap.remainingMeters;
+          if (stable.moved) {
+            const progress = slicePathBehind(path, progressSnap);
+            const base = traveledBaseRef.current;
+            const behind =
+              base.length >= 1
+                ? (() => {
+                    const head = base.slice();
+                    const junction = progress[0] ?? position;
+                    const last = head[head.length - 1];
+                    if (!last || haversineMeters(last, junction) > 2) head.push(junction);
+                    const rest = progress.slice(1);
+                    return [...head, ...rest];
+                  })()
+                : progress;
+            traveledRef.current = behind;
+            setTraveled(behind);
+          }
+        } else if (offRoute) {
+          stablePoseRef.current = null;
           heading = moveHeading ?? snap.heading;
+        } else {
+          heading = snap.heading;
         }
       }
+
+      const reportedSpeed =
+        coords.speed != null && Number.isFinite(coords.speed) && coords.speed >= 0
+          ? coords.speed
+          : dt > 0
+            ? Math.min(35, movedMeters / (dt / 1000))
+            : 0;
 
       lastRawRef.current = raw;
       lastPosRef.current = position;
@@ -346,6 +377,7 @@ export function useCampoNav() {
           ...prev,
           position,
           heading,
+          speedMps: reportedSpeed,
           arrived: true,
           remainingMeters: 0,
           etaSeconds: 0,
@@ -366,7 +398,7 @@ export function useCampoNav() {
             traveledRef.current = seed;
             setTraveled(seed);
           }
-          setState((prev) => ({ ...prev, recalculating: true, position, heading }));
+          setState((prev) => ({ ...prev, recalculating: true, position, heading, speedMps: reportedSpeed }));
           void calculate(raw, dest, vehicleRef.current, { quick: true })
             .then((directions) => {
               if (!activeRef.current) return;
@@ -403,13 +435,14 @@ export function useCampoNav() {
           ...prev,
           position,
           heading,
+          speedMps: reportedSpeed,
           remainingMeters: remaining,
           etaSeconds: Math.max(30, Math.round(baseDuration * (remaining / baseDist))),
         }));
         return;
       }
 
-      setState((prev) => ({ ...prev, position, heading }));
+      setState((prev) => ({ ...prev, position, heading, speedMps: reportedSpeed }));
     },
     [applyDirections, calculate],
   );
@@ -445,6 +478,7 @@ export function useCampoNav() {
               latitude: next.point.lat,
               longitude: next.point.lng,
               heading: next.heading,
+              speed: 12,
             });
             return;
           }
@@ -456,9 +490,10 @@ export function useCampoNav() {
             latitude: next.point.lat,
             longitude: next.point.lng,
             heading: headingToward(from, dest),
+            speed: 12,
           });
         })();
-      }, 1800);
+      }, 400);
       return;
     }
 
@@ -488,7 +523,7 @@ export function useCampoNav() {
             // ignore tick
           }
         })();
-      }, 2000);
+      }, 400);
     }
   }, [onPosition, stopWatch]);
 
@@ -506,6 +541,7 @@ export function useCampoNav() {
       recalcBusyRef.current = false;
       pendingRecalcRef.current = null;
       lastRawRef.current = null;
+      stablePoseRef.current = null;
       void loadNavRestrictions().then((rows) => {
         restrictRef.current = rows;
         restrictReadyRef.current = true;
@@ -632,8 +668,9 @@ export function useCampoNav() {
         state.selectedId,
         traveled,
         state.routeItem ? prioridadMeta(state.routeItem.prioridad).color : null,
+        state.speedMps,
       ),
-    [state.active, state.position, state.heading, dest, state.result, state.selectedId, traveled, state.routeItem],
+    [state.active, state.position, state.heading, dest, state.result, state.selectedId, traveled, state.routeItem, state.speedMps],
   );
 
   /** Web/mock: fuerza un desvío ~120 m para probar el recálculo parcial. */

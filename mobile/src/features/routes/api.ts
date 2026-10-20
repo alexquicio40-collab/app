@@ -11,6 +11,7 @@ export type FetchRoutesQuery = {
   fecha?: string | null;
   conductorId?: string | null;
   estado?: string | null;
+  localId?: string | null;
 };
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -182,6 +183,7 @@ function buildQuery(query: FetchRoutesQuery) {
   if (query.fecha) params.set("fecha", query.fecha);
   if (query.conductorId) params.set("conductor_id", query.conductorId);
   if (query.estado) params.set("estado", query.estado);
+  if (query.localId) params.set("local_id", query.localId);
   const qs = params.toString();
   return qs ? `/api/rutas?${qs}` : "/api/rutas";
 }
@@ -280,6 +282,7 @@ export async function fetchRoutes(query: FetchRoutesQuery & {
           fecha,
           conductorId: query.conductorId,
           estado: query.estado,
+          localId: query.localId,
         }),
       ),
     );
@@ -301,7 +304,43 @@ export async function fetchRoutes(query: FetchRoutesQuery & {
     fecha,
     conductorId: query.conductorId,
     estado: query.estado,
+    localId: query.localId,
   });
+}
+
+function shiftDay(iso: string, days: number) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y || 2026, (m || 1) - 1, (d || 1) + days);
+  const yy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+function sortRecojos(rows: RouteItem[]) {
+  return rows
+    .slice()
+    .sort((a, b) => {
+      const fa = a.fechaCompletada || a.fechaAsignacion;
+      const fb = b.fechaCompletada || b.fechaAsignacion;
+      return fb.localeCompare(fa);
+    })
+    .slice(0, 30);
+}
+
+/** Últimos recojos de un local (guía / evidencias). */
+export async function fetchRutasDeLocal(localId: string): Promise<RouteItem[]> {
+  const direct = await fetchRoutesOnce({ localId }).catch(() => [] as RouteItem[]);
+  const own = direct.filter((item) => item.localId === localId);
+  if (own.length >= 3) return sortRecojos(own.map(withResolvedMedia));
+
+  const hasta = limaDate();
+  const span = await fetchRoutesSpan(shiftDay(hasta, -21), hasta).catch(() => [] as RouteItem[]);
+  const merged = new Map<string, RouteItem>();
+  for (const item of [...own, ...span.filter((row) => row.localId === localId)]) {
+    merged.set(item.id, item);
+  }
+  return sortRecojos([...merged.values()].map(withResolvedMedia));
 }
 
 /** Hoy en Lima — valor por defecto para listados rápidos. */

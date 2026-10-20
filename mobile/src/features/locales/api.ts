@@ -88,9 +88,12 @@ function parseFotos(value: unknown, localId: string): LocalFoto[] {
   return out.sort((a, b) => a.orden - b.orden);
 }
 
-function parseFirstFoto(value: unknown, localId: string): LocalFoto[] {
-  const first = parseFotos(value, localId)[0];
-  return first ? [first] : [];
+function firstFotoUrl(value: unknown): string | null {
+  if (!Array.isArray(value) || !value.length) return null;
+  const row = value[0];
+  if (!isRecord(row)) return null;
+  const ruta = text(row.ruta_archivo, row.rutaArchivo, row.url);
+  return ruta ? resolveMediaPath(ruta) : null;
 }
 
 export function parseLocal(
@@ -99,7 +102,8 @@ export function parseLocal(
 ): LocalItem | null {
   const id = text(row.id);
   if (!id) return null;
-  const includeFotos = opts?.includeFotos !== false;
+  const includeFotos = opts?.includeFotos === true;
+  const portada = includeFotos ? null : firstFotoUrl(row.fotos);
 
   return {
     id,
@@ -134,8 +138,11 @@ export function parseLocal(
     operadoresVenPrecio: bool(row.operadores_ven_precio ?? row.operadoresVenPrecio),
     frecuencias: parseFrecuencias(row.frecuencias_asignacion),
     metodosPago: parseMetodos(row.metodos_pago),
-    // Listados: solo la portada (entrada). El resto se hidrata al abrir detalle.
-    fotos: includeFotos ? parseFotos(row.fotos, id) : parseFirstFoto(row.fotos, id),
+    fotos: includeFotos
+      ? parseFotos(row.fotos, id)
+      : portada
+        ? [{ id: `${id}-portada`, localId: id, rutaArchivo: portada, descripcion: "", orden: 0 }]
+        : [],
     prioridad: normalizePrioridad(text(row.prioridad)),
     restringido: bool(row.restringido ?? row.local_restringido),
     createdAt: text(row.created_at, row.createdAt) || null,
@@ -179,9 +186,14 @@ function toBody(input: LocalFormInput) {
   };
 }
 
+/** Listado ya parseado (para pintar la pantalla al toque). */
+export function peekLocalesCache(): LocalItem[] | null {
+  return localesListCache?.items ?? null;
+}
+
 export async function fetchLocales(opts?: {
   force?: boolean;
-  /** Por defecto false: listado/mapa sin parsear fotos (mucho más rápido). */
+  /** Por defecto false: listado/mapa sin parsear el álbum de fotos. */
   includeFotos?: boolean;
 }): Promise<LocalItem[]> {
   const includeFotos = opts?.includeFotos === true;

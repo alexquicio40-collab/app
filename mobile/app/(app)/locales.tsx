@@ -33,7 +33,7 @@ export default function LocalesScreen() {
   const screen = useLocalesScreen();
   const params = useLocalSearchParams<{ crear?: string }>();
   const bottomPad = useContentBottomPad(12);
-  const [mode, setMode] = useState<LocalesViewMode>("mapa");
+  const [mode, setMode] = useState<LocalesViewMode>("lista");
   const [lista, setLista] = useState<"locales" | "certificados">("locales");
 
   useFocusEffect(
@@ -43,13 +43,13 @@ export default function LocalesScreen() {
     }, [params.crear, screen.canManage, screen.openCreate]),
   );
 
-  const visibles = useMemo(
-    () =>
-      screen.filtered.filter((item) =>
-        lista === "certificados" ? item.necesitaCertificacion : !item.necesitaCertificacion,
-      ),
-    [screen.filtered, lista],
-  );
+  const searching = Boolean(screen.filters.search.trim());
+  const visibles = useMemo(() => {
+    if (searching) return screen.filtered;
+    return screen.filtered.filter((item) =>
+      lista === "certificados" ? item.necesitaCertificacion : !item.necesitaCertificacion,
+    );
+  }, [screen.filtered, lista, searching]);
 
   const mappedCount = useMemo(
     () => visibles.filter((item) => item.latitud != null && item.longitud != null).length,
@@ -71,18 +71,19 @@ export default function LocalesScreen() {
         canManage={screen.canManage}
         onOpen={() => screen.openLocal(item.id)}
         onEdit={
-          screen.canManage && canEditarLocal(item, user?.rol)
+          screen.canManage && canEditarLocal(item, user)
             ? () => screen.openEdit(item.id)
             : undefined
         }
         onDelete={
-          screen.canManage && canEditarLocal(item, user?.rol)
+          screen.canManage && canEditarLocal(item, user)
             ? () => void screen.removeLocal(item)
             : undefined
         }
+        readonly={screen.canManage && !canEditarLocal(item, user)}
       />
     ),
-    [screen, user?.rol],
+    [screen, user],
   );
 
   return (
@@ -155,12 +156,30 @@ export default function LocalesScreen() {
       ) : mode === "mapa" ? (
         <View style={[styles.mapStage, { paddingBottom: bottomPad }]}>
           {mappedCount === 0 ? (
-            <View style={styles.center}>
-              <Text style={styles.emptyTitle}>Sin ubicaciones</Text>
-              <Text style={styles.emptyText}>
-                Los locales filtrados no tienen coordenadas para mostrar en el mapa.
-              </Text>
-            </View>
+            visibles.length ? (
+              <FlatList
+                data={visibles}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.list}
+                ListHeaderComponent={
+                  <Text style={styles.mapHint}>
+                    Estos locales coinciden con la búsqueda, pero no tienen pin. Ábrelos para
+                    actualizar la ubicación.
+                  </Text>
+                }
+                renderItem={renderItem}
+                ItemSeparatorComponent={Sep}
+              />
+            ) : (
+              <View style={styles.center}>
+                <Text style={styles.emptyTitle}>Sin ubicaciones</Text>
+                <Text style={styles.emptyText}>
+                  {searching
+                    ? "No hay un local con ese nombre. Prueba en Lista o limpia la búsqueda."
+                    : "Los locales filtrados no tienen coordenadas para mostrar en el mapa."}
+                </Text>
+              </View>
+            )
           ) : (
             <LocalesMap
               locales={visibles}
@@ -173,9 +192,10 @@ export default function LocalesScreen() {
         <FlatList
           data={visibles}
           keyExtractor={(item) => item.id}
-          initialNumToRender={16}
-          maxToRenderPerBatch={16}
-          windowSize={7}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          updateCellsBatchingPeriod={40}
           removeClippedSubviews
           contentContainerStyle={[styles.list, { paddingBottom: bottomPad }]}
           refreshControl={
@@ -215,7 +235,7 @@ export default function LocalesScreen() {
         canManage={screen.canManage}
         onClose={screen.closeLocal}
         onEdit={
-          screen.selected && screen.canManage && canEditarLocal(screen.selected, user?.rol)
+          screen.selected && screen.canManage && canEditarLocal(screen.selected, user)
             ? () => {
                 const id = screen.selected!.id;
                 screen.closeLocal();
@@ -226,7 +246,7 @@ export default function LocalesScreen() {
         onToggleCert={
           screen.selected &&
           screen.canManage &&
-          canEditarLocal(screen.selected, user?.rol)
+          canEditarLocal(screen.selected, user)
             ? () => void screen.toggleCertEstado(screen.selected!)
             : undefined
         }
@@ -350,5 +370,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 18,
     maxWidth: 260,
+  },
+  mapHint: {
+    color: theme.colors.muted,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 18,
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 10,
   },
 });

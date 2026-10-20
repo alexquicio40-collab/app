@@ -23,6 +23,7 @@ type LocalDetailSheetProps = {
   onClose: () => void;
   onEdit?: () => void;
   onToggleCert?: () => void;
+  onVerGuia?: () => void;
 };
 
 export function LocalDetailSheet({
@@ -31,6 +32,7 @@ export function LocalDetailSheet({
   onClose,
   onEdit,
   onToggleCert,
+  onVerGuia,
 }: LocalDetailSheetProps) {
   const insets = useSafeAreaInsets();
   const bottomPad = useContentBottomPad(8);
@@ -64,6 +66,13 @@ export function LocalDetailSheet({
                   <Text style={styles.restrictBadgeText}>Local restringido</Text>
                 </View>
               ) : null}
+              {canManage && !onEdit ? (
+                <View style={styles.readonlyBadge}>
+                  <Text style={styles.readonlyBadgeText}>
+                    Solo consulta{local.asesorBioClim ? ` · ${local.asesorBioClim}` : ""}
+                  </Text>
+                </View>
+              ) : null}
             </View>
             <Pressable onPress={onClose} style={styles.close}>
               <Text style={styles.closeText}>Cerrar</Text>
@@ -88,6 +97,7 @@ export function LocalDetailSheet({
                 if (phone) void Linking.openURL(`tel:${phone}`);
               }}
             />
+            {onVerGuia ? <Action label="Ver la guía" onPress={onVerGuia} /> : null}
             {canManage && onEdit ? <Action label="Editar" onPress={onEdit} /> : null}
           </View>
 
@@ -280,6 +290,15 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.dangerSoft,
   },
   restrictBadgeText: { color: theme.colors.danger, fontSize: 10, fontWeight: "800" },
+  readonlyBadge: {
+    alignSelf: "flex-start",
+    marginTop: 4,
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: theme.colors.infoSoft,
+  },
+  readonlyBadgeText: { color: theme.colors.info, fontSize: 10, fontWeight: "800" },
   close: {
     paddingHorizontal: 10,
     paddingVertical: 6,

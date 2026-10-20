@@ -15,6 +15,7 @@ import {
   fetchMetodosPago,
   hydrateLocalFotos,
   invalidateLocalesCaches,
+  peekLocalesCache,
   syncLocalFotos,
   updateLocal,
   updateLocalCertEstado,
@@ -33,6 +34,13 @@ import type { LocalFormInput, LocalItem, LocalesFilters } from "./types";
 function notify(title: string, message: string) {
   if (Platform.OS === "web") window.alert(`${title}: ${message}`);
   else Alert.alert(title, message);
+}
+
+function avisoSoloConsulta() {
+  notify(
+    "Solo consulta",
+    "Este local lo registró otro asesor. Puedes verlo, pero no editarlo ni accionar.",
+  );
 }
 
 async function confirmDelete(nombre: string) {
@@ -63,12 +71,33 @@ export function useLocalesScreen() {
   const [metodosOpen, setMetodosOpen] = useState(false);
   const [metodosSaving, setMetodosSaving] = useState(false);
 
+  const applyRows = useCallback(
+    (rows: LocalItem[], restrictedIds: Set<string>) => {
+      setLocales(
+        localesDelUsuario(rows, user).map((item) => ({
+          ...item,
+          restringido: item.restringido || restrictedIds.has(item.id),
+        })),
+      );
+    },
+    [user],
+  );
+
   const load = useCallback(async (mode: "boot" | "refresh" = "boot") => {
-    if (mode === "boot") setLoading(true);
-    else setRefreshing(true);
+    if (mode === "boot") {
+      const cached = peekLocalesCache();
+      if (cached?.length) {
+        const restrictedIds = await loadRestringidos();
+        applyRows(cached, restrictedIds);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+    } else {
+      setRefreshing(true);
+    }
     setError(null);
     try {
-      // Sin parsear fotos: listado/mapa listos mucho antes.
       const [rows, restrictedIds] = await Promise.all([
         fetchLocales({
           force: mode === "refresh",
@@ -76,11 +105,7 @@ export function useLocalesScreen() {
         }),
         loadRestringidos(),
       ]);
-      const scoped = localesDelUsuario(rows, user).map((item) => ({
-        ...item,
-        restringido: item.restringido || restrictedIds.has(item.id),
-      }));
-      setLocales(scoped);
+      applyRows(rows, restrictedIds);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar los locales");
     } finally {
@@ -92,7 +117,7 @@ export function useLocalesScreen() {
     void fetchMetodosPago()
       .then(setMetodosPago)
       .catch(() => setMetodosPago([]));
-  }, [user]);
+  }, [applyRows]);
 
   useEffect(() => {
     void load("boot");
@@ -119,15 +144,15 @@ export function useLocalesScreen() {
   const openEdit = useCallback(
     (id: string) => {
       const local = locales.find((item) => item.id === id);
-      if (local && !canEditarLocal(local, rol)) {
-        notify("Local restringido", "Puedes verlo, pero no editarlo.");
+      if (local && !canEditarLocal(local, user)) {
+        avisoSoloConsulta();
         return;
       }
       enrichLocal(id);
       setCreating(false);
       setEditingId(id);
     },
-    [enrichLocal, locales, rol],
+    [enrichLocal, locales, user],
   );
 
   const filtered = useMemo(() => filterLocales(locales, filters), [locales, filters]);
@@ -177,8 +202,8 @@ export function useLocalesScreen() {
       const { pendingFotos = [], removedFotoIds = [], ...payload } = input;
       if (editingId) {
         const current = locales.find((item) => item.id === editingId);
-        if (current && !canEditarLocal(current, rol)) {
-          notify("Local restringido", "Puedes verlo, pero no editarlo.");
+        if (current && !canEditarLocal(current, user)) {
+          avisoSoloConsulta();
           return;
         }
       }
@@ -225,8 +250,8 @@ export function useLocalesScreen() {
 
   const removeLocal = useCallback(
     async (local: LocalItem) => {
-      if (!canEditarLocal(local, rol)) {
-        notify("Local restringido", "Puedes verlo, pero no editarlo.");
+      if (!canEditarLocal(local, user)) {
+        avisoSoloConsulta();
         return;
       }
       const ok = await confirmDelete(local.nombre);
@@ -244,13 +269,13 @@ export function useLocalesScreen() {
         setMutating(false);
       }
     },
-    [rol],
+    [rol, user],
   );
 
   const toggleCertEstado = useCallback(async (local: LocalItem) => {
     if (!local.necesitaCertificacion) return;
-    if (!canEditarLocal(local, rol)) {
-      notify("Local restringido", "Puedes verlo, pero no editarlo.");
+    if (!canEditarLocal(local, user)) {
+      avisoSoloConsulta();
       return;
     }
     const next = local.estadoCertificacion === "pendiente" ? "ya emitido" : "pendiente";
@@ -268,7 +293,7 @@ export function useLocalesScreen() {
     } finally {
       setMutating(false);
     }
-  }, [rol]);
+  }, [user]);
 
   const setCertFilter = useCallback((value: "necesita" | "no_necesita" | null) => {
     setFilters((prev) => ({ ...prev, certificacion: value }));

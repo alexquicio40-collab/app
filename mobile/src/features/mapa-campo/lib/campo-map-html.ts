@@ -1,8 +1,9 @@
 import { MAPS_RASTER_OPTION, leafletHead, leafletStart } from "@/features/map/lib/map-raster";
+import { NAV_CAMERA_JS } from "@/features/mapa-campo/lib/nav-camera";
 
 /**
- * Mapa de campo: rutas estables + seguimiento suave del marker/cámara.
- * No redibuja polylines en cada tick GPS (evita “rayado”).
+ * Mapa de campo: rutas estables + cámara de navegación estilo Google Maps
+ * (tilt, look-ahead, vehículo abajo). No redibuja polylines en cada tick GPS.
  */
 export function buildCampoMapHtml() {
   return `<!DOCTYPE html>
@@ -12,7 +13,7 @@ export function buildCampoMapHtml() {
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   ${leafletHead()}
   <style>
-    html, body, #map { height: 100%; margin: 0; background: #E7EEEB; }
+    html, body, #stage, #map { height: 100%; width: 100%; margin: 0; background: #E7EEEB; }
     #compassRose {
       position: absolute; top: 12px; right: 12px; z-index: 4;
       width: 44px; height: 44px; pointer-events: none;
@@ -34,7 +35,7 @@ export function buildCampoMapHtml() {
   </style>
 </head>
 <body>
-  <div id="map"></div>
+  <div id="stage" class="gm-nav-stage"><div id="map"></div></div>
   <div id="compassRose" aria-hidden="true">
     <svg viewBox="0 0 44 44">
       <circle cx="22" cy="22" r="20" fill="#FFFFFF" stroke="#0B5340" stroke-width="2"/>
@@ -62,12 +63,18 @@ export function buildCampoMapHtml() {
     var deviceHeading = null;
     var horizon = null;
     var lockedCourse = 0;
-    var courseCandidate = null;
-    var courseAt = 0;
+    var courseReady = false;
+    var courseAnchor = null;
     var lastPan = null;
-    var TURN_MIN_DEG = 20;
-    var TURN_HOLD_MS = 400;
-    var anim = null;
+    var lastNavZoom = 0;
+    var lastSpeedMps = 0;
+    var TURN_MIN_DEG = 22;
+    var TURN_TRAVEL_M = 10;
+    var PAN_MIN_M = 2;
+    var CATCH_S = 0.12;
+    var pendingCourse = null;
+    var animRaf = 0;
+    var lastAnimTs = 0;
     var displayPos = null;
     var targetPos = null;
     var displayHeading = 0;
@@ -90,15 +97,38 @@ export function buildCampoMapHtml() {
       post({ type: 'follow', on: !!followEnabled });
     }
 
-    function focusCar(snap) {
-      var pos = displayPos || targetPos;
+    ${NAV_CAMERA_JS}
+
+    function navHeading() {
+      if (courseReady) return lockedCourse;
+      return displayHeading || targetHeading || 0;
+    }
+
+    function followCamera(pos, snap) {
       if (!map || !pos) return;
-      if (snap) {
-        map.setCenter(pos);
-        if (map.getZoom() < 17) map.setZoom(18);
+      if (!trackingActive) {
+        if (snap) {
+          map.setCenter(pos);
+          if (map.getZoom() < 17) map.setZoom(18);
+          return;
+        }
+        if (lastPan && metersApprox(lastPan, pos) < PAN_MIN_M) return;
+        lastPan = { lat: pos.lat, lng: pos.lng };
+        map.panTo(pos);
         return;
       }
-      map.panTo(pos);
+      var aim = applyNavCamera(map, pos, navHeading(), lastSpeedMps, {
+        snap: !!snap,
+        zoom: snap || lastNavZoom === 0,
+        tilt: followEnabled || cameraHold,
+      });
+      if (!aim) return;
+      lastPan = { lat: aim.lat, lng: aim.lng };
+      lastNavZoom = navZoomForSpeed(lastSpeedMps);
+    }
+
+    function focusCar(snap) {
+      followCamera(displayPos || targetPos, snap);
     }
 
     function setFollow(on, snap) {
@@ -128,15 +158,15 @@ export function buildCampoMapHtml() {
       horizon = createHorizonSmoother(function (deg) {
         if (map && map.setHeading) map.setHeading(deg);
         paintRose(deg);
-      }, { tau: 0.72, maxDegS: 38, deadzone: 6 });
+      }, { tau: 0.16, maxDegS: 140, deadzone: 4, holdMs: 50 });
       return horizon;
     }
 
     function desiredHorizon() {
+      if (trackingActive) return wrapDeg(lockedCourse);
       if (compassOn && deviceHeading != null && !isNaN(Number(deviceHeading))) {
         return wrapDeg(deviceHeading);
       }
-      if (!compassOn && trackingActive && followEnabled) return wrapDeg(lockedCourse);
       return 0;
     }
 
@@ -152,38 +182,51 @@ export function buildCampoMapHtml() {
       else api.aim(next);
     }
 
-    function lockNavCourse(heading, force) {
-      var next = wrapDeg(heading);
-      if (force) {
-        lockedCourse = next;
-        courseCandidate = null;
-        courseAt = 0;
+    function bearingFrom(a, b) {
+      var dLng = (b.lng - a.lng) * Math.PI / 180;
+      var lat1 = a.lat * Math.PI / 180;
+      var lat2 = b.lat * Math.PI / 180;
+      var y = Math.sin(dLng) * Math.cos(lat2);
+      var x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+      return wrapDeg(Math.atan2(y, x) * 180 / Math.PI);
+    }
+
+    function noteTravel(pos) {
+      if (!trackingActive || !pos) return;
+      if (!courseAnchor) {
+        courseAnchor = { lat: pos.lat, lng: pos.lng };
+        return;
+      }
+      var dist = metersApprox(courseAnchor, pos);
+      if (dist < TURN_TRAVEL_M) return;
+      var bearing = bearingFrom(courseAnchor, pos);
+      if (!courseReady) {
+        lockedCourse = bearing;
+        courseReady = true;
+        courseAnchor = { lat: pos.lat, lng: pos.lng };
+        pendingCourse = null;
         applyHorizon(true);
         return;
       }
-      if (!trackingActive || compassOn) return;
-      var delta = Math.abs(shortestDeg(lockedCourse, next));
-      if (delta < TURN_MIN_DEG) {
-        courseCandidate = null;
+      var turn = Math.abs(shortestDeg(lockedCourse, bearing));
+      if (turn < TURN_MIN_DEG) {
+        courseAnchor = { lat: pos.lat, lng: pos.lng };
+        pendingCourse = null;
         return;
       }
-      var now = Date.now();
-      if (courseCandidate == null || Math.abs(shortestDeg(courseCandidate, next)) > 12) {
-        courseCandidate = next;
-        courseAt = now;
+      if (pendingCourse == null || Math.abs(shortestDeg(pendingCourse, bearing)) > 18) {
+        pendingCourse = bearing;
         return;
       }
-      if (now - courseAt < TURN_HOLD_MS) return;
-      lockedCourse = wrapDeg(courseCandidate);
-      courseCandidate = null;
+      lockedCourse = bearing;
+      pendingCourse = null;
+      courseAnchor = { lat: pos.lat, lng: pos.lng };
       applyHorizon(false);
     }
 
     function panFollow(pos) {
       if (!map || !pos || (!followEnabled && !cameraHold)) return;
-      if (lastPan && metersApprox(lastPan, pos) < 2.4) return;
-      lastPan = { lat: pos.lat, lng: pos.lng };
-      map.panTo(pos);
+      followCamera(pos, false);
     }
 
     function setCampoCompass(on, heading) {
@@ -199,10 +242,10 @@ export function buildCampoMapHtml() {
 
     function recenterMe() {
       cameraHold = true;
-      setFollow(true, true);
       lastPan = null;
-      if (map && map.getZoom() < 16) map.setZoom(17);
-      applyHorizon();
+      lastNavZoom = 0;
+      setFollow(true, true);
+      applyHorizon(true);
     }
 
     function goToStop(lat, lng) {
@@ -210,6 +253,7 @@ export function buildCampoMapHtml() {
       followEnabled = false;
       cameraHold = false;
       emitFollow();
+      clearNavCamera(map);
       map.panTo({ lat: Number(lat), lng: Number(lng) });
       if (map.getZoom() < 15) map.setZoom(16);
     }
@@ -299,14 +343,20 @@ export function buildCampoMapHtml() {
     function meIcon(tracking, heading) {
       if (tracking) {
         var svg =
-          '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">' +
-          '<circle cx="14" cy="14" r="12.2" fill="#0B5340" stroke="#fff" stroke-width="2.2"/>' +
-          '<path d="M14 6 L19.4 20.2 L14 17 L8.6 20.2 Z" fill="#fff"/>' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="58" viewBox="0 0 44 58">' +
+          '<ellipse cx="22" cy="52" rx="12" ry="4.4" fill="#000" opacity=".22"/>' +
+          '<path d="M12.6 40.5c0 3.4 18.8 3.4 18.8 0l2.2-15.2C34.2 16 29.2 10 22 10s-12.2 6-11.6 15.3z" fill="#F7F8FA" stroke="#C8CDD3" stroke-width="1.3"/>' +
+          '<path d="M16.2 23c.2-5.2 11.4-5.2 11.6 0l-.8 6.2c-.4 1.8-10 1.8-10.4 0z" fill="#90A4AE"/>' +
+          '<path d="M15.8 32.4h12.4l.8 6.6H15z" fill="#EEF1F4"/>' +
+          '<rect x="11.4" y="26.2" width="2.3" height="5.2" rx="1" fill="#1A73E8"/>' +
+          '<rect x="30.3" y="26.2" width="2.3" height="5.2" rx="1" fill="#1A73E8"/>' +
+          '<rect x="11.6" y="34.6" width="2.5" height="5.6" rx="1" fill="#263238"/>' +
+          '<rect x="29.9" y="34.6" width="2.5" height="5.6" rx="1" fill="#263238"/>' +
           '</svg>';
         return {
           url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-          scaledSize: new google.maps.Size(28, 28),
-          anchor: new google.maps.Point(14, 14),
+          scaledSize: new google.maps.Size(44, 58),
+          anchor: new google.maps.Point(22, 40),
           rotation: Number(heading || 0),
         };
       }
@@ -473,26 +523,45 @@ export function buildCampoMapHtml() {
       return Math.sqrt(dlat * dlat + dlng * dlng);
     }
 
-    function tickAnim() {
-      anim = null;
+    function startAnim() {
+      if (animRaf) return;
+      lastAnimTs = 0;
+      animRaf = requestAnimationFrame(tickAnim);
+    }
+
+    function tickAnim(ts) {
+      animRaf = 0;
       if (!targetPos || !meMarker) return;
       if (!displayPos) displayPos = { lat: targetPos.lat, lng: targetPos.lng };
-      if (metersApprox(displayPos, targetPos) > 40) {
+      if (!lastAnimTs) lastAnimTs = ts;
+      var dt = Math.min(0.05, (ts - lastAnimTs) / 1000);
+      lastAnimTs = ts;
+      var jump = metersApprox(displayPos, targetPos);
+      var t = 1 - Math.exp(-dt / CATCH_S);
+      if (jump < 0.35) {
         displayPos = { lat: targetPos.lat, lng: targetPos.lng };
-        displayHeading = targetHeading;
+      } else if (jump > 90) {
+        displayPos = { lat: targetPos.lat, lng: targetPos.lng };
       } else {
         displayPos = {
-          lat: lerp(displayPos.lat, targetPos.lat, 0.28),
-          lng: lerp(displayPos.lng, targetPos.lng, 0.28),
+          lat: lerp(displayPos.lat, targetPos.lat, t),
+          lng: lerp(displayPos.lng, targetPos.lng, t),
         };
-        displayHeading = lerpAngle(displayHeading, targetHeading, 0.35);
       }
+      var wantHeading = courseReady ? lockedCourse : targetHeading;
+      displayHeading = lerpAngle(displayHeading, wantHeading, t);
       meMarker.setPosition(displayPos);
       if (meMarker.__kind === 'arrow') {
-        meMarker.setOptions({ rotation: compassOn ? 0 : displayHeading });
+        meMarker.setOptions({ rotation: 0 });
       }
       panFollow(displayPos);
-      if (trackingActive && !compassOn) lockNavCourse(displayHeading, false);
+      noteTravel(displayPos);
+      var headingGap = Math.abs(shortestDeg(displayHeading, wantHeading));
+      if (jump > 0.35 || headingGap > 0.8) {
+        animRaf = requestAnimationFrame(tickAnim);
+      } else {
+        lastAnimTs = 0;
+      }
     }
 
     function setAccuracy(position, accuracy) {
@@ -521,26 +590,43 @@ export function buildCampoMapHtml() {
       accCircle.setRadius(r);
     }
 
-    function setMe(position, heading, tracking, accuracy) {
+    function setMe(position, heading, tracking, accuracy, speedMps) {
       if (!position) {
+        if (animRaf) cancelAnimationFrame(animRaf);
+        animRaf = 0;
+        lastAnimTs = 0;
         if (meMarker) { meMarker.setMap(null); meMarker = null; }
         if (accCircle) { accCircle.setMap(null); accCircle = null; }
         displayPos = null;
         targetPos = null;
         trackingActive = false;
+        lastSpeedMps = 0;
+        lastNavZoom = 0;
+        clearNavCamera(map);
         return;
       }
-      targetPos = { lat: Number(position.lat), lng: Number(position.lng) };
-      targetHeading = Number(heading || 0);
+      lastSpeedMps = Number(speedMps) || 0;
+      var nextPos = { lat: Number(position.lat), lng: Number(position.lng) };
+      var nextHeading = Number(heading || 0);
       var starting = tracking && !trackingActive;
+      if (trackingActive && !tracking) {
+        lastNavZoom = 0;
+        clearNavCamera(map);
+      }
+      targetPos = nextPos;
+      targetHeading = nextHeading;
       if (starting) {
         displayPos = { lat: targetPos.lat, lng: targetPos.lng };
         displayHeading = targetHeading;
         followEnabled = true;
         cameraHold = true;
         lastPan = null;
+        lastNavZoom = 0;
+        lockedCourse = targetHeading;
+        courseReady = Number.isFinite(targetHeading);
+        pendingCourse = null;
+        courseAnchor = { lat: displayPos.lat, lng: displayPos.lng };
         emitFollow();
-        lockNavCourse(targetHeading, true);
       }
       ensureMeMarker(!!tracking, targetPos, targetHeading);
       trackingActive = !!tracking;
@@ -551,15 +637,13 @@ export function buildCampoMapHtml() {
       }
       meMarker.setPosition(displayPos);
       if (meMarker.__kind === 'arrow') {
-        meMarker.setOptions({ rotation: compassOn ? 0 : displayHeading });
+        meMarker.setOptions({ rotation: 0 });
       }
       if (starting) {
-        map.setCenter(displayPos);
-        lastPan = { lat: displayPos.lat, lng: displayPos.lng };
-        if (map.getZoom() < 16) map.setZoom(17);
-        if (map.setTilt) map.setTilt(0);
+        applyHorizon(true);
+        followCamera(displayPos, true);
       }
-      tickAnim();
+      startAnim();
     }
 
     function draw(payload) {
@@ -572,13 +656,14 @@ export function buildCampoMapHtml() {
       var selectedId = payload.selectedId;
       var routes = payload.routes || [];
       var accuracy = payload.accuracy;
+      var speedMps = Number(payload.speedMps || 0);
 
       var pins = payload.pins || [];
       var selectedPinId = payload.selectedPinId || null;
       var routeBounds = drawRoutes(routes, selectedId, payload.traveled || []);
       drawPins(pins, selectedPinId);
       ensureDestMarker(pins.length ? null : dest, payload.destColor);
-      setMe(position, heading, tracking, accuracy);
+      setMe(position, heading, tracking, accuracy, speedMps);
 
       if (tracking) {
         lastIdleFit = '';
@@ -608,7 +693,7 @@ export function buildCampoMapHtml() {
       }
 
       if (routeBounds) {
-        if (map.setTilt) map.setTilt(0);
+        clearNavCamera(map);
         applyHorizon();
         if (dest) routeBounds.extend(dest);
         if (position) routeBounds.extend(position);
@@ -616,7 +701,7 @@ export function buildCampoMapHtml() {
         return;
       }
 
-      if (map.setTilt) map.setTilt(0);
+      clearNavCamera(map);
       applyHorizon();
       var idle = new google.maps.LatLngBounds();
       var has = false;

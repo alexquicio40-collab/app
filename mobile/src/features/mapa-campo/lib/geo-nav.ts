@@ -191,6 +191,15 @@ export function pathLengthMeters(path: LatLng[]) {
   return sum;
 }
 
+/** Avanza metros en el rumbo (look-ahead de cámara / destinos). */
+export function offsetAlongHeading(point: LatLng, headingDeg: number, meters: number): LatLng {
+  const rad = (headingDeg * Math.PI) / 180;
+  const dLat = (meters * Math.cos(rad)) / METERS_PER_DEG;
+  const dLng =
+    (meters * Math.sin(rad)) / (METERS_PER_DEG * Math.cos((point.lat * Math.PI) / 180));
+  return { lat: point.lat + dLat, lng: point.lng + dLng };
+}
+
 /** Offset perpendicular a la ruta (para simular desvío en web). */
 export function offsetPerpendicular(point: LatLng, headingDeg: number, meters: number): LatLng {
   const rad = ((headingDeg + 90) * Math.PI) / 180;
@@ -250,27 +259,77 @@ export function advanceAlongPath(
   return { point: cur, heading, remainingMeters: remaining };
 }
 
-/** Suaviza saltos GPS absurdos (teleport). */
+/** Suaviza saltos GPS absurdos (teleport). ~200 km/h + holgura corta. */
 export function shouldAcceptMove(
   prev: LatLng | null,
   next: LatLng,
   dtMs: number,
-  maxSpeedMps = 45,
+  maxSpeedMps = 55,
 ) {
   if (!prev) return true;
   if (dtMs <= 0) return true;
   const dist = haversineMeters(prev, next);
-  const maxDist = maxSpeedMps * (dtMs / 1000) + 25;
+  const maxDist = maxSpeedMps * Math.max(dtMs, 80) / 1000 + 12;
   return dist <= maxDist;
 }
 
-/** Fuera de la polyline dibujada (ruido GPS típico < 8 m). */
-export const OFF_ROUTE_METERS = 8;
+/**
+ * Vibración en recta: el GPS salta unos metros y el rumbo gira sin que el vehículo lo haga.
+ * En velocidad se usa el GPS del chip (no se congela el punto).
+ */
+export const VIBE_CORRIDOR_M = 22;
+/** En parado / marcha lenta: no mover por temblor menor a esto. */
+export const VIBE_HOLD_M = 3;
+/** A partir de esta velocidad (m/s) se sigue el GPS al 100%. */
+export const LIVE_SPEED_MPS = 4;
+/** Giro de la calle que sí debe rotar el mapa. */
+export const STRAIGHT_TURN_DEG = 42;
+
+/** Fuera de la polyline dibujada. El temblor corto no cuenta. */
+export const OFF_ROUTE_METERS = 32;
 /** Giro / calle distinta: el rumbo ya no coincide con el trazo. */
-export const OFF_ROUTE_HEADING_DEG = 35;
-export const OFF_ROUTE_MIN_MOVE_M = 2.5;
+export const OFF_ROUTE_HEADING_DEG = 58;
+export const OFF_ROUTE_MIN_MOVE_M = 20;
 /** Micro-ajuste a la calle: solo ruido GPS. */
 export const SNAP_METERS = 8;
+
+export type LockedPose = { position: LatLng; heading: number };
+
+/**
+ * En una ruta recta, un temblor no mueve el auto ni la cámara.
+ * Solo avanza si el desplazamiento es hacia adelante, y solo gira si la calle misma gira.
+ */
+export function stabilizeStraightMove(
+  locked: LockedPose | null,
+  next: LatLng,
+  routeHeading: number,
+  speedMps?: number | null,
+): { pose: LockedPose; moved: boolean } {
+  if (!locked) {
+    return { pose: { position: next, heading: routeHeading }, moved: true };
+  }
+  if (speedMps != null && speedMps >= LIVE_SPEED_MPS) {
+    return { pose: { position: next, heading: routeHeading }, moved: true };
+  }
+
+  const dist = haversineMeters(locked.position, next);
+  const routeTurn = headingDeltaDeg(routeHeading, locked.heading);
+  if (routeTurn >= STRAIGHT_TURN_DEG && dist >= 8) {
+    return { pose: { position: next, heading: routeHeading }, moved: true };
+  }
+  if (dist < VIBE_HOLD_M) {
+    return { pose: locked, moved: false };
+  }
+
+  const travel = bearingDeg(locked.position, next);
+  const offTravel = headingDeltaDeg(travel, locked.heading);
+  if (offTravel > 80) {
+    return { pose: locked, moved: false };
+  }
+
+  return { pose: { position: next, heading: locked.heading }, moved: true };
+}
+
 /** Sin espera: el recálculo sale en el mismo tick del desvío. */
 export const RECALC_COOLDOWN_MS = 0;
 export const ARRIVAL_METERS = 35;
@@ -283,9 +342,7 @@ export function isOffDrawnRoute(input: {
   speedMps?: number | null;
 }) {
   if (input.snapDist > OFF_ROUTE_METERS) return true;
-  const moving =
-    input.movedMeters >= OFF_ROUTE_MIN_MOVE_M ||
-    (input.speedMps != null && input.speedMps >= 1);
-  if (!moving || input.moveHeading == null) return false;
+  if (input.snapDist <= 16) return false;
+  if (input.movedMeters < OFF_ROUTE_MIN_MOVE_M || input.moveHeading == null) return false;
   return headingDeltaDeg(input.moveHeading, input.routeHeading) >= OFF_ROUTE_HEADING_DEG;
 }

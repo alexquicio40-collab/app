@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
-import { HEADING_DEADZONE_DEG, HEADING_SAMPLE_MS, headingDelta, wrapHeading } from "./heading-smooth";
+import {
+  acceptCompassHeading,
+  EMPTY_COMPASS_GATE,
+  HEADING_SAMPLE_MS,
+  wrapHeading,
+  type CompassGate,
+} from "./heading-smooth";
 
 type OrientationCtor = {
   requestPermission?: () => Promise<"granted" | "denied">;
@@ -40,22 +46,19 @@ export function useCompassHeading(enabled: boolean) {
 
     let cancelled = false;
     let remove: (() => void) | null = null;
-    let lastEmit = 0;
-    let lastValue: number | null = null;
+    let gate: CompassGate = { ...EMPTY_COMPASS_GATE };
     let preferTrue = false;
+    let lastEmit = 0;
 
     const apply = (value: number) => {
       if (cancelled || !Number.isFinite(value)) return;
-      const next = wrapHeading(value);
       const now = Date.now();
-      if (lastValue != null) {
-        const delta = headingDelta(lastValue, next);
-        if (delta < HEADING_DEADZONE_DEG) return;
-        if (delta < 14 && now - lastEmit < HEADING_SAMPLE_MS) return;
-      }
+      const step = acceptCompassHeading(gate, value, now);
+      gate = step.gate;
+      if (step.emit == null) return;
+      if (lastEmit && now - lastEmit < HEADING_SAMPLE_MS) return;
       lastEmit = now;
-      lastValue = next;
-      setHeading(next);
+      setHeading(step.emit);
     };
 
     if (Platform.OS === "web") {

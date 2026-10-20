@@ -7,6 +7,7 @@ import {
   TextField,
 } from "@/features/routes/assign/components/form-kit";
 import type { LocalOption } from "@/features/routes/assign/types";
+import { DayCalendarField } from "@/features/routes/components/day-calendar-field";
 import { toDayKey } from "@/features/routes/lib/format";
 import type { ConductorOption, RouteItem } from "@/features/routes/types";
 import { theme } from "@/lib/theme";
@@ -116,7 +117,7 @@ export function RouteEditSheet({
           <FieldRow>
             <View style={styles.half}>
               <FieldLabel>Fecha *</FieldLabel>
-              <TextField value={fecha} onChangeText={setFecha} placeholder="yyyy-mm-dd" />
+              <DayCalendarField value={fecha} onChange={setFecha} autoOpen />
             </View>
             <View style={styles.half}>
               <FieldLabel>Observaciones</FieldLabel>

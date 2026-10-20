@@ -14,9 +14,17 @@ type LocalCardProps = {
   onOpen: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  readonly?: boolean;
 };
 
-export function LocalCard({ local, canManage, onOpen, onEdit, onDelete }: LocalCardProps) {
+export function LocalCard({
+  local,
+  canManage,
+  onOpen,
+  onEdit,
+  onDelete,
+  readonly = false,
+}: LocalCardProps) {
   const tone = TONE[certTone(local.necesitaCertificacion)];
   const prioridad = prioridadMeta(local.prioridad);
 
@@ -41,7 +49,13 @@ export function LocalCard({ local, canManage, onOpen, onEdit, onDelete }: LocalC
             </Text>
           </View>
         </View>
-        {local.restringido ? (
+        {readonly ? (
+          <View style={styles.readonlyBadge}>
+            <Text style={styles.readonlyBadgeText}>
+              Solo consulta{local.asesorBioClim ? ` · ${local.asesorBioClim}` : ""}
+            </Text>
+          </View>
+        ) : local.restringido ? (
           <View style={styles.restrictBadge}>
             <Text style={styles.restrictBadgeText}>Local restringido</Text>
           </View>
@@ -142,6 +156,18 @@ const styles = StyleSheet.create({
   },
   restrictBadgeText: {
     color: theme.colors.danger,
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  readonlyBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 7,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    backgroundColor: theme.colors.infoSoft,
+  },
+  readonlyBadgeText: {
+    color: theme.colors.info,
     fontSize: 9,
     fontWeight: "800",
   },

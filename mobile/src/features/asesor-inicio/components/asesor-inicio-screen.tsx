@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { useAsesorInicio } from "../hooks";
 import type { AsesorKpis, AsesorMes, GestionItem, GestionKind } from "../types";
+import { GuiaRecojosSheet } from "./guia-recojos-sheet";
 
 const KPI: {
   key: keyof AsesorKpis;
@@ -51,6 +52,7 @@ export function AsesorInicioScreen() {
   const bottom = useContentBottomPad(18);
   const { data, locales, loading, error, reload } = useAsesorInicio();
   const [localId, setLocalId] = useState<string | null>(null);
+  const [guia, setGuia] = useState<{ id: string; nombre: string } | null>(null);
   const local = localId ? locales.find((item) => item.id === localId) ?? null : null;
 
   return (
@@ -85,6 +87,9 @@ export function AsesorInicioScreen() {
                 if (item.localId) setLocalId(item.localId);
                 else router.push("/locales");
               }}
+              onVerGuia={(item) => {
+                if (item.localId) setGuia({ id: item.localId, nombre: item.nombre });
+              }}
               onProgramar={() => router.push("/rutas?tab=programacion")}
             />
             <AccesosCard onGo={(href) => router.push(href as never)} />
@@ -92,7 +97,19 @@ export function AsesorInicioScreen() {
           </>
         ) : null}
       </ScrollView>
-      <LocalDetailSheet local={local} canManage onClose={() => setLocalId(null)} />
+      <LocalDetailSheet
+        local={local}
+        canManage
+        onClose={() => setLocalId(null)}
+        onVerGuia={
+          local ? () => setGuia({ id: local.id, nombre: local.nombre }) : undefined
+        }
+      />
+      <GuiaRecojosSheet
+        localId={guia?.id ?? null}
+        localNombre={guia?.nombre ?? ""}
+        onClose={() => setGuia(null)}
+      />
     </View>
   );
 }
@@ -121,12 +138,14 @@ function GestionCard({
   total,
   onTodos,
   onVer,
+  onVerGuia,
   onProgramar,
 }: {
   items: GestionItem[];
   total: number;
   onTodos: () => void;
   onVer: (item: GestionItem) => void;
+  onVerGuia: (item: GestionItem) => void;
   onProgramar: () => void;
 }) {
   return (
@@ -211,6 +230,9 @@ function GestionCard({
                   </>
                 ) : null}
                 <Accion label="Ver local" icon="pin" tone="ghost" onPress={() => onVer(item)} />
+                {item.localId ? (
+                  <Accion label="Ver la guía" icon="cert" tone="ghost" onPress={() => onVerGuia(item)} />
+                ) : null}
                 {item.kind !== "seguimiento" ? (
                   <Accion label="Programar" icon="calendar" tone="ghost" onPress={onProgramar} />
                 ) : null}
