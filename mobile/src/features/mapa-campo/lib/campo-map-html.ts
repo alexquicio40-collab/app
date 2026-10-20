@@ -13,8 +13,7 @@ export function buildCampoMapHtml() {
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   ${leafletHead()}
   <style>
-    html, body { height: 100%; width: 100%; margin: 0; overflow: hidden; background: #E7EEEB; }
-    #stage, #map { position: absolute; inset: 0; height: 100%; width: 100%; }
+    html, body, #map { height: 100%; width: 100%; margin: 0; background: #E7EEEB; }
     #compassRose {
       position: absolute; top: 12px; right: 12px; z-index: 4;
       width: 44px; height: 44px; pointer-events: none;
@@ -22,21 +21,11 @@ export function buildCampoMapHtml() {
     }
     #compassRose.on { display: flex; }
     #compassRose svg { width: 44px; height: 44px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.35)); }
-    .tip {
-      background: #FFFFFF; color: #0B1F1A; border-radius: 10px; padding: 6px 8px;
-      box-shadow: 0 4px 14px rgba(8,61,48,0.22); border: 1.5px solid #D2DDD8;
-      font-family: system-ui, -apple-system, sans-serif; min-width: 84px; text-align: center;
-      cursor: pointer; user-select: none;
-    }
-    .tip.best { border-color: #0B5340; background: #DCEEE7; }
-    .tip .mins { font-size: 13px; font-weight: 900; color: #0B5340; line-height: 1.1; }
-    .tip .delta { font-size: 10px; font-weight: 800; color: #5C6B67; margin-top: 1px; }
-    .tip .traf { font-size: 9px; font-weight: 800; text-transform: uppercase; margin-top: 2px; }
-    .tip .traf.ok { color: #0B5340; } .tip .traf.warn { color: #C2410C; } .tip .traf.bad { color: #B42318; }
   </style>
 </head>
 <body>
-  <div id="stage" class="gm-nav-stage"><div id="map"></div></div>
+  <div id="boot">Cargando mapa…</div>
+  <div id="map"></div>
   <div id="compassRose" aria-hidden="true">
     <svg viewBox="0 0 44 44">
       <circle cx="22" cy="22" r="20" fill="#FFFFFF" stroke="#0B5340" stroke-width="2"/>
@@ -57,6 +46,7 @@ export function buildCampoMapHtml() {
     var lastTraveledKey = '';
     var lastIdleFit = '';
     var lastFocusToken = 0;
+    var lastRouteBounds = null;
     var followEnabled = false;
     var cameraHold = false;
     var trackingActive = false;
@@ -82,7 +72,6 @@ export function buildCampoMapHtml() {
     var targetHeading = 0;
     var accCircle = null;
     var PRIMARY = '#0B5340';
-    var ALT = ['#5C8F7E', '#7FA898', '#A3C1B5'];
     var MY_BLUE = '#1A73E8';
 
     function post(msg) {
@@ -121,7 +110,7 @@ export function buildCampoMapHtml() {
       var aim = applyNavCamera(map, pos, navHeading(), lastSpeedMps, {
         snap: !!snap,
         zoom: snap || lastNavZoom === 0,
-        tilt: followEnabled || cameraHold,
+        tilt: false,
       });
       if (!aim) return;
       lastPan = { lat: aim.lat, lng: aim.lng };
@@ -249,6 +238,17 @@ export function buildCampoMapHtml() {
       applyHorizon(true);
     }
 
+    function centerRoute() {
+      followEnabled = false;
+      cameraHold = false;
+      lastNavZoom = 0;
+      lastPan = null;
+      emitFollow();
+      clearNavCamera(map);
+      if (!map || !lastRouteBounds) return;
+      map.fitBounds(lastRouteBounds, { top: 72, right: 36, bottom: 200, left: 36 });
+    }
+
     function goToStop(lat, lng) {
       if (!map || !isFinite(Number(lat)) || !isFinite(Number(lng))) return;
       followEnabled = false;
@@ -259,14 +259,13 @@ export function buildCampoMapHtml() {
       if (map.getZoom() < 15) map.setZoom(16);
     }
 
-    function routesKey(routes, selectedId, traveled) {
+    function routesKey(routes, selectedId) {
       var parts = (routes || []).map(function (r) {
         var first = r.coords && r.coords[0] ? r.coords[0].lat + ',' + r.coords[0].lng : '';
         var last = r.coords && r.coords.length ? r.coords[r.coords.length - 1].lat + ',' + r.coords[r.coords.length - 1].lng : '';
         return r.id + ':' + (r.coords ? r.coords.length : 0) + ':' + first + ':' + last + ':' + (r.minsLabel || '');
       });
-      var tLen = (traveled || []).length;
-      return selectedId + '|t' + tLen + '|' + parts.join('|');
+      return selectedId + '|' + parts.join('|');
     }
 
     function clearRoutes() {
@@ -291,7 +290,7 @@ export function buildCampoMapHtml() {
       if (path.length < 2) return;
       traveledLine = new google.maps.Polyline({
         path: path,
-        geodesic: true,
+        geodesic: false,
         strokeColor: '#8AA399',
         strokeOpacity: 0.55,
         strokeWeight: 5,
@@ -299,46 +298,6 @@ export function buildCampoMapHtml() {
         map: map,
         clickable: false,
       });
-    }
-
-    function tipHtml(item, selectedId) {
-      var best = item.id === selectedId;
-      return '<div class="tip' + (best ? ' best' : '') + '">' +
-        '<div class="mins">' + (item.minsLabel || '') + '</div>' +
-        (item.delta ? '<div class="delta">' + item.delta + '</div>' : '') +
-        '<div class="traf ' + (item.trafficTone || 'ok') + '">' + (item.trafficText || 'Fluido') + '</div>' +
-      '</div>';
-    }
-
-    function makeTip(mid, item, selectedId) {
-      var overlay = new google.maps.OverlayView();
-      overlay.onAdd = function () {
-        var div = document.createElement('div');
-        div.style.position = 'absolute';
-        div.style.zIndex = item.id === selectedId ? '50' : '20';
-        div.innerHTML = tipHtml(item, selectedId);
-        div.onclick = function (ev) {
-          ev.stopPropagation();
-          post({ type: 'select-route', id: item.id });
-        };
-        this.div_ = div;
-        this.getPanes().overlayMouseTarget.appendChild(div);
-      };
-      overlay.draw = function () {
-        if (!this.div_ || !mid) return;
-        var proj = this.getProjection();
-        if (!proj) return;
-        var point = proj.fromLatLngToDivPixel(new google.maps.LatLng(mid.lat, mid.lng));
-        if (!point) return;
-        this.div_.style.left = (point.x - 46) + 'px';
-        this.div_.style.top = (point.y - 44) + 'px';
-      };
-      overlay.onRemove = function () {
-        if (this.div_ && this.div_.parentNode) this.div_.parentNode.removeChild(this.div_);
-        this.div_ = null;
-      };
-      overlay.setMap(map);
-      return overlay;
     }
 
     function meIcon(tracking, heading) {
@@ -461,7 +420,7 @@ export function buildCampoMapHtml() {
     }
 
     function drawRoutes(routes, selectedId, traveled) {
-      var key = routesKey(routes, selectedId, traveled);
+      var key = routesKey(routes, selectedId);
       if (key === lastRoutesKey) {
         drawTraveled(traveled);
         return null;
@@ -479,35 +438,32 @@ export function buildCampoMapHtml() {
         return 0;
       });
 
-      var altIndex = 0;
-      ordered.forEach(function (item) {
-        var isSelected = item.id === selectedId;
-        var path = (item.coords || []).map(function (p) {
+      var picked = null;
+      for (var i = 0; i < ordered.length; i++) {
+        if (ordered[i].id === selectedId) { picked = ordered[i]; break; }
+      }
+      if (!picked) picked = ordered[0];
+      if (picked) {
+        var path = (picked.coords || []).map(function (p) {
           return { lat: Number(p.lat), lng: Number(p.lng) };
         });
-        if (path.length < 2) return;
-        path.forEach(function (p) { bounds.extend(p); hasBounds = true; });
-        var color = isSelected ? PRIMARY : ALT[Math.min(altIndex, ALT.length - 1)];
-        if (!isSelected) altIndex += 1;
+        if (path.length >= 2) {
+          path.forEach(function (p) { bounds.extend(p); hasBounds = true; });
+          var line = new google.maps.Polyline({
+            path: path,
+            geodesic: false,
+            strokeColor: PRIMARY,
+            strokeOpacity: 0.96,
+            strokeWeight: 7,
+            zIndex: 40,
+            map: map,
+            clickable: false,
+          });
+          routeLayers.push({ line: line, overlay: null });
+        }
+      }
 
-        var line = new google.maps.Polyline({
-          path: path,
-          geodesic: true,
-          strokeColor: color,
-          strokeOpacity: isSelected ? 0.96 : 0.4,
-          strokeWeight: isSelected ? 7 : 4,
-          zIndex: isSelected ? 40 : 10 + altIndex,
-          map: map,
-          clickable: true,
-        });
-        google.maps.event.addListener(line, 'click', function () {
-          post({ type: 'select-route', id: item.id });
-        });
-        var mid = item.mid || path[Math.floor(path.length / 2)];
-        var overlay = makeTip(mid, item, selectedId);
-        routeLayers.push({ line: line, overlay: overlay });
-      });
-
+      if (hasBounds) lastRouteBounds = bounds;
       return hasBounds ? bounds : null;
     }
 
@@ -619,8 +575,8 @@ export function buildCampoMapHtml() {
       if (starting) {
         displayPos = { lat: targetPos.lat, lng: targetPos.lng };
         displayHeading = targetHeading;
-        followEnabled = true;
-        cameraHold = true;
+        followEnabled = false;
+        cameraHold = false;
         lastPan = null;
         lastNavZoom = 0;
         lockedCourse = targetHeading;
@@ -642,7 +598,6 @@ export function buildCampoMapHtml() {
       }
       if (starting) {
         applyHorizon(true);
-        followCamera(displayPos, true);
       }
       startAnim();
     }
@@ -667,8 +622,13 @@ export function buildCampoMapHtml() {
       setMe(position, heading, tracking, accuracy, speedMps);
 
       if (tracking) {
-        lastIdleFit = '';
         lastFocusToken = 0;
+        if (routeBounds && lastIdleFit !== lastRoutesKey && !followEnabled) {
+          lastIdleFit = lastRoutesKey;
+          cameraHold = false;
+          emitFollow();
+          map.fitBounds(routeBounds, { top: 72, right: 36, bottom: 200, left: 36 });
+        }
         return;
       }
 
@@ -730,6 +690,7 @@ export function buildCampoMapHtml() {
 
     window.updateCampoMap = function (payload) { draw(payload); };
     window.recenterMe = recenterMe;
+    window.centerRoute = centerRoute;
     window.setCampoCompass = setCampoCompass;
 
     window.initCampoMap = function () {
@@ -752,6 +713,12 @@ export function buildCampoMapHtml() {
         emitFollow();
       });
       ready = true;
+      if (map && map._L && map._L.invalidateSize) {
+        setTimeout(function () { try { map._L.invalidateSize(); } catch (e) {} }, 80);
+        setTimeout(function () { try { map._L.invalidateSize(); } catch (e) {} }, 400);
+      }
+      var boot = document.getElementById('boot');
+      if (boot) boot.className = 'hide';
       if (pending) { draw(pending); pending = null; }
     };
 
@@ -762,6 +729,7 @@ export function buildCampoMapHtml() {
       }
       if (!data || !data.type) return;
       if (data.type === 'recenter') { recenterMe(); return; }
+      if (data.type === 'center-route') { centerRoute(); return; }
       if (data.type === 'compass') {
         setCampoCompass(!!data.on, data.heading);
         return;
@@ -780,6 +748,10 @@ export function campoMapUpdateScript(payload: unknown) {
 
 export function campoMapRecenterScript() {
   return `window.recenterMe && window.recenterMe(); true;`;
+}
+
+export function campoMapCenterRouteScript() {
+  return `window.centerRoute && window.centerRoute(); true;`;
 }
 
 export function campoMapCompassScript(on: boolean, heading: number | null) {

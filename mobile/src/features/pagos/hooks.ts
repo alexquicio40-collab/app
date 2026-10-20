@@ -5,6 +5,7 @@ import {
   deleteComprobante,
   fetchComprobantes,
   fetchHojasFinalizadas,
+  peekHojasFinalizadas,
   uploadComprobante,
 } from "./api";
 import {
@@ -42,9 +43,15 @@ export function usePagosScreen() {
   const canMutate = rol === "administrador" || rol === "asesor";
 
   const [tab, setTab] = useState<PagosTab>("pendientes");
-  const [hojas, setHojas] = useState<HojaPago[]>([]);
+  const [hojas, setHojas] = useState<HojaPago[]>(() => {
+    const defaults = createDefaultPagosFilters();
+    return peekHojasFinalizadas({ fechaDesde: defaults.fechaDesde, fechaHasta: defaults.fechaHasta }) ?? [];
+  });
   const [filters, setFilters] = useState<PagosFilters>(createDefaultPagosFilters);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    const defaults = createDefaultPagosFilters();
+    return !peekHojasFinalizadas({ fechaDesde: defaults.fechaDesde, fechaHasta: defaults.fechaHasta });
+  });
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
@@ -59,14 +66,33 @@ export function usePagosScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async (mode: "boot" | "refresh" | "silent" = "boot") => {
-    if (mode === "boot") setLoading(true);
-    else if (mode === "refresh") setRefreshing(true);
-    setError(null);
-    try {
-      const rows = await fetchHojasFinalizadas({
+    if (mode === "boot") {
+      const cached = peekHojasFinalizadas({
         fechaDesde: filtersRef.current.fechaDesde,
         fechaHasta: filtersRef.current.fechaHasta,
       });
+      if (cached) {
+        setHojas(cached);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+    } else if (mode === "refresh") setRefreshing(true);
+    setError(null);
+    try {
+      const rows = await fetchHojasFinalizadas(
+        {
+          fechaDesde: filtersRef.current.fechaDesde,
+          fechaHasta: filtersRef.current.fechaHasta,
+        },
+        {
+          force: mode === "refresh",
+          onPartial: (partial) => {
+            setHojas(partial);
+            setLoading(false);
+          },
+        },
+      );
       setHojas(rows);
       setDetail((prev) => {
         if (!prev) return null;

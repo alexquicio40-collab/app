@@ -88,7 +88,12 @@ export function AsesorInicioScreen() {
                 else router.push("/locales");
               }}
               onVerGuia={(item) => {
-                if (item.localId) setGuia({ id: item.localId, nombre: item.nombre });
+                const id =
+                  item.localId ??
+                  locales.find(
+                    (row) => row.nombre.trim().toLowerCase() === item.nombre.trim().toLowerCase(),
+                  )?.id;
+                if (id) setGuia({ id, nombre: item.nombre });
               }}
               onProgramar={() => router.push("/rutas?tab=programacion")}
             />
@@ -102,7 +107,14 @@ export function AsesorInicioScreen() {
         canManage
         onClose={() => setLocalId(null)}
         onVerGuia={
-          local ? () => setGuia({ id: local.id, nombre: local.nombre }) : undefined
+          local
+            ? () => {
+                const id = local.id;
+                const nombre = local.nombre;
+                setLocalId(null);
+                setGuia({ id, nombre });
+              }
+            : undefined
         }
       />
       <GuiaRecojosSheet
@@ -230,9 +242,7 @@ function GestionCard({
                   </>
                 ) : null}
                 <Accion label="Ver local" icon="pin" tone="ghost" onPress={() => onVer(item)} />
-                {item.localId ? (
-                  <Accion label="Ver la guía" icon="cert" tone="ghost" onPress={() => onVerGuia(item)} />
-                ) : null}
+                <Accion label="Ver la guía" icon="cert" tone="ghost" onPress={() => onVerGuia(item)} />
                 {item.kind !== "seguimiento" ? (
                   <Accion label="Programar" icon="calendar" tone="ghost" onPress={onProgramar} />
                 ) : null}

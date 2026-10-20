@@ -1,4 +1,5 @@
-import { api, apiUpload, getApiBaseUrl } from "@/lib/api";
+import { api, apiOnline, apiUpload, getApiBaseUrl } from "@/lib/api";
+import { readJsonFile, writeJsonFile } from "@/lib/offline/storage";
 import { parseMoney } from "./lib/precios";
 import { normalizePrioridad } from "./lib/prioridad";
 import type { LocalFormInput, LocalFoto, LocalItem, PendingLocalFoto } from "./types";
@@ -88,12 +89,52 @@ function parseFotos(value: unknown, localId: string): LocalFoto[] {
   return out.sort((a, b) => a.orden - b.orden);
 }
 
-function firstFotoUrl(value: unknown): string | null {
-  if (!Array.isArray(value) || !value.length) return null;
-  const row = value[0];
-  if (!isRecord(row)) return null;
-  const ruta = text(row.ruta_archivo, row.rutaArchivo, row.url);
-  return ruta ? resolveMediaPath(ruta) : null;
+/** Fila de lista: solo lo que pinta la tarjeta / filtros. Sin fotos ni álbum. */
+export function parseLocalList(row: UnknownRecord): LocalItem | null {
+  const id = text(row.id);
+  if (!id) return null;
+  return {
+    id,
+    nombre: text(row.nombre) || `Local ${id}`,
+    direccion: text(row.direccion),
+    direccionCert: "",
+    direccionFiscal: "",
+    direccionComercial: "",
+    latitud: num(row.latitud, row.lat),
+    longitud: num(row.longitud, row.lng),
+    horarioEntrada: "",
+    asesorBioClim: text(row.asesor_bio_clim),
+    telefonoAsesor: "",
+    encargadoNombre: text(row.encargado_tienda),
+    encargadoTelefono: "",
+    referencia: "",
+    ruc: text(row.ruc),
+    razonSocial: text(row.razon_social),
+    necesitaCertificacion: bool(row.necesita_certificacion),
+    estadoCertificacion: text(row.estado_certificacion) || null,
+    archivoCertificado: null,
+    activo: row.activo == null ? true : bool(row.activo),
+    tipoEnvase: "",
+    cantidadEnvases: null,
+    cantidadBidonesAzules: null,
+    cantidadBidonesBlancos: null,
+    bidonReal: null,
+    bidonPasadoPor: null,
+    precioLitro: parseMoney(row.precio_litro ?? row.precioLitro),
+    precioBalde: parseMoney(row.precio_balde ?? row.precioBalde),
+    precioGalonera: parseMoney(row.precio_galonera ?? row.precioGalonera),
+    operadoresVenPrecio: bool(row.operadores_ven_precio ?? row.operadoresVenPrecio),
+    operadoresVenTelefono:
+      row.operadores_ven_telefono == null && row.operadoresVenTelefono == null
+        ? true
+        : bool(row.operadores_ven_telefono ?? row.operadoresVenTelefono),
+    frecuencias: parseFrecuencias(row.frecuencias_asignacion),
+    metodosPago: [],
+    fotos: [],
+    prioridad: normalizePrioridad(text(row.prioridad)),
+    restringido: bool(row.restringido ?? row.local_restringido),
+    createdAt: text(row.created_at, row.createdAt) || null,
+  };
 }
 
 export function parseLocal(
@@ -103,7 +144,6 @@ export function parseLocal(
   const id = text(row.id);
   if (!id) return null;
   const includeFotos = opts?.includeFotos === true;
-  const portada = includeFotos ? null : firstFotoUrl(row.fotos);
 
   return {
     id,
@@ -142,11 +182,7 @@ export function parseLocal(
         : bool(row.operadores_ven_telefono ?? row.operadoresVenTelefono),
     frecuencias: parseFrecuencias(row.frecuencias_asignacion),
     metodosPago: parseMetodos(row.metodos_pago),
-    fotos: includeFotos
-      ? parseFotos(row.fotos, id)
-      : portada
-        ? [{ id: `${id}-portada`, localId: id, rutaArchivo: portada, descripcion: "", orden: 0 }]
-        : [],
+    fotos: includeFotos ? parseFotos(row.fotos, id) : [],
     prioridad: normalizePrioridad(text(row.prioridad)),
     restringido: bool(row.restringido ?? row.local_restringido),
     createdAt: text(row.created_at, row.createdAt) || null,
@@ -196,40 +232,11 @@ export function peekLocalesCache(): LocalItem[] | null {
   return localesListCache?.items ?? null;
 }
 
-export async function fetchLocales(opts?: {
-  force?: boolean;
-  /** Por defecto false: listado/mapa sin parsear el álbum de fotos. */
-  includeFotos?: boolean;
-}): Promise<LocalItem[]> {
-  const includeFotos = opts?.includeFotos === true;
-  if (
-    !includeFotos &&
-    !opts?.force &&
-    localesListCache &&
-    Date.now() - localesListCache.at < LOCALES_LIST_CACHE_MS
-  ) {
-    return localesListCache.items;
-  }
+const LOCALES_SNAP_FILE = "locales-snap.json";
+const LOCALES_SNAP_SIZE = 40;
 
-  const payload = await api<unknown>(
-    includeFotos ? "/api/locales" : "/api/locales?fotos=portada",
-  );
-  const raw = new Map<string, UnknownRecord>();
-  const items: LocalItem[] = [];
-  for (const row of asRows(payload, "locales")) {
-    const item = parseLocal(row, { includeFotos });
-    if (!item) continue;
-    raw.set(item.id, row);
-    items.push(item);
-  }
-
-  rawLocalesById = raw;
-  if (!includeFotos) {
-    localesListCache = { at: Date.now(), items };
-  } else {
-    localesListCache = null;
-  }
-  // Calienta el cache lite (Asignar / Hoja ruta) con el mismo payload.
+function rememberList(items: LocalItem[]) {
+  localesListCache = { at: Date.now(), items };
   localesLiteCache = {
     at: Date.now(),
     items: items.map((item) => ({
@@ -240,6 +247,70 @@ export async function fetchLocales(opts?: {
       activo: item.activo,
     })),
   };
+  if (items.length) {
+    void writeJsonFile(LOCALES_SNAP_FILE, {
+      at: Date.now(),
+      items: items.slice(0, LOCALES_SNAP_SIZE),
+    });
+  }
+}
+
+export async function peekLocalesSnap(): Promise<LocalItem[] | null> {
+  const snap = await readJsonFile<{ items?: LocalItem[] }>(LOCALES_SNAP_FILE, {});
+  return snap.items?.length ? snap.items : null;
+}
+
+export function seedLocalesCache(items: LocalItem[]) {
+  if (!items.length) return;
+  rememberList(items);
+}
+
+export async function fetchLocales(opts?: {
+  force?: boolean;
+  /** Por defecto false: listado/mapa sin parsear el álbum de fotos. */
+  includeFotos?: boolean;
+  /** Primera tanda lista para pintar; el resto llega en el return. */
+  onPartial?: (items: LocalItem[]) => void;
+}): Promise<LocalItem[]> {
+  const includeFotos = opts?.includeFotos === true;
+  if (
+    !includeFotos &&
+    !opts?.force &&
+    localesListCache &&
+    Date.now() - localesListCache.at < LOCALES_LIST_CACHE_MS
+  ) {
+    opts?.onPartial?.(localesListCache.items);
+    return localesListCache.items;
+  }
+
+  const payload = await apiOnline<unknown>(
+    includeFotos ? "/api/locales" : "/api/locales?fotos=0",
+  );
+  const rows = asRows(payload, "locales");
+  const items: LocalItem[] = [];
+  const firstPaint = 12;
+  let painted = false;
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i]!;
+    const item = includeFotos ? parseLocal(row, { includeFotos: true }) : parseLocalList(row);
+    if (!item) continue;
+    if (includeFotos) rawLocalesById.set(item.id, row);
+    items.push(item);
+    if (!includeFotos && !painted && items.length === firstPaint) {
+      painted = true;
+      rememberList(items);
+      opts?.onPartial?.(items.slice());
+    }
+    if (!includeFotos && i > 0 && i % 80 === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+
+  if (!includeFotos) {
+    rememberList(items);
+  } else {
+    localesListCache = null;
+  }
   return items;
 }
 
@@ -318,7 +389,7 @@ export async function fetchLocalesLite(opts?: {
     }));
   }
 
-  const payload = await api<unknown>("/api/locales?fotos=portada");
+  const payload = await api<unknown>("/api/locales?fotos=0");
   const items: LocalLiteCached[] = asRows(payload, "locales")
     .map((row) => {
       const id = text(row.id);

@@ -9,6 +9,8 @@ import {
   eliminarDispositivo,
   fetchDispositivos,
   fetchSesiones,
+  peekDispositivos,
+  peekSesiones,
   registrarDispositivo,
 } from "./api";
 import { getDispositivo } from "./lib/dispositivo";
@@ -37,10 +39,10 @@ export function useSesionesScreen() {
   const [tab, setTab] = useState<SesionesTab>("sesiones");
   const [q, setQ] = useState("");
   const [soloActivas, setSoloActivas] = useState(true);
-  const [sesiones, setSesiones] = useState<SesionItem[]>([]);
-  const [dispositivos, setDispositivos] = useState<DispositivoItem[]>([]);
+  const [sesiones, setSesiones] = useState<SesionItem[]>(() => peekSesiones() ?? []);
+  const [dispositivos, setDispositivos] = useState<DispositivoItem[]>(() => peekDispositivos() ?? []);
   const [huella, setHuella] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !peekSesiones() && !peekDispositivos());
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -50,12 +52,17 @@ export function useSesionesScreen() {
       setLoading(false);
       return;
     }
-    if (!silent) setLoading(true);
+    const cachedSes = peekSesiones();
+    const cachedDevs = peekDispositivos();
+    if (cachedSes) setSesiones(cachedSes);
+    if (cachedDevs) setDispositivos(cachedDevs);
+    if (cachedSes || cachedDevs) setLoading(false);
+    else if (!silent) setLoading(true);
     setError(null);
     try {
       const [ses, devs, yo] = await Promise.all([
-        fetchSesiones(),
-        fetchDispositivos(),
+        fetchSesiones({ force: silent }),
+        fetchDispositivos({ force: silent }),
         getDispositivo(),
       ]);
       setSesiones(ses);

@@ -1,5 +1,6 @@
 import { api, limaDate } from "@/lib/api";
-import { asEstado } from "./lib/estados-recojo";
+import { createListStore, fetchLive } from "@/lib/fast-data";
+import { asEstado, isRecolectado } from "./lib/estados-recojo";
 import { toDayKey } from "./lib/format";
 import { normalizePrioridad } from "@/features/locales/lib/prioridad";
 import { resolveMediaUrl } from "./lib/format";
@@ -208,11 +209,29 @@ export async function fetchRutasReprogramadas() {
   return fetchRoutesOnce({ estado: "reprogramado" });
 }
 
-async function fetchRoutesOnce(query: FetchRoutesQuery = {}): Promise<RouteItem[]> {
-  const payload = await api<unknown>(buildQuery(query));
-  return asRows(payload, "rutas")
+function routesStore(query: FetchRoutesQuery) {
+  return createListStore<RouteItem>(`rutas:${buildQuery(query)}`);
+}
+
+export function peekRoutes(query: FetchRoutesQuery = {}) {
+  return routesStore(query).peek();
+}
+
+async function fetchRoutesOnce(
+  query: FetchRoutesQuery = {},
+  opts?: { force?: boolean },
+): Promise<RouteItem[]> {
+  const store = routesStore(query);
+  if (!opts?.force && store.fresh()) {
+    const cached = store.peek();
+    if (cached) return cached;
+  }
+  const payload = await fetchLive<unknown>(buildQuery(query));
+  const items = asRows(payload, "rutas")
     .map(parseRoute)
     .filter((item): item is RouteItem => Boolean(item));
+  store.remember(items);
+  return items;
 }
 
 /** Rutas del operador entre dos días (inclusive). Un día usa una sola petición. */
@@ -256,7 +275,7 @@ export async function fetchRoutesSpan(desde: string, hasta: string) {
 /** Paridad Flutter `getRutasOperador` → `/api/conductores/:id/rutas`. */
 export async function fetchOperadorRutas(operadorId: string, fecha?: string | null) {
   const qs = fecha ? `?fecha=${encodeURIComponent(fecha)}` : "";
-  const payload = await api<unknown>(`/api/conductores/${operadorId}/rutas${qs}`);
+  const payload = await fetchLive<unknown>(`/api/conductores/${operadorId}/rutas${qs}`);
   return asRows(payload, "rutas")
     .map(parseRoute)
     .filter((item): item is RouteItem => Boolean(item));
@@ -328,19 +347,45 @@ function sortRecojos(rows: RouteItem[]) {
     .slice(0, 30);
 }
 
-/** Últimos recojos de un local (guía / evidencias). */
-export async function fetchRutasDeLocal(localId: string): Promise<RouteItem[]> {
-  const direct = await fetchRoutesOnce({ localId }).catch(() => [] as RouteItem[]);
-  const own = direct.filter((item) => item.localId === localId);
-  if (own.length >= 3) return sortRecojos(own.map(withResolvedMedia));
+function esEvidencia(item: RouteItem) {
+  return Boolean(
+    item.fotoGuia ||
+      item.fotoMercaderia ||
+      item.fotoPago ||
+      item.fechaCompletada ||
+      isRecolectado(item.estado),
+  );
+}
 
-  const hasta = limaDate();
-  const span = await fetchRoutesSpan(shiftDay(hasta, -21), hasta).catch(() => [] as RouteItem[]);
+/** Últimos recojos de un local con guía / evidencias (no las rutas solo programadas). */
+export async function fetchRutasDeLocal(localId: string): Promise<RouteItem[]> {
+  const [direct, recolectadas] = await Promise.all([
+    fetchRoutesOnce({ localId }).catch(() => [] as RouteItem[]),
+    fetchRoutesOnce({ localId, estado: "recolectado" }).catch(() => [] as RouteItem[]),
+  ]);
   const merged = new Map<string, RouteItem>();
-  for (const item of [...own, ...span.filter((row) => row.localId === localId)]) {
+  for (const item of [...direct, ...recolectadas]) {
+    if (item.localId && item.localId !== localId) continue;
     merged.set(item.id, item);
   }
-  return sortRecojos([...merged.values()].map(withResolvedMedia));
+  const evidencias = [...merged.values()].filter(esEvidencia);
+  if (evidencias.length) return sortRecojos(evidencias.map(withResolvedMedia));
+
+  const hasta = limaDate();
+  const days = Array.from({ length: 14 }, (_, index) => shiftDay(hasta, -index));
+  const batches = await Promise.all(
+    days.map((fecha) =>
+      fetchRoutesOnce({ localId, fecha, estado: "recolectado" }).catch(() => [] as RouteItem[]),
+    ),
+  );
+  for (const batch of batches) {
+    for (const item of batch) {
+      if (item.localId && item.localId !== localId) continue;
+      if (!esEvidencia(item)) continue;
+      merged.set(item.id, item);
+    }
+  }
+  return sortRecojos([...merged.values()].filter(esEvidencia).map(withResolvedMedia));
 }
 
 /** Hoy en Lima — valor por defecto para listados rápidos. */
@@ -358,7 +403,7 @@ export function withResolvedMedia(route: RouteItem): RouteItem {
 }
 
 export async function fetchConductores(): Promise<ConductorOption[]> {
-  const payload = await api<unknown>("/api/conductores").catch(() => ({ conductores: [] }));
+  const payload = await fetchLive<unknown>("/api/conductores").catch(() => ({ conductores: [] }));
   const map = new Map<string, ConductorOption>();
 
   for (const row of asRows(payload, "conductores")) {

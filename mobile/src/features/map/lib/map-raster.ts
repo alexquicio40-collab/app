@@ -12,7 +12,12 @@ export const MAP_WEBVIEW_BASE = "https://unpkg.com";
 
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+const LEAFLET_JS_FB = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js";
 const LEAFLET_ROTATE_JS = "https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js";
+const LEAFLET_ROTATE_FB = "https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate.js";
+
+const MAPS_KEY =
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? "AIzaSyCj1xJNYLv2E45yrRRNPAi-BBTfp_L01z0";
 
 /** Directions en web (no WebView). */
 export function mapsJsSrc(key: string, callback?: string, libraries?: string) {
@@ -25,17 +30,13 @@ export function mapsJsSrc(key: string, callback?: string, libraries?: string) {
 export function leafletHead() {
   return `<link rel="stylesheet" href="${LEAFLET_CSS}"/>
 <style>
-  html, body { height: 100%; width: 100%; margin: 0; overflow: hidden; background: #E7EEEB; }
-  #map, .leaflet-container { height: 100%; width: 100%; margin: 0; background: #E7EEEB; }
+  html, body, #map, .leaflet-container { height: 100%; width: 100%; margin: 0; background: #E7EEEB; }
   .gm-label { background: #fff; border: 1px solid #D2DDD8; border-radius: 6px; padding: 1px 6px; font: 700 11px system-ui, sans-serif; color: #14261F; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-  .gm-nav-stage { position: absolute; inset: 0; overflow: hidden; perspective-origin: 50% 100%; }
-  .gm-nav-stage.gm-nav-on { perspective: 980px; }
-  .gm-nav-stage.gm-nav-on .leaflet-container {
-    transform: rotateX(var(--gm-tilt, 50deg)) scale(1.78);
-    transform-origin: 50% 100%;
-    transition: transform 0.28s ease-out;
-    will-change: transform;
+  #boot {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #5C6B67; font: 700 13px system-ui, sans-serif; z-index: 2; pointer-events: none;
   }
+  #boot.hide { display: none; }
 </style>`;
 }
 
@@ -281,9 +282,56 @@ google.maps.DirectionsRenderer.prototype.setDirections = function (result) {
   });
 };
 
+function gmDecodePoly(encoded) {
+  var coords = [];
+  if (!encoded) return coords;
+  var index = 0, lat = 0, lng = 0;
+  while (index < encoded.length) {
+    var result = 0, shift = 0, b;
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+    result = 0; shift = 0;
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+    coords.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return coords;
+}
+function gmJoinPath(out, part) {
+  if (!part || !part.length) return;
+  if (out.length && part[0] && Math.abs(out[out.length - 1].lat - part[0].lat) < 1e-6 &&
+      Math.abs(out[out.length - 1].lng - part[0].lng) < 1e-6) {
+    for (var i = 1; i < part.length; i++) out.push(part[i]);
+    return;
+  }
+  for (var j = 0; j < part.length; j++) out.push(part[j]);
+}
 google.maps.DirectionsService = function () {};
 google.maps.DirectionsService.prototype.route = function (req, cb) {
-  cb({ routes: [{ overview_path: [req.origin, req.destination] }] }, "OK");
+  var o = gmLL(req.origin);
+  var d = gmLL(req.destination);
+  if (!o || !d) { cb(null, "NOT_FOUND"); return; }
+  var url = "https://maps.googleapis.com/maps/api/directions/json" +
+    "?origin=" + encodeURIComponent(o.lat + "," + o.lng) +
+    "&destination=" + encodeURIComponent(d.lat + "," + d.lng) +
+    "&mode=driving&region=pe&overview=full&avoid=ferries&alternatives=false" +
+    "&key=" + encodeURIComponent(${JSON.stringify(MAPS_KEY)});
+  fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+    if (!data || data.status !== "OK" || !data.routes || !data.routes[0]) {
+      cb(null, (data && data.status) || "ZERO_RESULTS");
+      return;
+    }
+    var path = [];
+    var route = data.routes[0];
+    (route.legs || []).forEach(function (leg) {
+      (leg.steps || []).forEach(function (step) {
+        gmJoinPath(path, gmDecodePoly(step.polyline && step.polyline.points));
+      });
+    });
+    if (path.length < 2) path = gmDecodePoly(route.overview_polyline && route.overview_polyline.points);
+    if (path.length < 2) { cb(null, "ZERO_RESULTS"); return; }
+    cb({ routes: [{ overview_path: path }] }, "OK");
+  }).catch(function () { cb(null, "UNKNOWN_ERROR"); });
 };
 
 google.maps.OverlayView = function () {};
@@ -320,30 +368,23 @@ google.maps.Map = function (el, opts) {
     maxZoom: 20,
     subdomains: "0123"
   });
-  this._osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 });
   this._sat = L.tileLayer("https://mt{s}.google.com/vt/lyrs=y&hl=es&x={x}&y={y}&z={z}", {
     maxZoom: 20,
     subdomains: "0123"
   });
-  this._L = L.map(el, {
+  var mapOpts = {
     center: center,
     zoom: opts.zoom || 12,
     zoomControl: !opts.disableDefaultUI && opts.zoomControl !== false,
-    attributionControl: false,
-    rotate: true,
-    bearing: 0
-  });
+    attributionControl: false
+  };
+  this._L = L.map(el, mapOpts);
   this._heading = 0;
   this._tilt = 0;
   this._road.addTo(this._L);
   var self = this;
-  var fellBack = false;
-  this._road.on("tileerror", function () {
-    if (fellBack) return;
-    fellBack = true;
-    if (self._L.hasLayer(self._road)) self._L.removeLayer(self._road);
-    self._osm.addTo(self._L);
-  });
+  var boot = document.getElementById("boot");
+  if (boot) boot.className = "hide";
   this._type = "roadmap";
   this._listeners = {};
   this._L.on("click", function (e) {
@@ -387,7 +428,6 @@ google.maps.Map.prototype.setMapTypeId = function (id) {
   this._type = id;
   if (id === "hybrid" || id === "satellite") {
     if (this._L.hasLayer(this._road)) this._L.removeLayer(this._road);
-    if (this._L.hasLayer(this._osm)) this._L.removeLayer(this._osm);
     this._sat.addTo(this._L);
   } else {
     if (this._L.hasLayer(this._sat)) this._L.removeLayer(this._sat);
@@ -396,38 +436,12 @@ google.maps.Map.prototype.setMapTypeId = function (id) {
 };
 google.maps.Map.prototype.getMapTypeId = function () { return this._type; };
 google.maps.Map.prototype.setHeading = function (deg) {
-  var n = ((Number(deg) || 0) + 360) % 360;
-  if (this._heading != null && Math.abs(((n - this._heading + 540) % 360) - 180) < 0.35) return;
-  this._heading = n;
-  if (this._L && typeof this._L.setBearing === "function") {
-    try { this._L.setBearing(n); return; } catch (e) {}
-  }
-  var pane = this._L && this._L.getPane && this._L.getPane("mapPane");
-  if (!pane) return;
-  pane.style.transformOrigin = "50% 50%";
-  pane.style.transition = "none";
-  pane.style.transform = n ? "rotate(" + (-n) + "deg)" : "";
+  this._heading = ((Number(deg) || 0) + 360) % 360;
 };
 google.maps.Map.prototype.getHeading = function () { return this._heading || 0; };
 google.maps.Map.prototype.setTilt = function (deg) {
-  var n = Math.max(0, Math.min(67, Number(deg) || 0));
-  if (this._tilt != null && Math.abs(this._tilt - n) < 0.35) return;
-  this._tilt = n;
-  var el = this._L && this._L.getContainer();
-  if (!el) return;
-  var stage = el.closest ? el.closest(".gm-nav-stage") : el.parentElement;
-  if (!stage) return;
-  if (n < 0.5) {
-    stage.classList.remove("gm-nav-on");
-    stage.style.removeProperty("--gm-tilt");
-  } else {
-    stage.classList.add("gm-nav-on");
-    stage.style.setProperty("--gm-tilt", n + "deg");
-  }
-  var self = this;
-  if (self._L && self._L.invalidateSize) {
-    setTimeout(function () { try { self._L.invalidateSize(); } catch (e) {} }, 40);
-  }
+  // Sin rotateX en el contenedor: en WebView Android las teselas quedan en verde.
+  this._tilt = Math.max(0, Math.min(67, Number(deg) || 0));
 };
 google.maps.Map.prototype.getTilt = function () { return this._tilt || 0; };
 google.maps.Map.prototype.moveCamera = function (cam) {
@@ -458,19 +472,45 @@ google.maps.event = {
 `;
 
 export function leafletStart(callback: string) {
-  return `<script src="${LEAFLET_JS}" onerror="var b=document.getElementById('boot');if(b){b.className='';b.textContent='Error al cargar el mapa';}"></script>
-<script src="${LEAFLET_ROTATE_JS}"></script>
-<script>
-if (window.L && L.Icon && L.Icon.Default) {
-  L.Icon.Default.imagePath = "https://unpkg.com/leaflet@1.9.4/dist/images/";
-}
-${SHIM}
-${HORIZON_SMOOTHER_JS}
-try { ${callback}(); } catch (err) {
-  var boot = document.getElementById("boot");
-  if (boot) { boot.className = ""; boot.textContent = "Error al iniciar el mapa"; }
-  console.error(err);
-}
+  return `<script>
+(function () {
+  function fail(msg) {
+    var boot = document.getElementById("boot");
+    if (boot) { boot.className = ""; boot.textContent = msg || "Error al cargar el mapa"; }
+  }
+  function addScript(src, onDone) {
+    var s = document.createElement("script");
+    s.src = src;
+    s.onload = function () { onDone(false); };
+    s.onerror = function () { onDone(true); };
+    document.head.appendChild(s);
+  }
+  function start() {
+    if (!window.L) { fail("Error al cargar el mapa"); return; }
+    if (L.Icon && L.Icon.Default) {
+      L.Icon.Default.imagePath = "https://unpkg.com/leaflet@1.9.4/dist/images/";
+    }
+    ${SHIM}
+    ${HORIZON_SMOOTHER_JS}
+    try { ${callback}(); } catch (err) {
+      fail("Error al iniciar el mapa");
+      console.error(err);
+    }
+  }
+  function loadRotate() {
+    addScript("${LEAFLET_ROTATE_JS}", function (err) {
+      if (err) addScript("${LEAFLET_ROTATE_FB}", function () { start(); });
+      else start();
+    });
+  }
+  addScript("${LEAFLET_JS}", function (err) {
+    if (err || !window.L) addScript("${LEAFLET_JS_FB}", function (err2) {
+      if (err2 || !window.L) { fail("Error al cargar el mapa"); return; }
+      loadRotate();
+    });
+    else loadRotate();
+  });
+})();
 </script>`;
 }
 

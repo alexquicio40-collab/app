@@ -39,6 +39,7 @@ import type {
 } from "@/features/routes/navegacion/types";
 import type { RouteItem } from "@/features/routes/types";
 import { readPreciseFix, watchPreciseFix } from "@/features/map/lib/precise-location";
+import { esEmuladorAndroid } from "@/lib/emulador";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Platform } from "react-native";
 
@@ -125,6 +126,10 @@ async function readPosition(): Promise<{ origin: LatLng; heading: number; mocked
   // Web demo: no pedir GPS real (el prompt puede colgarse detrás del lock del browser).
   if (isWebMockGpsEnabled()) {
     return { origin: MOCK_GPS_LIMA, heading: 0, mocked: true, accuracy: 8 };
+  }
+  // AVD: el GPS suele estar en California. Fijamos Lima para probar el trazado.
+  if (esEmuladorAndroid()) {
+    return { origin: MOCK_GPS_LIMA, heading: 250, mocked: true, accuracy: 8 };
   }
 
   try {
@@ -451,6 +456,10 @@ export function useCampoNav() {
     stopWatch();
 
     // Web sin GPS: avanza SUAVE sobre la polyline (no en línea recta)
+    if (mockingRef.current && esEmuladorAndroid()) {
+      return;
+    }
+
     if (mockingRef.current) {
       pollRef.current = setInterval(() => {
         void (async () => {
@@ -570,7 +579,7 @@ export function useCampoNav() {
           const pos = await readPosition();
           mocked = pos.mocked;
           // Si el mock genérico (Lima) está lejos del local, anclar cerca del destino
-          if (mocked) {
+          if (mocked && !esEmuladorAndroid()) {
             origin = mockOriginNear(dest);
             heading = headingToward(origin, dest);
           } else {

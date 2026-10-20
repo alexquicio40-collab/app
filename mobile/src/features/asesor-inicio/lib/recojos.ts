@@ -1,8 +1,11 @@
 import { fetchHistorial } from "@/features/certificados/api";
+import { isPdfFile } from "@/features/certificados/lib/format";
 import type { CertificadoHistorial } from "@/features/certificados/types";
 import { fetchRutasDeLocal } from "@/features/routes/api";
 import { estadoLabel, formatDate } from "@/features/routes/lib/format";
 import type { RouteItem } from "@/features/routes/types";
+
+export type GuiaMediaKind = "image" | "pdf";
 
 export type GuiaRecojo = {
   id: string;
@@ -13,8 +16,16 @@ export type GuiaRecojo = {
   fotoGuia: string | null;
   fotoMercaderia: string | null;
   certificadoUrl: string | null;
+  fotoGuiaKind: GuiaMediaKind | null;
+  fotoMercaderiaKind: GuiaMediaKind | null;
+  certificadoKind: GuiaMediaKind | null;
   origen: "ruta" | "certificado";
 };
+
+export function kindOfUrl(url: string | null | undefined): GuiaMediaKind | null {
+  if (!url) return null;
+  return isPdfFile("", url) ? "pdf" : "image";
+}
 
 function dayKey(value: string | null | undefined) {
   if (!value) return "";
@@ -33,12 +44,16 @@ function fromRuta(item: RouteItem): GuiaRecojo {
     fotoGuia: item.fotoGuia,
     fotoMercaderia: item.fotoMercaderia,
     certificadoUrl: null,
+    fotoGuiaKind: kindOfUrl(item.fotoGuia),
+    fotoMercaderiaKind: kindOfUrl(item.fotoMercaderia),
+    certificadoKind: null,
     origen: "ruta",
   };
 }
 
 function fromCert(item: CertificadoHistorial): GuiaRecojo {
   const fecha = item.rutaFechaCompletada || item.rutaFecha || item.createdAt || "";
+  const url = item.archivoUrl || item.archivo || null;
   return {
     id: `cert-${item.id}`,
     fecha,
@@ -47,7 +62,10 @@ function fromCert(item: CertificadoHistorial): GuiaRecojo {
     operador: item.conductorNombre || item.usuarioNombre || "—",
     fotoGuia: null,
     fotoMercaderia: null,
-    certificadoUrl: item.archivoUrl || item.archivo || null,
+    certificadoUrl: url,
+    fotoGuiaKind: null,
+    fotoMercaderiaKind: null,
+    certificadoKind: kindOfUrl(url),
     origen: "certificado",
   };
 }
@@ -59,7 +77,9 @@ export async function loadGuiaRecojos(
   const nombre = localNombre.trim().toLowerCase();
   const [rutas, historial] = await Promise.all([
     fetchRutasDeLocal(localId).catch(() => [] as RouteItem[]),
-    fetchHistorial({ fechaDesde: null, fechaHasta: null }).catch(() => [] as CertificadoHistorial[]),
+    fetchHistorial({ fechaDesde: null, fechaHasta: null, localId }).catch(
+      () => [] as CertificadoHistorial[],
+    ),
   ]);
 
   const certs = historial.filter(
@@ -80,7 +100,9 @@ export async function loadGuiaRecojos(
   for (const item of rutas) push(fromRuta(item));
   for (const item of certs) push(fromCert(item));
 
-  return out
-    .sort((a, b) => dayKey(b.fecha).localeCompare(dayKey(a.fecha)))
-    .slice(0, 24);
+  const ranked = out.sort((a, b) => dayKey(b.fecha).localeCompare(dayKey(a.fecha)));
+  const withMedia = ranked.filter(
+    (row) => row.fotoGuia || row.fotoMercaderia || row.certificadoUrl,
+  );
+  return (withMedia.length ? withMedia : ranked).slice(0, 24);
 }

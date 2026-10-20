@@ -1,4 +1,4 @@
-import { fetchConductores, loadReportesKpi } from "@/features/reportes-kpi/api";
+import { fetchConductores, loadReportesKpi, peekReportesKpi } from "@/features/reportes-kpi/api";
 import {
   applyPeriodo,
   createDefaultReportFilters,
@@ -47,12 +47,18 @@ export function useReportesKpiScreen() {
 
   const [filters, setFilters] = useState<ReportFilters>(createDefaultReportFilters);
   const [conductores, setConductores] = useState<ConductorOption[]>([]);
-  const [asignadores, setAsignadores] = useState<AsignadorOption[]>([]);
-  const [snapshot, setSnapshot] = useState<ReportSnapshot>(EMPTY);
-  const [loading, setLoading] = useState(true);
+  const [asignadores, setAsignadores] = useState<AsignadorOption[]>(() => {
+    return peekReportesKpi(createDefaultReportFilters(), user)?.asignadores ?? [];
+  });
+  const [snapshot, setSnapshot] = useState<ReportSnapshot>(() => {
+    return peekReportesKpi(createDefaultReportFilters(), user)?.snapshot ?? EMPTY;
+  });
+  const [loading, setLoading] = useState(() => !peekReportesKpi(createDefaultReportFilters(), user));
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hint, setHint] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(() => {
+    return peekReportesKpi(createDefaultReportFilters(), user)?.plantaHint ?? null;
+  });
 
   const load = useCallback(
     async (mode: "boot" | "refresh" = "boot", nextFilters?: ReportFilters) => {
@@ -62,13 +68,20 @@ export function useReportesKpiScreen() {
         return;
       }
       const active = nextFilters ?? filters;
-      if (mode === "boot") setLoading(true);
-      else setRefreshing(true);
+      const cached = peekReportesKpi(active, user);
+      if (cached) {
+        setAsignadores(seesAllUsers(user?.rol) ? cached.asignadores : []);
+        setSnapshot(cached.snapshot);
+        setHint(cached.plantaHint);
+        setLoading(false);
+      }
+      if (mode === "boot" && !cached) setLoading(true);
+      if (mode === "refresh") setRefreshing(true);
       setError(null);
       try {
         const [ops, report] = await Promise.all([
           fetchConductores().catch(() => [] as ConductorOption[]),
-          loadReportesKpi(active, user),
+          loadReportesKpi(active, user, { force: mode === "refresh" }),
         ]);
         const ownOps = seesAllUsers(user?.rol)
           ? ops

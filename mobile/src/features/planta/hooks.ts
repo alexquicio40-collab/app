@@ -7,6 +7,7 @@ import {
   deletePlantaRegistro,
   fetchAsesores,
   fetchPlantaRegistros,
+  peekPlantaRegistros,
   updatePlantaRegistro,
 } from "./api";
 import {
@@ -41,10 +42,10 @@ export function usePlantaScreen() {
   const rol = (user?.rol ?? "").toLowerCase();
   const canManage = rol === "administrador" || rol === "planta" || rol === "asesor";
 
-  const [registros, setRegistros] = useState<PlantaRegistro[]>([]);
+  const [registros, setRegistros] = useState<PlantaRegistro[]>(() => peekPlantaRegistros() ?? []);
   const [asesores, setAsesores] = useState<AsesorOption[]>([]);
   const [filters, setFilters] = useState<PlantaFilters>(createDefaultPlantaFilters);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !peekPlantaRegistros());
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -53,19 +54,31 @@ export function usePlantaScreen() {
   const [mutating, setMutating] = useState(false);
 
   const load = useCallback(async (mode: "boot" | "refresh" = "boot") => {
-    if (mode === "boot") setLoading(true);
-    else setRefreshing(true);
+    if (mode === "boot") {
+      const cached = peekPlantaRegistros();
+      if (cached) {
+        setRegistros(cached);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+    } else setRefreshing(true);
     setError(null);
     try {
+      const allPlanta = seesAllUsers(rol) || rol === "planta";
+      const scope = (rows: PlantaRegistro[]) =>
+        allPlanta ? rows : rows.filter((item) => matchAsesorTag(item.asesorComercial, user));
       const [rows, asesoresRows] = await Promise.all([
-        fetchPlantaRegistros(),
+        fetchPlantaRegistros({
+          force: mode === "refresh",
+          onPartial: (partial) => {
+            setRegistros(scope(partial));
+            setLoading(false);
+          },
+        }),
         fetchAsesores().catch(() => [] as AsesorOption[]),
       ]);
-      const allPlanta = seesAllUsers(rol) || rol === "planta";
-      const mine = allPlanta
-        ? rows
-        : rows.filter((item) => matchAsesorTag(item.asesorComercial, user));
-      setRegistros(mine);
+      setRegistros(scope(rows));
       setAsesores(allPlanta ? asesoresRows : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar los registros");

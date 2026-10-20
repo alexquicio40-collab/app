@@ -1,4 +1,4 @@
-import { fetchLocales } from "@/features/locales/api";
+import { fetchLocales, peekLocalesCache } from "@/features/locales/api";
 import { ROUTES_POLL_MS } from "@/features/map/constants";
 import { connectLiveSocket } from "@/features/map/socket";
 import { useMyLocation } from "@/features/map/lib/use-my-location";
@@ -9,6 +9,7 @@ import { asEstado, isCerrado, isEnCurso, isRecolectado } from "@/features/routes
 import type { RouteItem } from "@/features/routes/types";
 import type { CampoMapPin } from "@/features/mapa-campo/nav-types";
 import { limaDate } from "@/lib/api";
+import { esEmuladorAndroid, rutaDemoEmulador } from "@/lib/emulador";
 import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -64,13 +65,14 @@ export function useMapaCampo() {
       }
       try {
         const rutas = await fetchOperadorRutas(userId, fecha);
-        // Refuerzo: si algún campo falta, completar desde catálogo de locales
         if (!localesRef.current.length) {
-          localesRef.current = await fetchLocales().catch(() => []);
+          const cached = peekLocalesCache();
+          if (cached?.length) localesRef.current = cached;
         }
-        const mine = enrichRoutesWithLocales(rutas, localesRef.current)
+        let mine = enrichRoutesWithLocales(rutas, localesRef.current)
           .filter(isRutaActiva)
           .sort(sortByOrden);
+        if (!mine.length && esEmuladorAndroid()) mine = [rutaDemoEmulador()];
 
         const nextFp = routesFingerprint(mine);
         if (nextFp !== fingerprintRef.current) {
@@ -87,8 +89,27 @@ export function useMapaCampo() {
           });
         }
         if (!silent) setError(null);
+        if (!localesRef.current.length) {
+          localesRef.current = await fetchLocales({ includeFotos: false }).catch(() => []);
+          if (localesRef.current.length) {
+            const enriched = enrichRoutesWithLocales(rutas, localesRef.current)
+              .filter(isRutaActiva)
+              .sort(sortByOrden);
+            const fp = routesFingerprint(enriched);
+            if (fp !== fingerprintRef.current) {
+              fingerprintRef.current = fp;
+              setRoutes(enriched);
+            }
+          }
+        }
       } catch (err) {
-        if (!silent) {
+        if (esEmuladorAndroid()) {
+          const demo = [rutaDemoEmulador()];
+          fingerprintRef.current = routesFingerprint(demo);
+          setRoutes(demo);
+          setSelectedId("emu-demo-1");
+          if (!silent) setError(null);
+        } else if (!silent) {
           setError(err instanceof Error ? err.message : "No se pudieron cargar tus rutas");
           setRoutes([]);
         }

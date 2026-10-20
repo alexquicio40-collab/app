@@ -1,7 +1,7 @@
 import { fetchHistorial } from "@/features/certificados/api";
-import { fetchRoutesSpan } from "@/features/routes/api";
+import { fetchRoutes, fetchRoutesSpan, peekRoutes } from "@/features/routes/api";
 import type { RouteItem } from "@/features/routes/types";
-import { api } from "@/lib/api";
+import { fetchLive } from "@/lib/fast-data";
 import { hoy } from "@/lib/fecha-lima";
 import type { FuenteGerencia } from "./lib/build";
 
@@ -41,24 +41,55 @@ function unir(grupos: RouteItem[][]) {
   return [...map.values()];
 }
 
-export async function fetchGerenciaDia(): Promise<FuenteGerencia> {
+export async function fetchGerenciaDia(opts?: {
+  onPartial?: (fuente: FuenteGerencia) => void;
+}): Promise<FuenteGerencia> {
   const fecha = hoy();
   const mes = mesDe(fecha);
   const previo = mesAnterior(fecha);
-  const [rutasMes, rutasPrevias, historial, stats] = await Promise.all([
-    fetchRoutesSpan(mes.desde, mes.hasta),
-    fetchRoutesSpan(previo.desde, previo.hasta),
-    fetchHistorial({ fechaDesde: previo.desde, fechaHasta: mes.hasta }).catch(() => null),
-    api<unknown>("/api/estadisticas").catch(() => null),
-  ]);
 
-  return {
+  opts?.onPartial?.({
     hoy: fecha,
-    rutas: unir([rutasMes, rutasPrevias]),
+    rutas: peekRoutes({ fecha }) ?? [],
+    certificados: null,
+    metaMensual: null,
+    coberturaDesde: fecha,
+    coberturaHasta: fecha,
+  });
+
+  const [rutasHoy, stats] = await Promise.all([
+    fetchRoutes({ fecha }).catch(() => [] as RouteItem[]),
+    fetchLive<unknown>("/api/estadisticas").catch(() => null),
+  ]);
+  const first: FuenteGerencia = {
+    hoy: fecha,
+    rutas: rutasHoy,
+    certificados: null,
+    metaMensual: readMeta(stats),
+    coberturaDesde: fecha,
+    coberturaHasta: fecha,
+  };
+  opts?.onPartial?.(first);
+
+  const [rutasMes, historial] = await Promise.all([
+    fetchRoutesSpan(mes.desde, mes.hasta).catch(() => [] as RouteItem[]),
+    fetchHistorial({ fechaDesde: mes.desde, fechaHasta: mes.hasta }).catch(() => null),
+  ]);
+  const mid: FuenteGerencia = {
+    ...first,
+    rutas: unir([rutasHoy, rutasMes]),
     certificados: historial
       ? historial.map((item) => item.createdAt || item.rutaFecha || "").filter(Boolean)
       : null,
-    metaMensual: readMeta(stats),
+    coberturaDesde: mes.desde,
+    coberturaHasta: mes.hasta,
+  };
+  opts?.onPartial?.(mid);
+
+  const rutasPrevias = await fetchRoutesSpan(previo.desde, previo.hasta).catch(() => [] as RouteItem[]);
+  return {
+    ...mid,
+    rutas: unir([mid.rutas, rutasPrevias]),
     coberturaDesde: previo.desde,
     coberturaHasta: mes.hasta,
   };
@@ -69,7 +100,12 @@ export async function fetchRutasFuera(desde: string, hasta: string) {
   return fetchRoutesSpan(desde, hasta);
 }
 
-export function ampliarFuente(fuente: FuenteGerencia, extra: RouteItem[], desde: string, hasta: string): FuenteGerencia {
+export function ampliarFuente(
+  fuente: FuenteGerencia,
+  extra: RouteItem[],
+  desde: string,
+  hasta: string,
+): FuenteGerencia {
   return {
     ...fuente,
     rutas: unir([fuente.rutas, extra]),

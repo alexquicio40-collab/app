@@ -1,4 +1,5 @@
 import { api, apiUpload, getApiBaseUrl } from "@/lib/api";
+import { createListStore, fetchLive, mapRows } from "@/lib/fast-data";
 import type {
   CertificadoHistorial,
   CertificadoPendiente,
@@ -128,10 +129,34 @@ async function appendFile(form: FormData, field: string, file: PendingCertFile) 
   } as unknown as Blob);
 }
 
+function pendientesStore(filters: PendientesFilters) {
+  return createListStore<CertificadoPendiente>(
+    `cert-pend:${qs({
+      q: filters.search || undefined,
+      asesor: filters.asesor,
+      fecha_desde: filters.fechaDesde,
+      fecha_hasta: filters.fechaHasta,
+    })}`,
+  );
+}
+
+export function peekPendientes(filters: PendientesFilters) {
+  return pendientesStore(filters).peek();
+}
+
 export async function fetchPendientes(
   filters: PendientesFilters,
+  opts?: { force?: boolean; onPartial?: (items: CertificadoPendiente[]) => void },
 ): Promise<CertificadoPendiente[]> {
-  const payload = await api<unknown>(
+  const store = pendientesStore(filters);
+  if (!opts?.force && store.fresh()) {
+    const cached = store.peek();
+    if (cached) {
+      opts?.onPartial?.(cached);
+      return cached;
+    }
+  }
+  const payload = await fetchLive<unknown>(
     `/api/certificados/pendientes${qs({
       q: filters.search || undefined,
       asesor: filters.asesor,
@@ -139,23 +164,55 @@ export async function fetchPendientes(
       fecha_hasta: filters.fechaHasta,
     })}`,
   );
-  return asRows(payload, "locales")
-    .map(parsePendiente)
-    .filter((item): item is CertificadoPendiente => Boolean(item));
+  const items = await mapRows(asRows(payload, "locales"), parsePendiente, {
+    onPartial: opts?.onPartial,
+  });
+  store.remember(items);
+  return items;
+}
+
+function historialStore(
+  filters: Pick<HistorialFilters, "fechaDesde" | "fechaHasta"> & { localId?: string | null },
+) {
+  return createListStore<CertificadoHistorial>(
+    `cert-hist:${qs({
+      fecha_desde: filters.fechaDesde,
+      fecha_hasta: filters.fechaHasta,
+      local_id: filters.localId,
+    })}`,
+  );
+}
+
+export function peekHistorial(
+  filters: Pick<HistorialFilters, "fechaDesde" | "fechaHasta"> & { localId?: string | null },
+) {
+  return historialStore(filters).peek();
 }
 
 export async function fetchHistorial(
-  filters: Pick<HistorialFilters, "fechaDesde" | "fechaHasta">,
+  filters: Pick<HistorialFilters, "fechaDesde" | "fechaHasta"> & { localId?: string | null },
+  opts?: { force?: boolean; onPartial?: (items: CertificadoHistorial[]) => void },
 ): Promise<CertificadoHistorial[]> {
-  const payload = await api<unknown>(
+  const store = historialStore(filters);
+  if (!opts?.force && store.fresh()) {
+    const cached = store.peek();
+    if (cached) {
+      opts?.onPartial?.(cached);
+      return cached;
+    }
+  }
+  const payload = await fetchLive<unknown>(
     `/api/certificados/historial${qs({
       fecha_desde: filters.fechaDesde,
       fecha_hasta: filters.fechaHasta,
+      local_id: filters.localId,
     })}`,
   );
-  return asRows(payload, "historial")
-    .map(parseHistorial)
-    .filter((item): item is CertificadoHistorial => Boolean(item));
+  const items = await mapRows(asRows(payload, "historial"), parseHistorial, {
+    onPartial: opts?.onPartial,
+  });
+  store.remember(items);
+  return items;
 }
 
 export type CertificadoTexto = {

@@ -21,14 +21,8 @@ export function detectDistrito(direccion: string) {
   return null;
 }
 
-export function collectDistritos(locales: LocalItem[]) {
-  const found = new Set<string>();
-  for (const local of locales) {
-    const d = detectDistrito(local.direccion);
-    if (d) found.add(d);
-  }
-  const list = [...found].sort((a, b) => a.localeCompare(b, "es"));
-  return list.length ? list : [...LIMA_DISTRITOS];
+export function collectDistritos(_locales?: LocalItem[]) {
+  return [...LIMA_DISTRITOS];
 }
 
 function matchesCert(local: LocalItem, filter: string | null) {
@@ -54,29 +48,76 @@ function matchesSearch(local: LocalItem, query: string) {
   return q.split(" ").filter((part) => part.length >= 2).every((part) => hay.includes(part));
 }
 
+function matchesBase(local: LocalItem, filters: LocalesFilters) {
+  if (!matchesSearch(local, filters.search.trim())) return false;
+  if (filters.distrito && !local.direccion.toLowerCase().includes(filters.distrito.toLowerCase())) {
+    return false;
+  }
+  if (
+    filters.frecuencia &&
+    !local.frecuencias.some((f) => f.toLowerCase() === filters.frecuencia!.toLowerCase())
+  ) {
+    return false;
+  }
+  if (filters.prioridad && normalizePrioridad(local.prioridad) !== filters.prioridad) {
+    return false;
+  }
+  return true;
+}
+
 export function filterLocales(locales: LocalItem[], filters: LocalesFilters) {
-  const query = filters.search.trim();
+  return locales.filter(
+    (local) => matchesBase(local, filters) && matchesCert(local, filters.certificacion),
+  );
+}
 
-  return locales
-    .filter((local) => {
-      const matchSearch = matchesSearch(local, query);
+/** Una pasada: primera página + KPIs, sin copiar ni ordenar las 10k filas. */
+export function queryLocalesPage(
+  locales: LocalItem[],
+  filters: LocalesFilters,
+  opts: {
+    lista: "locales" | "certificados";
+    shown: number;
+    collectAll?: boolean;
+  },
+) {
+  const searching = Boolean(filters.search.trim());
+  const page: LocalItem[] = [];
+  const all: LocalItem[] | null = opts.collectAll ? [] : null;
+  let visible = 0;
+  let mapped = 0;
+  let necesitaCert = 0;
+  let noNecesitaCert = 0;
 
-      const matchDistrito =
-        !filters.distrito ||
-        local.direccion.toLowerCase().includes(filters.distrito.toLowerCase());
+  for (const local of locales) {
+    if (!matchesBase(local, filters)) continue;
+    if (local.necesitaCertificacion) necesitaCert += 1;
+    else noNecesitaCert += 1;
+    if (!matchesCert(local, filters.certificacion)) continue;
 
-      const matchCert = matchesCert(local, filters.certificacion);
+    const inLista = searching
+      ? true
+      : opts.lista === "certificados"
+        ? local.necesitaCertificacion
+        : !local.necesitaCertificacion;
+    if (!inLista) continue;
+    if (local.latitud != null && local.longitud != null) mapped += 1;
+    if (page.length < opts.shown) page.push(local);
+    all?.push(local);
+    visible += 1;
+  }
 
-      const matchFreq =
-        !filters.frecuencia ||
-        local.frecuencias.some((f) => f.toLowerCase() === filters.frecuencia!.toLowerCase());
-
-      const matchPrioridad =
-        !filters.prioridad || normalizePrioridad(local.prioridad) === filters.prioridad;
-
-      return matchSearch && matchDistrito && matchCert && matchFreq && matchPrioridad;
-    })
-    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  return {
+    page,
+    visibles: all ?? page,
+    visible,
+    mapped,
+    kpiCounts: {
+      total: necesitaCert + noNecesitaCert,
+      necesitaCert,
+      noNecesitaCert,
+    } satisfies LocalesCounts,
+  };
 }
 
 export function countLocales(locales: LocalItem[]): LocalesCounts {

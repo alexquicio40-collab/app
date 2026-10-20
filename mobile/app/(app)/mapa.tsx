@@ -284,7 +284,7 @@ export default function MapaScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.accentDeep },
-  stage: { flex: 1, position: "relative" },
+  stage: { flex: 1, minHeight: 0, position: "relative", backgroundColor: theme.colors.cream },
   panelStack: { gap: 8 },
   boot: {
     flex: 1,

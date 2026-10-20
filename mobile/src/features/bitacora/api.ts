@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { createStore, fetchLive } from "@/lib/fast-data";
 import type { BitacoraEvento, BitacoraResumen } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
@@ -72,7 +73,9 @@ export type BitacoraQuery = {
   q?: string;
 };
 
-export async function fetchBitacora(query: BitacoraQuery) {
+type BitacoraPack = ReturnType<typeof readBitacora>;
+
+function bitacoraSearch(query: BitacoraQuery) {
   const search = new URLSearchParams();
   search.set("desde", query.desde);
   search.set("hasta", query.hasta);
@@ -80,15 +83,36 @@ export async function fetchBitacora(query: BitacoraQuery) {
   if (query.accion) search.set("accion", query.accion);
   if (query.q?.trim()) search.set("q", query.q.trim());
   search.set("limit", "200");
+  return search.toString();
+}
 
-  const payload = await api<unknown>(`/api/bitacora?${search.toString()}`);
+function bitacoraStore(query: BitacoraQuery) {
+  return createStore<BitacoraPack>(`bitacora:${bitacoraSearch(query)}`);
+}
+
+export function peekBitacora(query: BitacoraQuery) {
+  return bitacoraStore(query).peek();
+}
+
+export async function fetchBitacora(query: BitacoraQuery, opts?: { force?: boolean }) {
+  const store = bitacoraStore(query);
+  if (!opts?.force && store.fresh()) {
+    const cached = store.peek();
+    if (cached) return cached;
+  }
+
+  const payload = await fetchLive<unknown>(`/api/bitacora?${bitacoraSearch(query)}`);
+  const next = readBitacora(payload);
+  store.remember(next, true);
+  return next;
+}
+
+function readBitacora(payload: unknown) {
   if (!isRecord(payload)) return { eventos: [] as BitacoraEvento[], resumen: emptyResumen(), total: 0 };
-
   const raw = payload.eventos;
   const eventos = Array.isArray(raw)
     ? raw.filter(isRecord).map(parseEvento).filter((item): item is BitacoraEvento => Boolean(item))
     : [];
-
   const box = isRecord(payload.resumen) ? payload.resumen : {};
   const resumen: BitacoraResumen = {
     ...emptyResumen(),
@@ -104,7 +128,6 @@ export async function fetchBitacora(query: BitacoraQuery) {
     autorizar: num(box.autorizar),
     bloquear: num(box.bloquear),
   };
-
   return { eventos, resumen, total: resumen.total };
 }
 

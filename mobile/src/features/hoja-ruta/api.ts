@@ -1,5 +1,6 @@
 import { fetchLocalesLite } from "@/features/locales/api";
 import { api } from "@/lib/api";
+import { createListStore, fetchLive } from "@/lib/fast-data";
 import { dia } from "@/lib/fecha-lima";
 import type {
   CreateHojaRutaInput,
@@ -128,7 +129,7 @@ export async function fetchLocalesActivos(opts?: { force?: boolean }): Promise<L
 }
 
 export async function fetchUserPlaca(userId: number | string): Promise<string> {
-  const payload = await api<unknown>(`/api/users/${userId}`).catch(() => null);
+  const payload = await fetchLive<unknown>(`/api/users/${userId}`).catch(() => null);
   if (!isRecord(payload)) return "";
   const nested = payload.usuario ?? payload.user ?? payload.data ?? payload;
   if (!isRecord(nested)) return "";
@@ -157,18 +158,42 @@ export async function createHojaRuta(input: CreateHojaRutaInput): Promise<{ id: 
   return { id: String(payload.id ?? "") };
 }
 
+function hojasRutaStore(filters: HistorialFilters) {
+  return createListStore<HojaHistorialItem>(
+    `hojas-ruta:${qs({
+      fecha_desde: filters.fechaDesde,
+      fecha_hasta: filters.fechaHasta,
+      conductor_id: filters.conductorId,
+    })}`,
+  );
+}
+
+export function peekHojasRuta(filters: HistorialFilters) {
+  return hojasRutaStore(filters).peek();
+}
+
 /** Lista historial. Admin/asesor: todas (+ filtro conductor). Operador: solo propias (API). */
-export async function fetchHojasRuta(filters: HistorialFilters): Promise<HojaHistorialItem[]> {
-  const payload = await api<unknown>(
+export async function fetchHojasRuta(
+  filters: HistorialFilters,
+  opts?: { force?: boolean },
+): Promise<HojaHistorialItem[]> {
+  const store = hojasRutaStore(filters);
+  if (!opts?.force && store.fresh()) {
+    const cached = store.peek();
+    if (cached) return cached;
+  }
+  const payload = await fetchLive<unknown>(
     `/api/hojas-ruta${qs({
       fecha_desde: filters.fechaDesde,
       fecha_hasta: filters.fechaHasta,
       conductor_id: filters.conductorId,
     })}`,
   );
-  return asRows(payload, "hojas")
+  const items = asRows(payload, "hojas")
     .map(parseResumen)
     .filter((item): item is HojaHistorialItem => Boolean(item));
+  store.remember(items);
+  return items;
 }
 
 export async function fetchHojaRutaById(id: string): Promise<HojaHistorialDetail> {

@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { createListStore, fetchLive, mapRows } from "@/lib/fast-data";
 import {
   emptyPermisosMenu,
   parsePermisosExtras,
@@ -95,12 +96,34 @@ function toBody(
   return body;
 }
 
-export async function fetchUsuarios(): Promise<UsuarioItem[]> {
-  const payload = await api<unknown>("/api/users");
-  return asRows(payload, "usuarios", "users")
-    .map(parseUsuario)
-    .filter((item): item is UsuarioItem => Boolean(item))
-    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+const usuariosStore = createListStore<UsuarioItem>("usuarios");
+
+export async function fetchUsuarios(opts?: {
+  force?: boolean;
+  onPartial?: (items: UsuarioItem[]) => void;
+}): Promise<UsuarioItem[]> {
+  if (!opts?.force && usuariosStore.fresh()) {
+    const cached = usuariosStore.peek();
+    if (cached) {
+      opts?.onPartial?.(cached);
+      return cached;
+    }
+  }
+  const payload = await fetchLive<unknown>("/api/users");
+  const items = await mapRows(asRows(payload, "usuarios", "users"), parseUsuario, {
+    onPartial: opts?.onPartial,
+  });
+  items.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  usuariosStore.remember(items);
+  return items;
+}
+
+export function peekUsuarios() {
+  return usuariosStore.peek();
+}
+
+export function invalidateUsuariosCache() {
+  usuariosStore.invalidate();
 }
 
 export async function fetchUsuario(id: string): Promise<UsuarioItem | null> {

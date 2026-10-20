@@ -1,4 +1,4 @@
-import { api } from "@/lib/api";
+import { createStore, fetchLive } from "@/lib/fast-data";
 import { dia } from "@/lib/fecha-lima";
 import type { GpsPunto, HistorialResumen } from "./types";
 import { aKmh } from "./lib/geo";
@@ -54,11 +54,16 @@ export async function fetchHistorialGps(opts: {
   const params = new URLSearchParams();
   params.set("fecha", opts.fecha);
   if (opts.conductorId) params.set("conductor_id", opts.conductorId);
-  const payload = await api<{ success?: boolean; historial?: unknown }>(
+  const store = createStore<{ resumen: HistorialResumen; puntos: GpsPunto[] }[]>(
+    `trazos:${params.toString()}`,
+  );
+  const cached = store.peek();
+  if (cached && store.fresh()) return cached;
+  const payload = await fetchLive<{ success?: boolean; historial?: unknown }>(
     `/api/historial?${params.toString()}`,
   );
   const rows = Array.isArray(payload.historial) ? payload.historial.filter(isRecord) : [];
-  return rows
+  const next = rows
     .map((row) => {
       const usuarioId = text(row.usuario_id, row.usuarioId) || opts.conductorId || "";
       const rawPuntos = Array.isArray(row.puntos) ? row.puntos.filter(isRecord) : [];
@@ -77,4 +82,6 @@ export async function fetchHistorialGps(opts: {
       };
     })
     .filter((item) => item.puntos.length > 0);
+  store.remember(next);
+  return next;
 }

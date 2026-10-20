@@ -1,3 +1,4 @@
+import { GuiaRecojosSheet } from "@/features/asesor-inicio/components/guia-recojos-sheet";
 import { LocalCard } from "@/features/locales/components/local-card";
 import { LocalDetailSheet } from "@/features/locales/components/local-detail-sheet";
 import { LocalFormSheet } from "@/features/locales/components/local-form-sheet";
@@ -10,14 +11,16 @@ import { LocalesSummary } from "@/features/locales/components/locales-summary";
 import { LocalesToolbar } from "@/features/locales/components/locales-toolbar";
 import { MetodosPagoManagerSheet } from "@/features/locales/components/metodos-pago-manager-sheet";
 import { useLocalesScreen } from "@/features/locales/hooks";
+import { queryLocalesPage } from "@/features/locales/lib/filters";
 import { canEditarLocal } from "@/features/locales/lib/permisos";
+import { isAdministrador, isAsesor } from "@/lib/role-nav";
 import { useAuth } from "@/providers/auth-provider";
 import { theme } from "@/lib/theme";
 import { HeaderAction, IconCard } from "@/ui/header-action";
 import { ScreenHeader } from "@/ui/screen-header";
 import { useContentBottomPad } from "@/ui/use-content-bottom-pad";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -28,6 +31,8 @@ import {
   View,
 } from "react-native";
 
+const PAGE_SIZE = 10;
+
 export default function LocalesScreen() {
   const { user } = useAuth();
   const screen = useLocalesScreen();
@@ -35,6 +40,9 @@ export default function LocalesScreen() {
   const bottomPad = useContentBottomPad(12);
   const [mode, setMode] = useState<LocalesViewMode>("lista");
   const [lista, setLista] = useState<"locales" | "certificados">("locales");
+  const [shown, setShown] = useState(PAGE_SIZE);
+  const [guia, setGuia] = useState<{ id: string; nombre: string } | null>(null);
+  const canVerGuia = isAsesor(user?.rol) || isAdministrador(user?.rol);
 
   useFocusEffect(
     useCallback(() => {
@@ -44,46 +52,90 @@ export default function LocalesScreen() {
   );
 
   const searching = Boolean(screen.filters.search.trim());
-  const visibles = useMemo(() => {
-    if (searching) return screen.filtered;
-    return screen.filtered.filter((item) =>
-      lista === "certificados" ? item.necesitaCertificacion : !item.necesitaCertificacion,
-    );
-  }, [screen.filtered, lista, searching]);
 
-  const mappedCount = useMemo(
-    () => visibles.filter((item) => item.latitud != null && item.longitud != null).length,
-    [visibles],
+  useEffect(() => {
+    setShown(PAGE_SIZE);
+  }, [
+    lista,
+    screen.filters.search,
+    screen.filters.distrito,
+    screen.filters.certificacion,
+    screen.filters.frecuencia,
+    screen.filters.prioridad,
+  ]);
+
+  const queried = useMemo(
+    () =>
+      queryLocalesPage(screen.locales, screen.filters, {
+        lista,
+        shown,
+        collectAll: mode === "mapa",
+      }),
+    [screen.locales, screen.filters, lista, shown, mode],
   );
+  const paged = queried.page;
+  const visibles = queried.visibles;
+  const canShowMore = shown < queried.visible;
+
+  const showMore = useCallback(() => {
+    setShown((prev) => prev + PAGE_SIZE);
+  }, []);
+
+  const mappedCount = queried.mapped;
+
+  const openLocal = screen.openLocal;
+  const closeLocal = screen.closeLocal;
+  const openEdit = screen.openEdit;
+  const removeLocal = screen.removeLocal;
+  const canManage = screen.canManage;
 
   const onSelectPin = useCallback(
     (id: string | null) => {
-      if (id) screen.openLocal(id);
-      else screen.closeLocal();
+      if (id) openLocal(id);
+      else closeLocal();
     },
-    [screen],
+    [closeLocal, openLocal],
+  );
+
+  const listFooter = canShowMore ? (
+    <View style={styles.moreWrap}>
+      <Text style={styles.moreHint}>
+        {paged.length} de {queried.visible}
+      </Text>
+      <Pressable onPress={showMore} style={styles.moreBtn} accessibilityRole="button">
+        <Text style={styles.moreBtnText}>Ver más</Text>
+      </Pressable>
+    </View>
+  ) : queried.visible > PAGE_SIZE ? (
+    <Text style={styles.moreHint}>
+      {queried.visible} {queried.visible === 1 ? "local" : "locales"}
+    </Text>
+  ) : null;
+
+  const onOpenCard = useCallback((id: string) => openLocal(id), [openLocal]);
+  const onEditCard = useCallback((id: string) => openEdit(id), [openEdit]);
+  const onDeleteCard = useCallback(
+    (item: (typeof paged)[number]) => {
+      void removeLocal(item);
+    },
+    [removeLocal],
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: (typeof visibles)[number] }) => (
-      <LocalCard
-        local={item}
-        canManage={screen.canManage}
-        onOpen={() => screen.openLocal(item.id)}
-        onEdit={
-          screen.canManage && canEditarLocal(item, user)
-            ? () => screen.openEdit(item.id)
-            : undefined
-        }
-        onDelete={
-          screen.canManage && canEditarLocal(item, user)
-            ? () => void screen.removeLocal(item)
-            : undefined
-        }
-        readonly={screen.canManage && !canEditarLocal(item, user)}
-      />
-    ),
-    [screen, user],
+    ({ item }: { item: (typeof paged)[number] }) => {
+      const own = canEditarLocal(item, user);
+      return (
+        <LocalCard
+          local={item}
+          canManage={canManage}
+          onOpen={onOpenCard}
+          onEdit={canManage && own ? onEditCard : undefined}
+          onDelete={canManage && own ? onDeleteCard : undefined}
+          readonly={canManage && !own}
+        />
+      );
+    },
+    [canManage, onDeleteCard, onEditCard, onOpenCard, user],
   );
 
   return (
@@ -137,16 +189,16 @@ export default function LocalesScreen() {
       />
 
       <LocalesSummary
-        counts={screen.kpiCounts}
+        counts={queried.kpiCounts}
         activeCert={screen.filters.certificacion}
         onSelectCert={screen.setCertFilter}
       />
 
-      {screen.loading ? (
+      {screen.loading && paged.length === 0 ? (
         <View style={styles.center}>
           <ActivityIndicator color={theme.colors.accent} />
         </View>
-      ) : screen.error ? (
+      ) : screen.error && paged.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.error}>{screen.error}</Text>
           <Pressable onPress={screen.reload} style={styles.retry}>
@@ -158,8 +210,11 @@ export default function LocalesScreen() {
           {mappedCount === 0 ? (
             visibles.length ? (
               <FlatList
-                data={visibles}
+                data={paged}
                 keyExtractor={(item) => item.id}
+                initialNumToRender={PAGE_SIZE}
+                maxToRenderPerBatch={PAGE_SIZE}
+                windowSize={5}
                 contentContainerStyle={styles.list}
                 ListHeaderComponent={
                   <Text style={styles.mapHint}>
@@ -167,6 +222,7 @@ export default function LocalesScreen() {
                     actualizar la ubicación.
                   </Text>
                 }
+                ListFooterComponent={listFooter}
                 renderItem={renderItem}
                 ItemSeparatorComponent={Sep}
               />
@@ -190,10 +246,10 @@ export default function LocalesScreen() {
         </View>
       ) : (
         <FlatList
-          data={visibles}
+          data={paged}
           keyExtractor={(item) => item.id}
-          initialNumToRender={10}
-          maxToRenderPerBatch={8}
+          initialNumToRender={PAGE_SIZE}
+          maxToRenderPerBatch={PAGE_SIZE}
           windowSize={5}
           updateCellsBatchingPeriod={40}
           removeClippedSubviews
@@ -225,6 +281,7 @@ export default function LocalesScreen() {
               ) : null}
             </View>
           }
+          ListFooterComponent={listFooter}
           renderItem={renderItem}
           ItemSeparatorComponent={Sep}
         />
@@ -234,6 +291,16 @@ export default function LocalesScreen() {
         local={screen.selected}
         canManage={screen.canManage}
         onClose={screen.closeLocal}
+        onVerGuia={
+          canVerGuia && screen.selected
+            ? () => {
+                const id = screen.selected!.id;
+                const nombre = screen.selected!.nombre;
+                screen.closeLocal();
+                setGuia({ id, nombre });
+              }
+            : undefined
+        }
         onEdit={
           screen.selected && screen.canManage && canEditarLocal(screen.selected, user)
             ? () => {
@@ -250,6 +317,12 @@ export default function LocalesScreen() {
             ? () => void screen.toggleCertEstado(screen.selected!)
             : undefined
         }
+      />
+
+      <GuiaRecojosSheet
+        localId={guia?.id ?? null}
+        localNombre={guia?.nombre ?? ""}
+        onClose={() => setGuia(null)}
       />
 
       <LocalFormSheet
@@ -379,5 +452,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingTop: 8,
     paddingBottom: 10,
+  },
+  moreWrap: {
+    alignItems: "center",
+    paddingTop: 12,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  moreHint: {
+    color: theme.colors.muted,
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
+    paddingVertical: 12,
+  },
+  moreBtn: {
+    backgroundColor: theme.colors.accent,
+    borderRadius: 12,
+    paddingHorizontal: 22,
+    paddingVertical: 11,
+    minWidth: 140,
+    alignItems: "center",
+  },
+  moreBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
   },
 });

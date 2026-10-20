@@ -2,7 +2,6 @@ import { RutaDetalleSheet } from "@/features/mapa-campo/components/ruta-detalle-
 import { RoleHeader } from "@/features/dashboard/components/role-header";
 import { AvisosSheet } from "@/features/operador-inicio/components/avisos-sheet";
 import { DashIcon } from "@/features/operador-inicio/components/dash-icon";
-import { GpsBanner } from "@/features/operador-inicio/components/gps-banner";
 import { ResumenDia } from "@/features/operador-inicio/components/resumen-dia";
 import { RutaHoyCard } from "@/features/operador-inicio/components/ruta-hoy-card";
 import { SiguienteLocalCard } from "@/features/operador-inicio/components/siguiente-local-card";
@@ -83,12 +82,6 @@ export function OperadorInicioScreen() {
               }}
             />
             <ResumenDia data={data} onMapa={irMapa} onLocales={irRutas} onRecojo={irMapa} onCaja={irCaja} />
-            <GpsBanner
-              activo={data.gpsActivo}
-              titulo={data.gpsTitulo}
-              detalle={data.gpsDetalle}
-              onMapa={irMapa}
-            />
           </>
         ) : null}
       </ScrollView>

@@ -2,9 +2,10 @@ import { canEditarLocal } from "./lib/permisos";
 import { loadRestringidos, rememberRestringido } from "./lib/restringidos-store";
 import { localesDelUsuario, seesAllUsers } from "@/lib/scope-user";
 import { isAdministrador } from "@/lib/role-nav";
+import { esEmuladorAndroid, localesDemoEmulador } from "@/lib/emulador";
 import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Platform } from "react-native";
+import { Alert, InteractionManager, Platform } from "react-native";
 import {
   createLocal,
   createMetodoPago,
@@ -17,6 +18,8 @@ import {
   hydrateLocalFotos,
   invalidateLocalesCaches,
   peekLocalesCache,
+  peekLocalesSnap,
+  seedLocalesCache,
   syncLocalFotos,
   updateLocal,
   updateLocalCertEstado,
@@ -27,7 +30,6 @@ import {
   collectDistritos,
   countLocales,
   createDefaultLocalFilters,
-  filterLocales,
   hasActiveLocalFilters,
 } from "./lib/filters";
 import type { LocalFormInput, LocalItem, LocalesFilters } from "./types";
@@ -59,10 +61,22 @@ export function useLocalesScreen() {
   const rol = (user?.rol ?? "").toLowerCase();
   const canManage = rol === "administrador" || rol === "asesor";
 
-  const [locales, setLocales] = useState<LocalItem[]>([]);
+  const [locales, setLocales] = useState<LocalItem[]>(() => {
+    const cached = peekLocalesCache();
+    if (cached?.length) return cached;
+    if (esEmuladorAndroid()) {
+      const demo = localesDemoEmulador();
+      seedLocalesCache(demo);
+      return demo;
+    }
+    return [];
+  });
   const [metodosPago, setMetodosPago] = useState<MetodoPagoOption[]>([]);
   const [filters, setFilters] = useState<LocalesFilters>(createDefaultLocalFilters);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (peekLocalesCache()?.length) return false;
+    return !esEmuladorAndroid();
+  });
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -73,12 +87,18 @@ export function useLocalesScreen() {
   const [metodosSaving, setMetodosSaving] = useState(false);
 
   const applyRows = useCallback(
-    (rows: LocalItem[], restrictedIds: Set<string>) => {
+    (rows: LocalItem[], restrictedIds?: Set<string>) => {
+      const scoped = localesDelUsuario(rows, user);
+      if (!restrictedIds || restrictedIds.size === 0) {
+        setLocales(scoped);
+        return;
+      }
       setLocales(
-        localesDelUsuario(rows, user).map((item) => ({
-          ...item,
-          restringido: item.restringido || restrictedIds.has(item.id),
-        })),
+        scoped.map((item) =>
+          item.restringido || restrictedIds.has(item.id)
+            ? { ...item, restringido: true }
+            : item,
+        ),
       );
     },
     [user],
@@ -88,11 +108,22 @@ export function useLocalesScreen() {
     if (mode === "boot") {
       const cached = peekLocalesCache();
       if (cached?.length) {
-        const restrictedIds = await loadRestringidos();
-        applyRows(cached, restrictedIds);
+        applyRows(cached);
+        setLoading(false);
+      } else if (esEmuladorAndroid()) {
+        const demo = localesDemoEmulador();
+        seedLocalesCache(demo);
+        applyRows(demo);
         setLoading(false);
       } else {
-        setLoading(true);
+        const snap = await peekLocalesSnap();
+        if (snap?.length) {
+          seedLocalesCache(snap);
+          applyRows(snap);
+          setLoading(false);
+        } else {
+          setLoading(true);
+        }
       }
     } else {
       setRefreshing(true);
@@ -103,12 +134,31 @@ export function useLocalesScreen() {
         fetchLocales({
           force: mode === "refresh",
           includeFotos: false,
+          onPartial: (partial) => {
+            applyRows(partial);
+            setLoading(false);
+          },
         }),
         loadRestringidos(),
       ]);
-      applyRows(rows, restrictedIds);
+      const paint = () => {
+        applyRows(rows, restrictedIds);
+        setError(null);
+      };
+      if (mode === "boot" && peekLocalesCache()?.length) {
+        InteractionManager.runAfterInteractions(paint);
+      } else {
+        paint();
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudieron cargar los locales");
+      if (esEmuladorAndroid()) {
+        const demo = localesDemoEmulador();
+        seedLocalesCache(demo);
+        applyRows(demo);
+        setError(null);
+      } else if (mode !== "boot" || !peekLocalesCache()?.length) {
+        setError(err instanceof Error ? err.message : "No se pudieron cargar los locales");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -162,23 +212,15 @@ export function useLocalesScreen() {
     [enrichLocal, locales, user],
   );
 
-  const filtered = useMemo(() => filterLocales(locales, filters), [locales, filters]);
-
-  /** Conteos de KPI sin el filtro de certificación (para que ambos chips sigan visibles). */
-  const kpiCounts = useMemo(
-    () => countLocales(filterLocales(locales, { ...filters, certificacion: null })),
-    [locales, filters],
-  );
-
-  const counts = useMemo(() => countLocales(filtered), [filtered]);
-  const distritos = useMemo(() => collectDistritos(locales), [locales]);
+  const kpiCounts = useMemo(() => countLocales(locales), [locales]);
+  const counts = kpiCounts;
+  const distritos = useMemo(() => collectDistritos(), []);
 
   const selected = useMemo(
     () =>
-      filtered.find((item) => item.id === selectedId) ??
       locales.find((item) => item.id === selectedId) ??
       null,
-    [filtered, locales, selectedId],
+    [locales, selectedId],
   );
 
   const editing = useMemo(
@@ -376,7 +418,7 @@ export function useLocalesScreen() {
     refreshing,
     error,
     locales,
-    filtered,
+    filtered: locales,
     counts,
     kpiCounts,
     distritos,

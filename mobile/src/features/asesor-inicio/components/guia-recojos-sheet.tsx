@@ -1,7 +1,7 @@
 import { dash } from "@/features/operador-inicio/palette";
 import { theme } from "@/lib/theme";
 import { useContentBottomPad } from "@/ui/use-content-bottom-pad";
-import { useEffect, useState } from "react";
+import { createElement, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -14,7 +14,13 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { loadGuiaRecojos, type GuiaRecojo } from "../lib/recojos";
+import { WebView } from "react-native-webview";
+import {
+  kindOfUrl,
+  loadGuiaRecojos,
+  type GuiaMediaKind,
+  type GuiaRecojo,
+} from "../lib/recojos";
 
 type GuiaRecojosSheetProps = {
   localId: string | null;
@@ -22,18 +28,22 @@ type GuiaRecojosSheetProps = {
   onClose: () => void;
 };
 
+type Preview = { uri: string; kind: GuiaMediaKind; label: string };
+
 export function GuiaRecojosSheet({ localId, localNombre, onClose }: GuiaRecojosSheetProps) {
   const insets = useSafeAreaInsets();
   const bottomPad = useContentBottomPad(8);
   const [rows, setRows] = useState<GuiaRecojo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
 
   useEffect(() => {
+    setPreview(null);
     if (!localId) {
       setRows([]);
       setError(null);
+      setLoading(false);
       return;
     }
     let alive = true;
@@ -62,11 +72,17 @@ export function GuiaRecojosSheet({ localId, localNombre, onClose }: GuiaRecojosS
       : Math.max(insets.bottom, 16);
 
   return (
-    <>
-      <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-        <View style={styles.backdrop}>
-          <Pressable style={styles.dismiss} onPress={onClose} />
-          <View style={[styles.sheet, { paddingBottom: sheetBottom }]}>
+    <Modal
+      visible
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={preview ? () => setPreview(null) : onClose}
+    >
+      <View style={styles.backdrop}>
+        <Pressable style={styles.dismiss} onPress={onClose} />
+        <View style={[styles.sheet, { paddingBottom: sheetBottom }]}>
+          <View style={styles.sheetBody}>
             <View style={styles.handle} />
             <View style={styles.head}>
               <View style={styles.headCopy}>
@@ -82,15 +98,19 @@ export function GuiaRecojosSheet({ localId, localNombre, onClose }: GuiaRecojosS
 
             {loading ? (
               <View style={styles.center}>
-                <ActivityIndicator color={dash.green} />
+                <ActivityIndicator color={dash.green} size="large" />
+                <Text style={styles.empty}>Buscando fotos de guía…</Text>
               </View>
             ) : error ? (
               <Text style={styles.error}>{error}</Text>
             ) : rows.length === 0 ? (
-              <Text style={styles.empty}>Aún no hay recojos registrados para este local.</Text>
+              <Text style={styles.empty}>
+                Aún no hay recojos con foto de guía para este local.
+              </Text>
             ) : (
               <ScrollView
-                contentContainerStyle={{ paddingBottom: bottomPad, gap: 8 }}
+                style={styles.scroll}
+                contentContainerStyle={{ paddingBottom: bottomPad, gap: 10 }}
                 showsVerticalScrollIndicator={false}
               >
                 {rows.map((item) => (
@@ -100,30 +120,24 @@ export function GuiaRecojosSheet({ localId, localNombre, onClose }: GuiaRecojosS
                       {item.estado} · {item.operador}
                     </Text>
                     <View style={styles.fotos}>
-                      {item.fotoGuia ? (
-                        <Pressable onPress={() => setPreview(item.fotoGuia)} style={styles.foto}>
-                          <Image source={{ uri: item.fotoGuia }} style={styles.fotoImg} />
-                          <Text style={styles.fotoLbl}>Guía</Text>
-                        </Pressable>
-                      ) : null}
-                      {item.fotoMercaderia ? (
-                        <Pressable
-                          onPress={() => setPreview(item.fotoMercaderia)}
-                          style={styles.foto}
-                        >
-                          <Image source={{ uri: item.fotoMercaderia }} style={styles.fotoImg} />
-                          <Text style={styles.fotoLbl}>Mercadería</Text>
-                        </Pressable>
-                      ) : null}
-                      {item.certificadoUrl ? (
-                        <Pressable
-                          onPress={() => setPreview(item.certificadoUrl)}
-                          style={styles.foto}
-                        >
-                          <Image source={{ uri: item.certificadoUrl }} style={styles.fotoImg} />
-                          <Text style={styles.fotoLbl}>Certificado</Text>
-                        </Pressable>
-                      ) : null}
+                      <MediaThumb
+                        uri={item.fotoGuia}
+                        kind={item.fotoGuiaKind}
+                        label="Guía"
+                        onOpen={setPreview}
+                      />
+                      <MediaThumb
+                        uri={item.fotoMercaderia}
+                        kind={item.fotoMercaderiaKind}
+                        label="Mercadería"
+                        onOpen={setPreview}
+                      />
+                      <MediaThumb
+                        uri={item.certificadoUrl}
+                        kind={item.certificadoKind}
+                        label="Certificado"
+                        onOpen={setPreview}
+                      />
                       {!item.fotoGuia && !item.fotoMercaderia && !item.certificadoUrl ? (
                         <Text style={styles.sinFoto}>Sin foto de guía</Text>
                       ) : null}
@@ -133,15 +147,94 @@ export function GuiaRecojosSheet({ localId, localNombre, onClose }: GuiaRecojosS
               </ScrollView>
             )}
           </View>
-        </View>
-      </Modal>
 
-      <Modal visible={Boolean(preview)} transparent animationType="fade" onRequestClose={() => setPreview(null)}>
-        <Pressable style={styles.preview} onPress={() => setPreview(null)}>
-          {preview ? <Image source={{ uri: preview }} style={styles.previewImg} resizeMode="contain" /> : null}
-        </Pressable>
-      </Modal>
-    </>
+          {preview ? (
+            <View style={styles.previewLayer}>
+              <View style={styles.previewHead}>
+                <Text style={styles.previewTitle} numberOfLines={1}>
+                  {preview.label}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setPreview(null)}
+                  style={styles.close}
+                >
+                  <Text style={styles.closeText}>Cerrar</Text>
+                </Pressable>
+              </View>
+              <View style={styles.previewBody}>
+                {preview.kind === "pdf" ? (
+                  <PdfFrame url={preview.uri} />
+                ) : (
+                  <Image
+                    source={{ uri: preview.uri }}
+                    style={styles.previewImg}
+                    resizeMode="contain"
+                  />
+                )}
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function MediaThumb({
+  uri,
+  kind,
+  label,
+  onOpen,
+}: {
+  uri: string | null;
+  kind: GuiaMediaKind | null;
+  label: string;
+  onOpen: (preview: Preview) => void;
+}) {
+  if (!uri) return null;
+  const mediaKind = kind ?? kindOfUrl(uri) ?? "image";
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => onOpen({ uri, kind: mediaKind, label })}
+      style={styles.foto}
+    >
+      {mediaKind === "pdf" ? (
+        <View style={styles.pdfThumb}>
+          <Text style={styles.pdfGlyph}>PDF</Text>
+        </View>
+      ) : (
+        <Image source={{ uri }} style={styles.fotoImg} resizeMode="cover" />
+      )}
+      <Text style={styles.fotoLbl}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function PdfFrame({ url }: { url: string }) {
+  if (Platform.OS === "web") {
+    return (
+      <View style={styles.pdfHost}>
+        {createElement("iframe", {
+          src: url,
+          title: "Guía PDF",
+          style: { width: "100%", height: "100%", border: "none" },
+        })}
+      </View>
+    );
+  }
+  const sourceUri =
+    Platform.OS === "android"
+      ? `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`
+      : url;
+  return (
+    <WebView
+      source={{ uri: sourceUri }}
+      style={styles.pdfHost}
+      startInLoadingState
+      originWhitelist={["*"]}
+    />
   );
 }
 
@@ -153,10 +246,14 @@ const styles = StyleSheet.create({
   },
   dismiss: { flex: 1 },
   sheet: {
-    maxHeight: "88%",
-    backgroundColor: theme.colors.surface,
+    height: "82%",
+    backgroundColor: theme.colors.bg,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
+    overflow: "hidden",
+  },
+  sheetBody: {
+    flex: 1,
     paddingHorizontal: 12,
     paddingTop: 8,
     gap: 10,
@@ -185,35 +282,63 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.cream,
   },
   closeText: { color: theme.colors.muted, fontSize: 12, fontWeight: "700" },
-  center: { paddingVertical: 28, alignItems: "center" },
-  error: { color: "#DC2626", fontSize: 13, fontWeight: "700" },
-  empty: { color: dash.muted, fontSize: 13, fontWeight: "600", paddingVertical: 12 },
+  scroll: { flex: 1 },
+  center: { flex: 1, paddingVertical: 28, alignItems: "center", justifyContent: "center", gap: 10 },
+  error: { color: "#DC2626", fontSize: 13, fontWeight: "700", paddingVertical: 16 },
+  empty: { color: dash.muted, fontSize: 13, fontWeight: "600", paddingVertical: 12, textAlign: "center" },
   card: {
     borderRadius: 12,
     borderWidth: 1,
     borderColor: theme.colors.line,
-    backgroundColor: theme.colors.cream,
+    backgroundColor: theme.colors.surface,
     padding: 10,
     gap: 4,
   },
   fecha: { color: theme.colors.ink, fontSize: 14, fontWeight: "800" },
   meta: { color: dash.muted, fontSize: 12, fontWeight: "600" },
-  fotos: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
-  foto: { width: 84, gap: 4 },
+  fotos: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 },
+  foto: { width: 110, gap: 4 },
   fotoImg: {
-    width: 84,
-    height: 84,
+    width: 110,
+    height: 110,
     borderRadius: 10,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.cream,
   },
-  fotoLbl: { color: dash.muted, fontSize: 10, fontWeight: "700" },
-  sinFoto: { color: dash.muted, fontSize: 11, fontWeight: "600" },
-  preview: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.88)",
+  pdfThumb: {
+    width: 110,
+    height: 110,
+    borderRadius: 10,
+    backgroundColor: theme.colors.cream,
+    borderWidth: 1,
+    borderColor: theme.colors.line,
     alignItems: "center",
     justifyContent: "center",
-    padding: 16,
   },
-  previewImg: { width: "100%", height: "80%" },
+  pdfGlyph: { color: theme.colors.ink, fontSize: 16, fontWeight: "900" },
+  fotoLbl: { color: dash.muted, fontSize: 10, fontWeight: "700" },
+  sinFoto: { color: dash.muted, fontSize: 11, fontWeight: "600" },
+  previewLayer: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 4,
+    elevation: 6,
+    backgroundColor: theme.colors.bg,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    gap: 8,
+  },
+  previewHead: { flexDirection: "row", alignItems: "center", gap: 8 },
+  previewTitle: { flex: 1, color: theme.colors.ink, fontSize: 16, fontWeight: "800" },
+  previewBody: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: theme.colors.cream,
+    minHeight: 240,
+  },
+  previewImg: { width: "100%", height: "100%" },
+  pdfHost: { flex: 1, width: "100%", backgroundColor: theme.colors.cream },
 });

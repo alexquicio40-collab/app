@@ -149,7 +149,7 @@ export function buildRoutesMapHtml() {
 
         var line = new google.maps.Polyline({
           path: path,
-          geodesic: true,
+          geodesic: false,
           strokeColor: color,
           strokeOpacity: isSelected ? 0.96 : 0.42,
           strokeWeight: isSelected ? 7 : 4,

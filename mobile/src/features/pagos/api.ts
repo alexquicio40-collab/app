@@ -1,4 +1,5 @@
 import { api, apiUpload, getApiBaseUrl } from "@/lib/api";
+import { createListStore, fetchLive, mapRows } from "@/lib/fast-data";
 import type {
   ComprobantePago,
   ComprobanteUploadInput,
@@ -131,22 +132,46 @@ async function appendFile(form: FormData, field: string, file: PendingComprobant
   } as unknown as Blob);
 }
 
+function hojasStore(filters: Pick<PagosFilters, "fechaDesde" | "fechaHasta">) {
+  return createListStore<HojaPago>(
+    `pagos-hojas:${qs({
+      desde: filters.fechaDesde,
+      hasta: filters.fechaHasta,
+    })}`,
+  );
+}
+
+export function peekHojasFinalizadas(filters: Pick<PagosFilters, "fechaDesde" | "fechaHasta">) {
+  return hojasStore(filters).peek();
+}
+
 export async function fetchHojasFinalizadas(
   filters: Pick<PagosFilters, "fechaDesde" | "fechaHasta">,
+  opts?: { force?: boolean; onPartial?: (items: HojaPago[]) => void },
 ): Promise<HojaPago[]> {
-  const payload = await api<unknown>(
+  const store = hojasStore(filters);
+  if (!opts?.force && store.fresh()) {
+    const cached = store.peek();
+    if (cached) {
+      opts?.onPartial?.(cached);
+      return cached;
+    }
+  }
+  const payload = await fetchLive<unknown>(
     `/api/pagos/hojas-finalizadas${qs({
       desde: filters.fechaDesde,
       hasta: filters.fechaHasta,
     })}`,
   );
-  return asRows(payload, "hojas")
-    .map(parseHojaPago)
-    .filter((item): item is HojaPago => Boolean(item));
+  const items = await mapRows(asRows(payload, "hojas"), parseHojaPago, {
+    onPartial: opts?.onPartial,
+  });
+  store.remember(items);
+  return items;
 }
 
 export async function fetchComprobantes(hojaId: string): Promise<ComprobantePago[]> {
-  const payload = await api<unknown>(`/api/hojas-ruta/${hojaId}/comprobantes`);
+  const payload = await fetchLive<unknown>(`/api/hojas-ruta/${hojaId}/comprobantes`);
   return asRows(payload, "comprobantes")
     .map(parseComprobante)
     .filter((item): item is ComprobantePago => Boolean(item));

@@ -1,5 +1,6 @@
 import type { User } from "@/features/auth/types";
-import { fetchLocales } from "@/features/locales/api";
+import { fetchLocales, peekLocalesCache } from "@/features/locales/api";
+import { createStore } from "@/lib/fast-data";
 import { fetchPlantaRegistros } from "@/features/planta/api";
 import { fetchConductores, fetchRoutes } from "@/features/routes/api";
 import type { RouteItem } from "@/features/routes/types";
@@ -42,30 +43,54 @@ async function fetchRoutesForRange(
   return [...map.values()];
 }
 
-export async function loadReportesKpi(
-  filters: ReportFilters,
-  user?: User | null,
-): Promise<{
+type ReportPack = {
   snapshot: ReportSnapshot;
   plantaHint: string | null;
   asignadores: AsignadorOption[];
-}> {
+};
+
+function reportStore(filters: ReportFilters, user?: User | null) {
+  return createStore<ReportPack>(
+    `kpi:${filters.fechaDesde}:${filters.fechaHasta}:${filters.conductorId ?? ""}:${filters.asignadorId ?? ""}:${user?.id ?? ""}`,
+  );
+}
+
+export function peekReportesKpi(filters: ReportFilters, user?: User | null) {
+  return reportStore(filters, user).peek();
+}
+
+export async function loadReportesKpi(
+  filters: ReportFilters,
+  user?: User | null,
+  opts?: { force?: boolean },
+): Promise<ReportPack> {
+  const store = reportStore(filters, user);
+  if (!opts?.force && store.fresh()) {
+    const cached = store.peek();
+    if (cached) return cached;
+  }
+
+  const cachedLocales = peekLocalesCache();
   const [rutasRaw, plantaRaw, localesRaw] = await Promise.all([
     fetchRoutesForRange(filters.fechaDesde, filters.fechaHasta, filters.conductorId),
     fetchPlantaRegistros().catch(() => []),
     seesAllUsers(user?.rol)
       ? Promise.resolve([])
-      : fetchLocales({ includeFotos: false }).catch(() => []),
+      : cachedLocales?.length
+        ? Promise.resolve(cachedLocales)
+        : fetchLocales({ includeFotos: false }).catch(() => []),
   ]);
 
   const all = seesAllUsers(user?.rol);
   const mine = all ? [] : localesDelUsuario(localesRaw, user);
   if (!all && mine.length === 0) {
-    return {
+    const empty: ReportPack = {
       snapshot: buildReportSnapshot([], [], 0),
       plantaHint: "El reporte solo incluye los locales que registraste. Aún no tienes locales.",
       asignadores: [],
     };
+    store.remember(empty);
+    return empty;
   }
   const claves = clavesDeLocales(mine);
   const rutasAll = all ? rutasRaw : rutasRaw.filter((item) => esDeSusLocales(item, claves));
@@ -86,7 +111,9 @@ export async function loadReportesKpi(
     plantaHint = `Hay ${plantaAll.length} registros de planta, pero ninguno en el período. Prueba Mes o Personalizado.`;
   }
 
-  return { snapshot, plantaHint, asignadores };
+  const pack = { snapshot, plantaHint, asignadores };
+  store.remember(pack);
+  return pack;
 }
 
 export { fetchConductores };

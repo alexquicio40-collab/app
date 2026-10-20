@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               id: 1,
               name: "Emulador",
               username: "emulador",
-              rol: "administrador",
+              rol: "asesor",
             });
             setStatus("authenticated");
           }

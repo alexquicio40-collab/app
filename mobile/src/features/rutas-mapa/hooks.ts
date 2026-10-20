@@ -1,4 +1,4 @@
-import { fetchLocales } from "@/features/locales/api";
+import { fetchLocales, peekLocalesCache } from "@/features/locales/api";
 import { pinColorForLocal } from "@/features/locales/lib/prioridad";
 import { limaDate } from "@/lib/api";
 import { fetchConductores, fetchRoutes } from "@/features/routes/api";
@@ -38,7 +38,8 @@ export function useRutasMapaScreen() {
     setError(null);
     try {
       if (!localesRef.current.length) {
-        localesRef.current = await fetchLocales().catch(() => []);
+        const cached = peekLocalesCache();
+        if (cached?.length) localesRef.current = cached;
       }
       const [ops, rows] = await Promise.all([
         fetchConductores(),
@@ -46,6 +47,11 @@ export function useRutasMapaScreen() {
       ]);
       setConductores(ops);
       setRutas(enrichRoutesWithLocales(rows, localesRef.current));
+      setLoading(false);
+      if (!localesRef.current.length) {
+        localesRef.current = await fetchLocales({ includeFotos: false }).catch(() => []);
+        setRutas(enrichRoutesWithLocales(rows, localesRef.current));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar las rutas");
     } finally {

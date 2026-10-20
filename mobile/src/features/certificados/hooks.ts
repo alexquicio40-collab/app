@@ -10,6 +10,8 @@ import {
   fetchHistorial,
   fetchBorradorCertificado,
   fetchPendientes,
+  peekHistorial,
+  peekPendientes,
   generarCertificado,
   generarCertificadoManual,
   type CertificadoTexto,
@@ -74,12 +76,24 @@ export function useCertificadosScreen() {
   const allUsers = seesAllUsers(rol) || isAsesor(rol);
 
   const [tab, setTab] = useState<CertificadoTab>("pendientes");
-  const [pendientes, setPendientes] = useState<CertificadoPendiente[]>([]);
-  const [historial, setHistorial] = useState<CertificadoHistorial[]>([]);
+  const [pendientes, setPendientes] = useState<CertificadoPendiente[]>(
+    () => peekPendientes(createDefaultPendientesFilters()) ?? [],
+  );
+  const [historial, setHistorial] = useState<CertificadoHistorial[]>(() => {
+    const defaults = createDefaultHistorialFilters();
+    return peekHistorial({ fechaDesde: defaults.fechaDesde, fechaHasta: defaults.fechaHasta }) ?? [];
+  });
   const [asesores, setAsesores] = useState<string[]>([]);
   const [pendFilters, setPendFilters] = useState<PendientesFilters>(createDefaultPendientesFilters);
   const [histFilters, setHistFilters] = useState<HistorialFilters>(createDefaultHistorialFilters);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    const defaultsPend = createDefaultPendientesFilters();
+    const defaultsHist = createDefaultHistorialFilters();
+    return !peekPendientes(defaultsPend) && !peekHistorial({
+      fechaDesde: defaultsHist.fechaDesde,
+      fechaHasta: defaultsHist.fechaHasta,
+    });
+  });
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mutating, setMutating] = useState(false);
@@ -99,27 +113,51 @@ export function useCertificadosScreen() {
   histFiltersRef.current = histFilters;
 
   const load = useCallback(async (mode: "boot" | "refresh" | "silent" = "boot") => {
-    if (mode === "boot") setLoading(true);
-    else if (mode === "refresh") setRefreshing(true);
+    if (mode === "boot") {
+      const cachedPend = peekPendientes(pendFiltersRef.current);
+      const cachedHist = peekHistorial({
+        fechaDesde: histFiltersRef.current.fechaDesde,
+        fechaHasta: histFiltersRef.current.fechaHasta,
+      });
+      if (cachedPend || cachedHist) setLoading(false);
+      else setLoading(true);
+    } else if (mode === "refresh") setRefreshing(true);
     setError(null);
     try {
+      const scopePend = (rows: typeof pendientes) =>
+        allUsers ? rows : rows.filter((item) => matchAsesorTag(item.asesorBioClim, user));
+      const scopeHist = (rows: typeof historial) =>
+        allUsers
+          ? rows
+          : rows.filter(
+              (item) =>
+                (item.usuarioId && user?.id != null && String(item.usuarioId) === String(user.id)) ||
+                matchAsesorTag(item.usuarioNombre, user),
+            );
       const [pendRows, histRows] = await Promise.all([
-        fetchPendientes(pendFiltersRef.current),
-        fetchHistorial({
-          fechaDesde: histFiltersRef.current.fechaDesde,
-          fechaHasta: histFiltersRef.current.fechaHasta,
+        fetchPendientes(pendFiltersRef.current, {
+          force: mode === "refresh",
+          onPartial: (partial) => {
+            setPendientes(scopePend(partial));
+            setLoading(false);
+          },
         }),
+        fetchHistorial(
+          {
+            fechaDesde: histFiltersRef.current.fechaDesde,
+            fechaHasta: histFiltersRef.current.fechaHasta,
+          },
+          {
+            force: mode === "refresh",
+            onPartial: (partial) => {
+              setHistorial(scopeHist(partial));
+              setLoading(false);
+            },
+          },
+        ),
       ]);
-      const pendScoped = allUsers
-        ? pendRows
-        : pendRows.filter((item) => matchAsesorTag(item.asesorBioClim, user));
-      const histScoped = allUsers
-        ? histRows
-        : histRows.filter(
-            (item) =>
-              (item.usuarioId && user?.id != null && String(item.usuarioId) === String(user.id)) ||
-              matchAsesorTag(item.usuarioNombre, user),
-          );
+      const pendScoped = scopePend(pendRows);
+      const histScoped = scopeHist(histRows);
       setPendientes(pendScoped);
       setHistorial(histScoped);
       setAsesores(allUsers ? await fetchAsesoresFromPendientes(pendScoped) : []);

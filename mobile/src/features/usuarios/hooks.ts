@@ -6,6 +6,7 @@ import {
   deleteUsuario,
   fetchUsuario,
   fetchUsuarios,
+  peekUsuarios,
   updateUsuario,
   updateUsuarioActivo,
   updateUsuarioPermisos,
@@ -42,9 +43,9 @@ export function useUsuariosScreen() {
   const { user } = useAuth();
   const canManage = (user?.rol ?? "").toLowerCase() === "administrador";
 
-  const [usuarios, setUsuarios] = useState<UsuarioItem[]>([]);
+  const [usuarios, setUsuarios] = useState<UsuarioItem[]>(() => peekUsuarios() ?? []);
   const [filters, setFilters] = useState<UsuariosFilters>(createDefaultUsuariosFilters);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !peekUsuarios());
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -53,11 +54,24 @@ export function useUsuariosScreen() {
   const [mutating, setMutating] = useState(false);
 
   const load = useCallback(async (mode: "boot" | "refresh" = "boot") => {
-    if (mode === "boot") setLoading(true);
-    else setRefreshing(true);
+    if (mode === "boot") {
+      const cached = peekUsuarios();
+      if (cached) {
+        setUsuarios(cached);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+    } else setRefreshing(true);
     setError(null);
     try {
-      const rows = await fetchUsuarios();
+      const rows = await fetchUsuarios({
+        force: mode === "refresh",
+        onPartial: (partial) => {
+          setUsuarios(partial);
+          setLoading(false);
+        },
+      });
       setUsuarios(rows);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar los usuarios");

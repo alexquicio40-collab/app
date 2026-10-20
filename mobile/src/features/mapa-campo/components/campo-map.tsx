@@ -1,9 +1,11 @@
 import { CompassButton } from "@/features/map/components/compass-button";
+import { GmapsChip } from "@/features/map/components/gmaps-chip";
 import { LocateButton } from "@/features/map/components/locate-button";
 import { requestCompassPermission, useCompassHeading } from "@/features/map/lib/use-compass-heading";
 import {
   buildCampoMapHtml,
   campoMapCompassScript,
+  campoMapCenterRouteScript,
   campoMapRecenterScript,
   campoMapUpdateScript,
 } from "@/features/mapa-campo/lib/campo-map-html";
@@ -11,7 +13,7 @@ import type { CampoMapPayload, CampoMapPin } from "@/features/mapa-campo/nav-typ
 import type { LatLng } from "@/features/routes/navegacion/types";
 import { theme } from "@/lib/theme";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Platform, StyleSheet, View } from "react-native";
+import { Alert, LayoutAnimation, Platform, StyleSheet, UIManager, View } from "react-native";
 import { SafeMapWebView } from "@/features/map/lib/safe-map-webview";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
@@ -107,17 +109,42 @@ export function CampoMap({
   }, [compassOn, heading, pushCompass]);
 
   useEffect(() => {
-    if (effective.tracking) setFollowing(true);
+    if (!effective.tracking) setFollowing(false);
   }, [effective.tracking]);
 
+  const swapCam = useCallback((next: boolean) => {
+    setFollowing((prev) => {
+      if (prev === next) return prev;
+      if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+        UIManager.setLayoutAnimationEnabledExperimental(true);
+      }
+      LayoutAnimation.configureNext({
+        duration: 220,
+        create: { type: "easeInEaseOut", property: "opacity" },
+        update: { type: "easeInEaseOut" },
+        delete: { type: "easeInEaseOut", property: "opacity" },
+      });
+      return next;
+    });
+  }, []);
+
   const recenter = useCallback(() => {
-    setFollowing(true);
+    swapCam(true);
     if (Platform.OS === "web") {
       frameRef.current?.contentWindow?.postMessage({ type: "recenter" }, "*");
       return;
     }
     webRef.current?.injectJavaScript(campoMapRecenterScript());
-  }, []);
+  }, [swapCam]);
+
+  const centerRoute = useCallback(() => {
+    swapCam(false);
+    if (Platform.OS === "web") {
+      frameRef.current?.contentWindow?.postMessage({ type: "center-route" }, "*");
+      return;
+    }
+    webRef.current?.injectJavaScript(campoMapCenterRouteScript());
+  }, [swapCam]);
 
   const toggleCompass = useCallback(() => {
     void (async () => {
@@ -138,13 +165,13 @@ export function CampoMap({
     (raw: unknown) => {
       const data = raw as CampoMapMessage;
       if (data?.type === "follow") {
-        setFollowing(!!data.on);
+        swapCam(!!data.on);
         return;
       }
       if (data?.type === "select-pin" && data.id) onSelectPin?.(data.id);
       if (data?.type === "select-route" && data.id) onSelectRoute?.(data.id);
     },
-    [onSelectPin, onSelectRoute],
+    [onSelectPin, onSelectRoute, swapCam],
   );
 
   useEffect(() => {
@@ -162,16 +189,25 @@ export function CampoMap({
     }
   };
 
+  const tracking = effective.tracking;
   const fabs = (
     <View style={[styles.fabs, { bottom: locateBottom }]} pointerEvents="box-none">
-      <LocateButton active={following} onPress={recenter} />
+      {tracking ? (
+        following ? (
+          <GmapsChip kind="center" onPress={centerRoute} />
+        ) : (
+          <GmapsChip kind="locate" onPress={recenter} />
+        )
+      ) : (
+        <LocateButton active={following} onPress={recenter} />
+      )}
       <CompassButton active={compassOn} onPress={toggleCompass} />
     </View>
   );
 
   if (Platform.OS === "web") {
     return (
-      <View style={styles.wrap}>
+      <View style={styles.wrap} collapsable={false}>
         <iframe
           ref={frameRef}
           title="Mapa de campo"
@@ -192,10 +228,12 @@ export function CampoMap({
   }
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} collapsable={false}>
       <SafeMapWebView
         ref={webRef}
-        source={{ html, baseUrl: "https://maps.googleapis.com" }}
+        persist
+        androidLayerType="hardware"
+        source={{ html, baseUrl: "https://unpkg.com" }}
         style={styles.map}
         allowFileAccess
         onMessage={onMessage}
@@ -210,14 +248,14 @@ export function CampoMap({
 }
 
 const styles = StyleSheet.create({
-  wrap: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.colors.cream },
-  map: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.colors.cream },
+  wrap: { flex: 1, minHeight: 0, width: "100%", backgroundColor: theme.colors.cream },
+  map: { flex: 1, minHeight: 0, width: "100%", backgroundColor: theme.colors.cream },
   frame: { width: "100%", height: "100%", borderWidth: 0 } as never,
   fabs: {
     position: "absolute",
-    right: 10,
+    right: 12,
     zIndex: 6,
-    gap: 8,
-    alignItems: "center",
+    gap: 10,
+    alignItems: "flex-end",
   },
 });

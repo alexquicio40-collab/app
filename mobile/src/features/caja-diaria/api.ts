@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { createListStore, fetchLive } from "@/lib/fast-data";
 import type { CajaDiariaMap, CajaDiariaRow } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
@@ -46,14 +47,25 @@ function parseRow(row: UnknownRecord): CajaDiariaRow | null {
   };
 }
 
+function cajaStore(fecha: string) {
+  return createListStore<CajaDiariaRow>(`caja:${fecha}`);
+}
+
 /** Lista cajas del día (admin: todas; operador: solo la propia). */
-export async function fetchCajaDiaria(fecha: string): Promise<CajaDiariaRow[]> {
-  const payload = await api<unknown>(
+export async function fetchCajaDiaria(fecha: string, opts?: { force?: boolean }): Promise<CajaDiariaRow[]> {
+  const store = cajaStore(fecha);
+  if (!opts?.force && store.fresh()) {
+    const cached = store.peek();
+    if (cached) return cached;
+  }
+  const payload = await fetchLive<unknown>(
     `/api/caja-diaria?fecha=${encodeURIComponent(fecha)}`,
   );
-  return asRows(payload, "cajas")
+  const items = asRows(payload, "cajas")
     .map(parseRow)
     .filter((item): item is CajaDiariaRow => Boolean(item));
+  store.remember(items);
+  return items;
 }
 
 export async function fetchCajaDiariaMap(fecha: string): Promise<CajaDiariaMap> {
@@ -83,6 +95,7 @@ export async function setCajaDiaria(input: {
       monto: input.monto,
     },
   });
+  cajaStore(input.fecha).invalidate();
 }
 
 export async function deleteCajaDiaria(input: {
@@ -96,4 +109,5 @@ export async function deleteCajaDiaria(input: {
       fecha: input.fecha,
     },
   });
+  cajaStore(input.fecha).invalidate();
 }

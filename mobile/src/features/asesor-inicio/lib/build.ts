@@ -34,8 +34,8 @@ export function buildAsesorDash(
       seguimientos: pendientes.length,
       nuevosMes,
     },
-    gestion: gestion.slice(0, GESTION_MAX),
-    gestionTotal: gestion.length,
+    gestion: gestion.items,
+    gestionTotal: gestion.total,
     mes: {
       localesActivos: activos.length,
       sinProgramar: sinProgramar.length,
@@ -49,16 +49,18 @@ function armarGestion(
   locales: LocalItem[],
   recordatorios: Recordatorio[],
   pendientes: CertificadoPendiente[],
-): GestionItem[] {
+): { items: GestionItem[]; total: number } {
   const byNombre = new Map(locales.map((item) => [norm(item.nombre), item]));
   const seen = new Set<string>();
   const out: GestionItem[] = [];
+  let total = 0;
 
   const push = (item: GestionItem) => {
     const key = item.localId || norm(item.nombre);
     if (seen.has(key)) return;
     seen.add(key);
-    out.push(item);
+    total += 1;
+    if (out.length < GESTION_MAX) out.push(item);
   };
 
   for (const rec of recordatorios) {
@@ -112,7 +114,7 @@ function armarGestion(
     });
   }
 
-  return out;
+  return { items: out, total };
 }
 
 function esEsteMes(iso: string | null) {

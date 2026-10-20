@@ -1,3 +1,4 @@
+import { createStore } from "@/lib/fast-data";
 import { useCallback, useEffect, useState } from "react";
 import { dashboardSummaryRequest } from "./api";
 import type { DashboardSummary } from "./types";
@@ -15,24 +16,42 @@ const EMPTY: DashboardSummary = {
   actividad: [],
 };
 
-export function useDashboard() {
-  const [data, setData] = useState<DashboardSummary>(EMPTY);
-  const [loading, setLoading] = useState(true);
+const dashStore = createStore<DashboardSummary>("dashboard-admin");
 
-  const reload = useCallback(async () => {
-    setLoading(true);
+export function useDashboard() {
+  const [data, setData] = useState<DashboardSummary>(() => dashStore.peek() ?? EMPTY);
+  const [loading, setLoading] = useState(() => !dashStore.peek());
+
+  const reload = useCallback(async (force = false) => {
+    if (!force && dashStore.fresh()) {
+      const cached = dashStore.peek();
+      if (cached) {
+        setData(cached);
+        setLoading(false);
+        return;
+      }
+    }
+    const cached = dashStore.peek();
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      setData(await dashboardSummaryRequest());
+      const next = await dashboardSummaryRequest();
+      dashStore.remember(next, true);
+      setData(next);
     } catch {
-      setData(EMPTY);
+      if (!dashStore.peek()) setData(EMPTY);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    reload();
+    void reload();
   }, [reload]);
 
-  return { data, loading, reload };
+  return { data, loading, reload: () => reload(true) };
 }

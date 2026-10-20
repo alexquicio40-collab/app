@@ -125,7 +125,7 @@ export function buildRutasMapaHtml() {
       if (payload.path && payload.path.length > 1) {
         polyline = new google.maps.Polyline({
           path: payload.path,
-          geodesic: true,
+          geodesic: false,
           strokeColor: payload.pathColor || '#1976D2',
           strokeOpacity: 0.85,
           strokeWeight: 4,

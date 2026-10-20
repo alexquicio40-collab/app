@@ -1,4 +1,4 @@
-import { fetchLocales as fetchLocalesFull } from "@/features/locales/api";
+import { fetchLocales as fetchLocalesFull, peekLocalesCache } from "@/features/locales/api";
 import type { LocalItem } from "@/features/locales/types";
 import { localesDelUsuario, rutaDelUsuario } from "@/lib/scope-user";
 import { useAuth } from "@/providers/auth-provider";
@@ -9,6 +9,7 @@ import {
   deleteRoute,
   fetchConductores,
   fetchRoutes,
+  peekRoutes,
   updateRoute,
   type UpdateRouteInput,
 } from "./api";
@@ -50,7 +51,7 @@ export function useRoutesScreen() {
   const [conductores, setConductores] = useState<ConductorOption[]>([]);
   const [locales, setLocales] = useState<LocalOption[]>([]);
   const [filters, setFilters] = useState<RoutesFilters>(createDefaultFilters);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !peekRoutes({ fecha: defaultRoutesFecha() }));
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -69,14 +70,22 @@ export function useRoutesScreen() {
       const active = nextFilters ?? filters;
       const id = ++requestId.current;
 
-      if (mode === "boot" || mode === "filter") setLoading(true);
-      else setRefreshing(true);
+      const fechaDesde = active.fechaDesde ?? defaultRoutesFecha();
+      const fechaHasta = active.fechaHasta ?? active.fechaDesde ?? defaultRoutesFecha();
+      const cached = peekRoutes({
+        fecha: fechaDesde === fechaHasta ? fechaDesde : undefined,
+        conductorId: active.conductorId,
+        estado: active.estado,
+      });
+      if (cached) {
+        setRoutes(enrichRoutesWithLocales(cached, localesFullRef.current));
+        setLoading(false);
+      }
+      if ((mode === "boot" || mode === "filter") && !cached) setLoading(true);
+      if (mode === "refresh") setRefreshing(true);
       setError(null);
 
       try {
-        const fechaDesde = active.fechaDesde ?? defaultRoutesFecha();
-        const fechaHasta = active.fechaHasta ?? active.fechaDesde ?? defaultRoutesFecha();
-
         const routesPromise = fetchRoutes({
           fechaDesde,
           fechaHasta,
@@ -88,29 +97,37 @@ export function useRoutesScreen() {
           ? Promise.resolve(null)
           : fetchConductores();
 
-        const localesFullPromise = localesFullLoaded.current
-          ? Promise.resolve(localesFullRef.current)
-          : fetchLocalesFull().catch(() => [] as LocalItem[]);
-
-        const [rutas, drivers, localesFull] = await Promise.all([
-          routesPromise,
-          driversPromise,
-          localesFullPromise,
-        ]);
-        if (id !== requestId.current) return;
-
-        if (!localesFullLoaded.current) {
-          localesFullRef.current = localesFull;
+        const cachedLocales = peekLocalesCache();
+        if (!localesFullLoaded.current && cachedLocales?.length) {
+          localesFullRef.current = cachedLocales;
           localesFullLoaded.current = true;
         }
-        const mine = localesDelUsuario(localesFullRef.current, user);
-        const localIds = new Set(mine.map((item) => item.id));
-        const scoped = rutas.filter((item) => rutaDelUsuario(item, user, localIds));
-        setRoutes(enrichRoutesWithLocales(scoped, localesFullRef.current));
 
+        const [rutas, drivers] = await Promise.all([routesPromise, driversPromise]);
+        if (id !== requestId.current) return;
+
+        const paint = (catalog: LocalItem[]) => {
+          const mine = localesDelUsuario(catalog, user);
+          const localIds = new Set(mine.map((item) => item.id));
+          const scoped = rutas.filter((item) => rutaDelUsuario(item, user, localIds));
+          setRoutes(enrichRoutesWithLocales(scoped, catalog));
+        };
+        paint(localesFullRef.current);
         if (drivers) {
           driversLoaded.current = true;
           setConductores(drivers);
+        }
+        setLoading(false);
+        setRefreshing(false);
+
+        if (!localesFullLoaded.current) {
+          const localesFull = await fetchLocalesFull({ includeFotos: false }).catch(
+            () => [] as LocalItem[],
+          );
+          if (id !== requestId.current) return;
+          localesFullRef.current = localesFull;
+          localesFullLoaded.current = true;
+          paint(localesFull);
         }
       } catch (err) {
         if (id !== requestId.current) return;

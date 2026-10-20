@@ -1,4 +1,5 @@
 import { api, apiUpload, getApiBaseUrl } from "@/lib/api";
+import { createListStore, fetchLive, mapRows } from "@/lib/fast-data";
 import { fechaHora } from "@/lib/fecha-lima";
 import type { AsesorOption, PendingFoto, PlantaFormInput, PlantaRegistro } from "./types";
 
@@ -101,15 +102,37 @@ async function buildFormData(input: PlantaFormInput) {
   return form;
 }
 
-export async function fetchPlantaRegistros(): Promise<PlantaRegistro[]> {
-  const payload = await api<unknown>("/api/planta");
-  return asRows(payload, "registros", "planta")
-    .map(parsePlantaRegistro)
-    .filter((item): item is PlantaRegistro => Boolean(item));
+const plantaStore = createListStore<PlantaRegistro>("planta-registros");
+
+export async function fetchPlantaRegistros(opts?: {
+  force?: boolean;
+  onPartial?: (items: PlantaRegistro[]) => void;
+}): Promise<PlantaRegistro[]> {
+  if (!opts?.force && plantaStore.fresh()) {
+    const cached = plantaStore.peek();
+    if (cached) {
+      opts?.onPartial?.(cached);
+      return cached;
+    }
+  }
+  const payload = await fetchLive<unknown>("/api/planta");
+  const items = await mapRows(asRows(payload, "registros", "planta"), parsePlantaRegistro, {
+    onPartial: opts?.onPartial,
+  });
+  plantaStore.remember(items);
+  return items;
+}
+
+export function peekPlantaRegistros() {
+  return plantaStore.peek();
+}
+
+export function invalidatePlantaCache() {
+  plantaStore.invalidate();
 }
 
 export async function fetchAsesores(): Promise<AsesorOption[]> {
-  const payload = await api<unknown>("/api/asesores").catch(() => ({ asesores: [] }));
+  const payload = await fetchLive<unknown>("/api/asesores").catch(() => ({ asesores: [] }));
   const map = new Map<string, AsesorOption>();
   for (const row of asRows(payload, "asesores")) {
     const nombre = text(row.nombre);
@@ -123,14 +146,20 @@ export async function fetchAsesores(): Promise<AsesorOption[]> {
 
 export async function createPlantaRegistro(input: PlantaFormInput) {
   const form = await buildFormData(input);
-  return apiUpload<unknown>("/api/planta", form, { method: "POST" });
+  const result = await apiUpload<unknown>("/api/planta", form, { method: "POST" });
+  plantaStore.invalidate();
+  return result;
 }
 
 export async function updatePlantaRegistro(id: string, input: PlantaFormInput) {
   const form = await buildFormData(input);
-  return apiUpload<unknown>(`/api/planta/${id}`, form, { method: "PUT" });
+  const result = await apiUpload<unknown>(`/api/planta/${id}`, form, { method: "PUT" });
+  plantaStore.invalidate();
+  return result;
 }
 
 export async function deletePlantaRegistro(id: string) {
-  return api<{ success?: boolean }>(`/api/planta/${id}`, { method: "DELETE" });
+  const result = await api<{ success?: boolean }>(`/api/planta/${id}`, { method: "DELETE" });
+  plantaStore.invalidate();
+  return result;
 }

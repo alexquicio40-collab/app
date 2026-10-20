@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { fetchLive } from "@/lib/fast-data";
 import type { OperatorRouteDetail } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
@@ -103,7 +104,7 @@ function parseRoute(row: UnknownRecord): OperatorRouteDetail {
 
 /** Rutas activas del operador (paridad Flutter getConductorRutas). */
 export async function fetchOperatorRoutes(operatorId: number): Promise<OperatorRouteDetail[]> {
-  const payload = await api<unknown>(`/api/conductores/${operatorId}/rutas`).catch(() => ({
+  const payload = await fetchLive<unknown>(`/api/conductores/${operatorId}/rutas`).catch(() => ({
     rutas: [],
   }));
   const rows = asRows(payload, "rutas");

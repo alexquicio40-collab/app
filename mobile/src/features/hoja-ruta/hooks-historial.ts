@@ -2,6 +2,7 @@ import {
   deleteHojaRuta,
   fetchHojaRutaById,
   fetchHojasRuta,
+  peekHojasRuta,
 } from "@/features/hoja-ruta/api";
 import { formatFechaPdf, formatMoney } from "@/features/hoja-ruta/lib/format";
 import { buildHojaRutaHtml } from "@/features/hoja-ruta/lib/pdf";
@@ -99,8 +100,13 @@ export function useHistorialHr(enabled: boolean) {
               ? String(user.id)
               : "0",
         };
+        const cached = peekHojasRuta(query);
+        if (cached) {
+          setItems(cached);
+          setLoading(false);
+        }
         const [rows, ops] = await Promise.all([
-          fetchHojasRuta(query),
+          fetchHojasRuta(query, { force: mode === "refresh" }),
           puedeVerTodas
             ? fetchConductores().catch(() => [] as ConductorOption[])
             : Promise.resolve([] as ConductorOption[]),

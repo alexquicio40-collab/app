@@ -21,16 +21,55 @@ import type {
   VehicleTypeNav,
 } from "./types";
 
+type GoogleStep = {
+  polyline?: { points?: string };
+};
+
 type GoogleLeg = {
   distance?: { value?: number };
   duration?: { value?: number };
   duration_in_traffic?: { value?: number };
+  steps?: GoogleStep[];
 };
 
 type GoogleRoute = {
   overview_polyline?: { points?: string };
   legs?: GoogleLeg[];
 };
+
+function sameCoord(a: LatLng, b: LatLng) {
+  return Math.abs(a.lat - b.lat) < 1e-6 && Math.abs(a.lng - b.lng) < 1e-6;
+}
+
+function joinPath(out: LatLng[], part: LatLng[]) {
+  if (!part.length) return;
+  if (out.length && sameCoord(out[out.length - 1]!, part[0]!)) {
+    out.push(...part.slice(1));
+    return;
+  }
+  out.push(...part);
+}
+
+/**
+ * overview_polyline recorta curvas y atraviesa manzanas/parques.
+ * Los steps siguen la calle transitable (driving).
+ */
+function stepEncoded(step: GoogleStep | { polyline?: string | { points?: string } }) {
+  const raw = step.polyline;
+  if (typeof raw === "string") return raw;
+  return raw?.points ?? "";
+}
+
+function pathFromDrivingRoute(route: GoogleRoute): LatLng[] {
+  const out: LatLng[] = [];
+  for (const leg of route.legs ?? []) {
+    for (const step of leg.steps ?? []) {
+      joinPath(out, decodePolyline(stepEncoded(step)));
+    }
+  }
+  if (out.length >= 2) return out;
+  return decodePolyline(route.overview_polyline?.points ?? "");
+}
 
 type GoogleDirectionsResponse = {
   status?: string;
@@ -47,9 +86,7 @@ function parseCandidate(
   route: GoogleRoute,
   index: number,
 ): Omit<SuggestedRoute, "label" | "isBest" | "score"> | null {
-  const encoded = route.overview_polyline?.points;
-  if (!encoded) return null;
-  const coords = decodePolyline(encoded);
+  const coords = pathFromDrivingRoute(route);
   if (coords.length < 2) return null;
 
   let dist = 0;
@@ -212,6 +249,7 @@ async function fetchDirectionsViaMapsJs(
         travelMode: maps.TravelMode.DRIVING,
         provideRouteAlternatives: alternatives,
         region: "PE",
+        avoidFerries: true,
         drivingOptions: {
           departureTime: new Date(),
           trafficModel: maps.TrafficModel.BEST_GUESS,
@@ -228,12 +266,23 @@ async function fetchDirectionsViaMapsJs(
         }
 
         const routes = result.routes.map((route: any) => {
-          const path: LatLng[] = (route.overview_path ?? []).map(
-            (p: { lat: () => number; lng: () => number }) => ({
-              lat: p.lat(),
-              lng: p.lng(),
-            }),
-          );
+          const path: LatLng[] = [];
+          for (const leg of route.legs ?? []) {
+            for (const step of leg.steps ?? []) {
+              const part: LatLng[] = (step.path ?? []).map(
+                (p: { lat: () => number; lng: () => number }) => ({
+                  lat: p.lat(),
+                  lng: p.lng(),
+                }),
+              );
+              joinPath(path, part);
+            }
+          }
+          if (path.length < 2) {
+            for (const p of route.overview_path ?? []) {
+              path.push({ lat: p.lat(), lng: p.lng() });
+            }
+          }
           const legs: JsLeg[] = (route.legs ?? []).map((leg: any) => ({
             distance: { value: Number(leg.distance?.value ?? 0) },
             duration: { value: Number(leg.duration?.value ?? 0) },
@@ -369,7 +418,8 @@ export async function fetchSuggestedRoutes(options: FetchOptions): Promise<Direc
     `?origin=${encodeURIComponent(`${origin.lat},${origin.lng}`)}` +
     `&destination=${encodeURIComponent(`${destination.lat},${destination.lng}`)}` +
     `&key=${encodeURIComponent(key)}` +
-    `&region=pe&alternatives=${wantAlts ? "true" : "false"}` +
+    `&mode=driving&region=pe&alternatives=${wantAlts ? "true" : "false"}` +
+    `&overview=full&avoid=ferries` +
     `&departure_time=now&traffic_model=best_guess`;
 
   const response = await fetch(url);

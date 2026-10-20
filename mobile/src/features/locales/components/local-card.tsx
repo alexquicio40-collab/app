@@ -1,4 +1,3 @@
-import { portadaLocal } from "@/features/locales/api";
 import { LocalPortada } from "@/features/locales/components/local-portada";
 import { ActionIconButton, RouteActionBar, TrashIcon } from "@/features/routes/components/route-action-bar";
 import { certLabel, certTone } from "@/features/locales/lib/format";
@@ -6,18 +5,19 @@ import { canSeePrecios, formatPrecios } from "@/features/locales/lib/precios";
 import { prioridadMeta } from "@/features/locales/lib/prioridad";
 import type { LocalItem } from "@/features/locales/types";
 import { theme } from "@/lib/theme";
+import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 type LocalCardProps = {
   local: LocalItem;
   canManage: boolean;
-  onOpen: () => void;
-  onEdit?: () => void;
-  onDelete?: () => void;
+  onOpen: (id: string) => void;
+  onEdit?: (id: string) => void;
+  onDelete?: (local: LocalItem) => void;
   readonly?: boolean;
 };
 
-export function LocalCard({
+function LocalCardView({
   local,
   canManage,
   onOpen,
@@ -32,11 +32,11 @@ export function LocalCard({
     <View style={styles.card}>
       <Pressable
         accessibilityRole="button"
-        onPress={onOpen}
+        onPress={() => onOpen(local.id)}
         style={({ pressed }) => [styles.main, pressed ? styles.pressed : null]}
       >
         <View style={styles.row}>
-        <LocalPortada uri={portadaLocal(local)} size={48} radius={10} />
+        <LocalPortada uri={null} size={48} radius={10} />
         <View style={styles.body}>
         <View style={styles.head}>
           <Text style={styles.title} numberOfLines={1}>
@@ -92,16 +92,28 @@ export function LocalCard({
       {onEdit || onDelete ? (
         <RouteActionBar>
           {onEdit ? (
-            <ActionIconButton label="Editar" glyph="✎" tone="accent" onPress={onEdit} />
+            <ActionIconButton
+              label="Editar"
+              glyph="✎"
+              tone="accent"
+              onPress={() => onEdit(local.id)}
+            />
           ) : null}
           {onDelete ? (
-            <ActionIconButton label="Eliminar" tone="danger" icon={<TrashIcon />} onPress={onDelete} />
+            <ActionIconButton
+              label="Eliminar"
+              tone="danger"
+              icon={<TrashIcon />}
+              onPress={() => onDelete(local)}
+            />
           ) : null}
         </RouteActionBar>
       ) : null}
     </View>
   );
 }
+
+export const LocalCard = memo(LocalCardView);
 
 const TONE = {
   needs: { fg: theme.colors.gold, bg: theme.colors.goldSoft },
