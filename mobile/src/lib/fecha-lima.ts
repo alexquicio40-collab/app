@@ -99,6 +99,33 @@ export function fechaHoraInput(valor?: string | null) {
   return fechaHora(valor).replace(" ", "T");
 }
 
+/** Día de una DATE/texto. Un YYYY-MM-DD no se corre. Un instante Z sí pasa a Lima. */
+export function diaSql(valor?: string | Date | null) {
+  if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+    if (valor.getUTCHours() === 0 && valor.getUTCMinutes() === 0 && valor.getUTCSeconds() === 0) {
+      const mes = String(valor.getUTCMonth() + 1).padStart(2, "0");
+      const diaN = String(valor.getUTCDate()).padStart(2, "0");
+      return `${valor.getUTCFullYear()}-${mes}-${diaN}`;
+    }
+    return hoy(valor);
+  }
+  return dia(valor == null ? null : String(valor));
+}
+
+/**
+ * Fecha de hoja de ruta en Lima. Corrige el salto +1 día cuando
+ * se guardó el día UTC siguiente después de las 19:00 de Perú.
+ */
+export function hojaFecha(fecha?: string | Date | null, createdAt?: string | Date | null) {
+  const f = diaSql(fecha);
+  if (createdAt == null || String(createdAt).trim() === "") return f;
+  const created = typeof createdAt === "string" ? fechaHora(createdAt) : ahora(createdAt);
+  const cDay = created.slice(0, 10);
+  const cHour = Number.parseInt(created.slice(11, 13), 10);
+  if (f && cDay && f === sumarDias(cDay, 1) && cHour >= 19) return cDay;
+  return f || cDay || hoy();
+}
+
 /**
  * Texto listo para mostrar. Un instante UTC pasa a Lima.
  * La medianoche UTC es un día de calendario y no se corre.

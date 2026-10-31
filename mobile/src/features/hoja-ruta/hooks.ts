@@ -6,7 +6,7 @@ import {
 } from "@/features/hoja-ruta/api";
 import { computeTotales, parseNum, toFilaData, toGastoData } from "@/features/hoja-ruta/lib/calc";
 import { newKey, todayIso } from "@/features/hoja-ruta/lib/format";
-import { buildHojaRutaHtml } from "@/features/hoja-ruta/lib/pdf";
+import { buildHojaRutaHtml, HOJA_PDF_PAGE } from "@/features/hoja-ruta/lib/pdf";
 import type { GastoForm, LocalOption, LocalVisitaForm } from "@/features/hoja-ruta/types";
 import { useAuth } from "@/providers/auth-provider";
 import * as Print from "expo-print";
@@ -233,11 +233,11 @@ export function useHojaRutaScreen() {
         // Flutter continúa con PDF aunque falle el POST
       }
 
-      const html = buildHojaRutaHtml(payloadData, totales);
-      const file = await Print.printToFileAsync({ html });
+      const html = await buildHojaRutaHtml(payloadData, totales);
+      const file = await Print.printToFileAsync({ html, ...HOJA_PDF_PAGE });
 
       if (Platform.OS === "web") {
-        await Print.printAsync({ html });
+        await Print.printAsync({ html, ...HOJA_PDF_PAGE });
       } else if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(file.uri, {
           mimeType: "application/pdf",
@@ -245,7 +245,7 @@ export function useHojaRutaScreen() {
           UTI: "com.adobe.pdf",
         });
       } else {
-        await Print.printAsync({ html });
+        await Print.printAsync({ html, ...HOJA_PDF_PAGE });
       }
 
       await resetForm();

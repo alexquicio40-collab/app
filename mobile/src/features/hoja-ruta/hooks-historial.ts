@@ -5,7 +5,7 @@ import {
   peekHojasRuta,
 } from "@/features/hoja-ruta/api";
 import { formatFechaPdf, formatMoney } from "@/features/hoja-ruta/lib/format";
-import { buildHojaRutaHtml } from "@/features/hoja-ruta/lib/pdf";
+import { buildHojaRutaHtml, HOJA_PDF_PAGE } from "@/features/hoja-ruta/lib/pdf";
 import type {
   HistorialFilters,
   HojaHistorialItem,
@@ -158,13 +158,17 @@ export function useHistorialHr(enabled: boolean) {
     try {
       const detail = await fetchHojaRutaById(item.id);
       if (!detail.data) throw new Error("No se pudo obtener el detalle");
-      const totales = totalesFromDetail(detail);
-      const html = buildHojaRutaHtml(detail.data, totales);
-      const file = await Print.printToFileAsync({ html });
-      const fechaLabel = formatFechaPdf(detail.fecha ?? detail.data.fecha);
+      const payload = {
+        ...detail.data,
+        fecha: detail.fecha ?? detail.data.fecha,
+      };
+      const totales = totalesFromDetail({ ...detail, data: payload });
+      const html = await buildHojaRutaHtml(payload, totales);
+      const file = await Print.printToFileAsync({ html, ...HOJA_PDF_PAGE });
+      const fechaLabel = formatFechaPdf(payload.fecha);
 
       if (Platform.OS === "web") {
-        await Print.printAsync({ html });
+        await Print.printAsync({ html, ...HOJA_PDF_PAGE });
       } else if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(file.uri, {
           mimeType: "application/pdf",
@@ -172,7 +176,7 @@ export function useHistorialHr(enabled: boolean) {
           UTI: "com.adobe.pdf",
         });
       } else {
-        await Print.printAsync({ html });
+        await Print.printAsync({ html, ...HOJA_PDF_PAGE });
       }
     } catch (err) {
       Alert.alert(

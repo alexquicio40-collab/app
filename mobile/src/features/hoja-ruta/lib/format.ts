@@ -1,11 +1,9 @@
-import { enLima } from "@/lib/fecha-lima";
+import { dia, enLima, hoy } from "@/lib/fecha-lima";
 
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
 export function todayIso() {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return hoy();
 }
 
 export function formatMoney(n: number) {
@@ -23,8 +21,9 @@ export function formatFechaLabel(iso: string) {
 }
 
 export function formatFechaPdf(iso: string) {
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return iso.slice(0, 10);
+  const day = dia(iso);
+  const m = day.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return day || iso.slice(0, 10);
   return `${m[3]}/${m[2]}/${m[1]}`;
 }
 

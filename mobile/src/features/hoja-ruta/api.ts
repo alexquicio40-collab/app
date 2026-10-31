@@ -1,7 +1,7 @@
 import { fetchLocalesLite } from "@/features/locales/api";
 import { api } from "@/lib/api";
 import { createListStore, fetchLive } from "@/lib/fast-data";
-import { dia } from "@/lib/fecha-lima";
+import { dia, hojaFecha } from "@/lib/fecha-lima";
 import type {
   CreateHojaRutaInput,
   HistorialFilters,
@@ -62,13 +62,14 @@ function parseResumen(row: UnknownRecord): HojaHistorialItem | null {
   const id = text(row.id);
   if (!id) return null;
   const fechaRaw = text(row.fecha);
+  const createdAt = text(row.created_at);
   return {
     id,
     conductorId: text(row.conductor_id),
     conductorNombre: text(row.conductor_nombre) || "Sin conductor",
     operadorAcompanante: text(row.operador_acompanante),
     placa: text(row.placa),
-    fecha: fechaRaw ? fechaRaw.slice(0, 10) : null,
+    fecha: fechaRaw ? hojaFecha(fechaRaw, createdAt || null) : null,
     caja: num(row.caja),
     totalGalones: num(row.total_galones),
     totalBaldes: num(row.total_baldes),
@@ -100,7 +101,7 @@ function parseGastoData(row: UnknownRecord): HojaRutaGastoData {
   };
 }
 
-function parsePayloadData(raw: unknown): HojaRutaPayloadData | null {
+function parsePayloadData(raw: unknown, createdAt?: string | null): HojaRutaPayloadData | null {
   let data = raw;
   if (typeof raw === "string") {
     try {
@@ -116,7 +117,7 @@ function parsePayloadData(raw: unknown): HojaRutaPayloadData | null {
     chofer: text(data.chofer),
     operadorAcompanante: text(data.operadorAcompanante, data.operador_acompanante),
     placa: text(data.placa),
-    fecha: dia(text(data.fecha)),
+    fecha: hojaFecha(text(data.fecha) || null, createdAt || text(data.created_at) || null),
     caja: num(data.caja),
     filas,
     gastos,
@@ -144,7 +145,7 @@ export async function createHojaRuta(input: CreateHojaRutaInput): Promise<{ id: 
     body: {
       operador_acompanante: input.operadorAcompanante,
       placa: input.placa,
-      fecha: input.fecha,
+      fecha: dia(input.fecha),
       caja: input.caja,
       total_galones: input.totalGalones,
       total_baldes: input.totalBaldes,
@@ -209,7 +210,7 @@ export async function fetchHojaRutaById(id: string): Promise<HojaHistorialDetail
   if (!resumen) throw new Error("Hoja no encontrada");
   return {
     ...resumen,
-    data: parsePayloadData(row.data),
+    data: parsePayloadData(row.data, text(row.created_at) || null),
   };
 }
 
