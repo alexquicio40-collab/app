@@ -1,6 +1,6 @@
 import { fetchLocales as fetchLocalesFull, peekLocalesCache } from "@/features/locales/api";
 import type { LocalItem } from "@/features/locales/types";
-import { localesDelUsuario, rutaDelUsuario } from "@/lib/scope-user";
+import { isRolCampo, localesDelUsuario, rutaDelUsuario } from "@/lib/scope-user";
 import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Platform } from "react-native";
@@ -44,7 +44,8 @@ async function confirmDelete(routeName: string) {
 
 export function useRoutesScreen() {
   const { user } = useAuth();
-  const isOperador = (user?.rol ?? "").toLowerCase() === "operador" || (user?.rol ?? "").toLowerCase() === "conductor";
+  const rol = (user?.rol ?? "").toLowerCase();
+  const isOperador = rol === "operador" || rol === "conductor" || rol === "chofer";
   const userId = user?.id != null ? String(user.id) : null;
 
   const [routes, setRoutes] = useState<RouteItem[]>([]);
@@ -109,7 +110,9 @@ export function useRoutesScreen() {
         const paint = (catalog: LocalItem[]) => {
           const mine = localesDelUsuario(catalog, user);
           const localIds = new Set(mine.map((item) => item.id));
-          const scoped = rutas.filter((item) => rutaDelUsuario(item, user, localIds));
+          const scoped = isRolCampo(user?.rol)
+            ? rutas
+            : rutas.filter((item) => rutaDelUsuario(item, user, localIds));
           setRoutes(enrichRoutesWithLocales(scoped, catalog));
         };
         paint(localesFullRef.current);

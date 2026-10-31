@@ -1,6 +1,7 @@
 import { api } from "@/lib/api";
 import { createListStore, fetchLive, mapRows } from "@/lib/fast-data";
 import {
+  defaultPermisosForRol,
   emptyPermisosMenu,
   parsePermisosExtras,
   parsePermisosMenu,
@@ -85,10 +86,13 @@ function toBody(
     requiere_foto_guia: Boolean(input.requiereFotoGuia),
     requiere_foto_mercaderia: Boolean(input.requiereFotoMercaderia),
     requiere_notas: Boolean(input.requiereNotas),
-    permisos_menu: permisosToBackend(current?.permisosMenu ?? emptyPermisosMenu(), {
-      localesIds: current?.localesIds ?? [],
-      vinculadoUsuarioId: input.vinculadoUsuarioId?.trim() || "",
-    }),
+    permisos_menu: permisosToBackend(
+      current?.permisosMenu ?? defaultPermisosForRol(input.rol),
+      {
+        localesIds: current?.localesIds ?? [],
+        vinculadoUsuarioId: input.vinculadoUsuarioId?.trim() || "",
+      },
+    ),
   };
   if (includePassword && input.password?.trim()) {
     body.password = input.password.trim();

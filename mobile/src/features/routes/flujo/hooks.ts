@@ -30,9 +30,8 @@ function notify(title: string, message: string) {
 
 export function useRutaFlujo(onChanged?: () => void) {
   const { user } = useAuth();
-  const isOperador =
-    (user?.rol ?? "").toLowerCase() === "operador" ||
-    (user?.rol ?? "").toLowerCase() === "conductor";
+  const rol = (user?.rol ?? "").toLowerCase();
+  const isOperador = rol === "operador" || rol === "conductor" || rol === "chofer";
 
   const [startRoute, setStartRoute] = useState<RouteItem | null>(null);
   const [vehicleOpen, setVehicleOpen] = useState(false);
@@ -121,8 +120,9 @@ export function useRutaFlujo(onChanged?: () => void) {
     async (route: RouteItem) => {
       setFinishRoute(route);
       setFinishOpen(true);
-      if (user?.id != null) {
-        const config = await fetchFinalizacionConfig(user.id);
+      const configId = route.conductorId || (user?.id != null ? String(user.id) : "");
+      if (configId) {
+        const config = await fetchFinalizacionConfig(configId);
         setFinishConfig(config);
       } else {
         setFinishConfig(emptyFinalizacionConfig());

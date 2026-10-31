@@ -110,5 +110,6 @@ export const APP_MODULES: AppModule[] = [
 export function modulesForRole(rol?: string) {
   const role = (rol ?? "operador").toLowerCase();
   if (role === "administrador") return APP_MODULES;
-  return APP_MODULES.filter((item) => item.roles.includes(role));
+  const effective = role === "chofer" || role === "conductor" ? "operador" : role;
+  return APP_MODULES.filter((item) => item.roles.includes(effective) || item.roles.includes(role));
 }

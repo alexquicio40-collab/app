@@ -103,6 +103,39 @@ export function emptyPermisosMenu(): PermisosMenu {
   return out;
 }
 
+export function defaultPermisosForRol(rol?: string | null): PermisosMenu {
+  const out = emptyPermisosMenu();
+  const key = (rol ?? "").toLowerCase();
+  if (key === "operador" || key === "chofer" || key === "conductor") {
+    out.mapa = true;
+    out.mapa_rutas = true;
+    out.historial = true;
+    out.estadisticas = true;
+    out.hoja_ruta = true;
+    out.historial_hr = true;
+    return out;
+  }
+  if (key === "asesor") {
+    out.locales = true;
+    out.asignar = true;
+    out.rutas = true;
+    out.mapa = true;
+    out.mapa_rutas = true;
+    out.reportes_rutas = true;
+    out.planta = true;
+    out.certificados = true;
+    return out;
+  }
+  if (key === "administrador") {
+    for (const modulo of MENU_MODULO_KEYS) out[modulo] = true;
+    return out;
+  }
+  if (key === "planta") {
+    out.planta = true;
+  }
+  return out;
+}
+
 export function parsePermisosObject(raw: unknown): Record<string, unknown> {
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
     return raw as Record<string, unknown>;

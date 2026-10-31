@@ -183,7 +183,7 @@ export function UsuarioPermisosSheet({
 
             <View style={styles.group}>
               <Text style={styles.groupTitle}>Finalización de ruta</Text>
-              {user.rol !== "operador" ? (
+              {user.rol !== "operador" && user.rol !== "chofer" && user.rol !== "conductor" ? (
                 <Text style={styles.note}>
                   Este usuario no es operador; igual puedes configurar los flags.
                 </Text>

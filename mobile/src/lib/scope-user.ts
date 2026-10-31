@@ -88,6 +88,13 @@ export function esDeSusLocales(
   return Boolean(nombre && claves.nombres.has(nombre));
 }
 
+export function idsEquipoCampo(user?: ScopeUser | User | null) {
+  if (!user?.id) return [];
+  const self = String(user.id);
+  const vinculo = user.vinculadoUsuarioId ? String(user.vinculadoUsuarioId).trim() : "";
+  return vinculo && vinculo !== self ? [self, vinculo] : [self];
+}
+
 export function rutaDelUsuario<
   T extends {
     conductorId?: string | null;
@@ -100,9 +107,7 @@ export function rutaDelUsuario<
   if (!user) return false;
   const uid = String(user.id);
   if (isRolCampo(user.rol)) {
-    if (String(route.conductorId ?? "") === uid) return true;
-    const vinculo = user.vinculadoUsuarioId ? String(user.vinculadoUsuarioId) : "";
-    return Boolean(vinculo && String(route.conductorId ?? "") === vinculo);
+    return idsEquipoCampo(user).includes(String(route.conductorId ?? ""));
   }
   const restricted = (user.localesIds ?? []).map(String).filter(Boolean);
   if (restricted.length) {
