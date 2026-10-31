@@ -81,9 +81,7 @@ export function CampoMap({
   const [northUp, setNorthUp] = useState(true);
   const [mapHeading, setMapHeading] = useState(0);
   const webRef = useRef<WebView>(null);
-  const frameRef = useRef<{
-    contentWindow: { postMessage: (data: unknown, origin: string) => void } | null;
-  } | null>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
 
   const push = useCallback((data: CampoMapPayload) => {
     if (Platform.OS === "web") {
