@@ -2,23 +2,25 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 type CompassButtonProps = {
   active?: boolean;
+  heading?: number;
   onPress: () => void;
 };
 
 const RED = "#D93025";
 const INK = "#5F6368";
 
-/** FAB circular estilo Google Maps. */
-export function CompassButton({ active = false, onPress }: CompassButtonProps) {
+/** Brújula estilo Google Maps: la aguja apunta al norte según la cámara. */
+export function CompassButton({ active = false, heading = 0, onPress }: CompassButtonProps) {
+  const deg = Number.isFinite(heading) ? heading : 0;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Brújula del mapa"
+      accessibilityLabel="Norte arriba"
       accessibilityState={{ selected: active }}
       onPress={onPress}
       style={({ pressed }) => [styles.btn, pressed ? styles.pressed : null]}
     >
-      <View style={styles.glyph}>
+      <View style={[styles.glyph, { transform: [{ rotate: `${-deg}deg` }] }]}>
         <Text style={[styles.n, active ? styles.nOn : null]}>N</Text>
         <View style={[styles.needle, active ? styles.needleOn : null]} />
       </View>

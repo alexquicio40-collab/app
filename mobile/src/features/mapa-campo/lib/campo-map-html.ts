@@ -14,25 +14,11 @@ export function buildCampoMapHtml() {
   ${leafletHead()}
   <style>
     html, body, #map { height: 100%; width: 100%; margin: 0; background: #E7EEEB; }
-    #compassRose {
-      position: absolute; top: 12px; right: 12px; z-index: 4;
-      width: 44px; height: 44px; pointer-events: none;
-      display: none; align-items: center; justify-content: center;
-    }
-    #compassRose.on { display: flex; }
-    #compassRose svg { width: 44px; height: 44px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.35)); }
   </style>
 </head>
 <body>
   <div id="boot">Cargando mapa…</div>
   <div id="map"></div>
-  <div id="compassRose" aria-hidden="true">
-    <svg viewBox="0 0 44 44">
-      <circle cx="22" cy="22" r="20" fill="#FFFFFF" stroke="#0B5340" stroke-width="2"/>
-      <path d="M22 6 L26 24 L22 21 L18 24 Z" fill="#B42318"/>
-      <text x="22" y="14" text-anchor="middle" font-size="8" font-weight="800" fill="#0B5340">N</text>
-    </svg>
-  </div>
   <script>
     var map = null, ready = false, pending = null;
     var meMarker = null, destMarker = null;
@@ -50,8 +36,8 @@ export function buildCampoMapHtml() {
     var followEnabled = false;
     var cameraHold = false;
     var trackingActive = false;
-    var compassOn = false;
-    var deviceHeading = null;
+    var northUp = true;
+    var lastEmittedHeading = -1;
     var horizon = null;
     var lockedCourse = 0;
     var courseReady = false;
@@ -84,7 +70,7 @@ export function buildCampoMapHtml() {
     }
 
     function emitFollow() {
-      post({ type: 'follow', on: !!followEnabled });
+      post({ type: 'follow', on: !!followEnabled, northUp: !!northUp });
     }
 
     ${NAV_CAMERA_JS}
@@ -96,6 +82,7 @@ export function buildCampoMapHtml() {
 
     function followCamera(pos, snap) {
       if (!map || !pos) return;
+      applyHorizon(!!snap);
       if (!trackingActive) {
         if (snap) {
           map.setCenter(pos);
@@ -105,6 +92,15 @@ export function buildCampoMapHtml() {
         if (lastPan && metersApprox(lastPan, pos) < PAN_MIN_M) return;
         lastPan = { lat: pos.lat, lng: pos.lng };
         map.panTo(pos);
+        return;
+      }
+      if (northUp) {
+        if (snap) map.setCenter(pos);
+        else {
+          if (lastPan && metersApprox(lastPan, pos) < PAN_MIN_M) return;
+          lastPan = { lat: pos.lat, lng: pos.lng };
+          map.panTo(pos);
+        }
         return;
       }
       var aim = applyNavCamera(map, pos, navHeading(), lastSpeedMps, {
@@ -128,13 +124,6 @@ export function buildCampoMapHtml() {
       if (followEnabled) focusCar(!!snap);
     }
 
-    function paintRose(heading) {
-      var rose = document.getElementById('compassRose');
-      if (!rose) return;
-      rose.classList.toggle('on', compassOn);
-      rose.style.transform = 'rotate(' + (-Number(heading || 0)) + 'deg)';
-    }
-
     function shortestDeg(from, to) {
       return ((to - from + 540) % 360) - 180;
     }
@@ -143,29 +132,35 @@ export function buildCampoMapHtml() {
       return ((Number(n) % 360) + 360) % 360;
     }
 
+    function publishHeading(deg) {
+      var h = wrapDeg(deg);
+      if (lastEmittedHeading >= 0 && Math.abs(shortestDeg(lastEmittedHeading, h)) < 1) return;
+      lastEmittedHeading = h;
+      post({ type: 'map-heading', heading: h });
+    }
+
+    function paintHeading(deg) {
+      publishHeading(deg);
+    }
+
     function ensureHorizon() {
       if (horizon || typeof createHorizonSmoother !== 'function') return horizon;
       horizon = createHorizonSmoother(function (deg) {
-        if (map && map.setHeading) map.setHeading(deg);
-        paintRose(deg);
+        paintHeading(deg);
       }, { tau: 0.16, maxDegS: 140, deadzone: 4, holdMs: 50 });
       return horizon;
     }
 
     function desiredHorizon() {
-      if (trackingActive) return wrapDeg(lockedCourse);
-      if (compassOn && deviceHeading != null && !isNaN(Number(deviceHeading))) {
-        return wrapDeg(deviceHeading);
-      }
-      return 0;
+      if (northUp || !followEnabled || !trackingActive) return 0;
+      return wrapDeg(navHeading());
     }
 
     function applyHorizon(snap) {
       var api = ensureHorizon();
       var next = desiredHorizon();
       if (!api) {
-        if (map && map.setHeading) map.setHeading(next);
-        paintRose(next);
+        paintHeading(next);
         return;
       }
       if (snap) api.snap(next);
@@ -219,41 +214,49 @@ export function buildCampoMapHtml() {
       followCamera(pos, false);
     }
 
-    function setCampoCompass(on, heading) {
-      var wasOn = compassOn;
-      compassOn = !!on;
-      if (heading != null && !isNaN(Number(heading))) deviceHeading = Number(heading);
-      if (!compassOn && wasOn) {
-        applyHorizon(true);
-        return;
-      }
-      applyHorizon(false);
+    function syncDrag() {
+      if (!map || !map._L || !map._L.dragging) return;
+      if (northUp) map._L.dragging.enable();
+      else map._L.dragging.disable();
+    }
+
+    function resetNorth() {
+      northUp = true;
+      emitFollow();
+      applyHorizon(true);
+      syncDrag();
     }
 
     function recenterMe() {
+      northUp = false;
       cameraHold = true;
       lastPan = null;
       lastNavZoom = 0;
       setFollow(true, true);
-      applyHorizon(true);
+      syncDrag();
     }
 
     function centerRoute() {
+      northUp = true;
       followEnabled = false;
       cameraHold = false;
       lastNavZoom = 0;
       lastPan = null;
       emitFollow();
       clearNavCamera(map);
+      applyHorizon(true);
+      syncDrag();
       if (!map || !lastRouteBounds) return;
       map.fitBounds(lastRouteBounds, { top: 72, right: 36, bottom: 200, left: 36 });
     }
 
     function goToStop(lat, lng) {
       if (!map || !isFinite(Number(lat)) || !isFinite(Number(lng))) return;
+      northUp = true;
       followEnabled = false;
       cameraHold = false;
       emitFollow();
+      applyHorizon(true);
       clearNavCamera(map);
       map.panTo({ lat: Number(lat), lng: Number(lng) });
       if (map.getZoom() < 15) map.setZoom(16);
@@ -509,7 +512,7 @@ export function buildCampoMapHtml() {
       displayHeading = lerpAngle(displayHeading, wantHeading, t);
       meMarker.setPosition(displayPos);
       if (meMarker.__kind === 'arrow') {
-        meMarker.setOptions({ rotation: 0 });
+        meMarker.setOptions({ rotation: displayHeading });
       }
       panFollow(displayPos);
       noteTravel(displayPos);
@@ -575,6 +578,7 @@ export function buildCampoMapHtml() {
       if (starting) {
         displayPos = { lat: targetPos.lat, lng: targetPos.lng };
         displayHeading = targetHeading;
+        northUp = true;
         followEnabled = false;
         cameraHold = false;
         lastPan = null;
@@ -594,7 +598,7 @@ export function buildCampoMapHtml() {
       }
       meMarker.setPosition(displayPos);
       if (meMarker.__kind === 'arrow') {
-        meMarker.setOptions({ rotation: 0 });
+        meMarker.setOptions({ rotation: displayHeading });
       }
       if (starting) {
         applyHorizon(true);
@@ -691,7 +695,8 @@ export function buildCampoMapHtml() {
     window.updateCampoMap = function (payload) { draw(payload); };
     window.recenterMe = recenterMe;
     window.centerRoute = centerRoute;
-    window.setCampoCompass = setCampoCompass;
+    window.resetNorth = resetNorth;
+    window.setCampoCompass = resetNorth;
 
     window.initCampoMap = function () {
       map = new google.maps.Map(document.getElementById('map'), {
@@ -708,9 +713,11 @@ export function buildCampoMapHtml() {
       });
       google.maps.event.addListener(map, 'dragstart', function () {
         if (!followEnabled && !cameraHold) return;
+        northUp = true;
         followEnabled = false;
         cameraHold = false;
         emitFollow();
+        syncDrag();
       });
       ready = true;
       if (map && map._L && map._L.invalidateSize) {
@@ -730,8 +737,8 @@ export function buildCampoMapHtml() {
       if (!data || !data.type) return;
       if (data.type === 'recenter') { recenterMe(); return; }
       if (data.type === 'center-route') { centerRoute(); return; }
-      if (data.type === 'compass') {
-        setCampoCompass(!!data.on, data.heading);
+      if (data.type === 'compass' || data.type === 'north-up') {
+        resetNorth();
         return;
       }
       if (data.type === 'campo' || data.type === 'nav') window.updateCampoMap(data);
@@ -754,7 +761,10 @@ export function campoMapCenterRouteScript() {
   return `window.centerRoute && window.centerRoute(); true;`;
 }
 
-export function campoMapCompassScript(on: boolean, heading: number | null) {
-  const deg = heading == null || !Number.isFinite(heading) ? "null" : String(heading);
-  return `window.setCampoCompass && window.setCampoCompass(${on ? "true" : "false"}, ${deg}); true;`;
+export function campoMapNorthUpScript() {
+  return `window.resetNorth && window.resetNorth(); true;`;
+}
+
+export function campoMapCompassScript(_on?: boolean, _heading?: number | null) {
+  return campoMapNorthUpScript();
 }

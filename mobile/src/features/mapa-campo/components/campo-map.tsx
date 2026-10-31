@@ -1,11 +1,10 @@
 import { CompassButton } from "@/features/map/components/compass-button";
 import { GmapsChip } from "@/features/map/components/gmaps-chip";
 import { LocateButton } from "@/features/map/components/locate-button";
-import { requestCompassPermission, useCompassHeading } from "@/features/map/lib/use-compass-heading";
 import {
   buildCampoMapHtml,
-  campoMapCompassScript,
   campoMapCenterRouteScript,
+  campoMapNorthUpScript,
   campoMapRecenterScript,
   campoMapUpdateScript,
 } from "@/features/mapa-campo/lib/campo-map-html";
@@ -13,7 +12,7 @@ import type { CampoMapPayload, CampoMapPin } from "@/features/mapa-campo/nav-typ
 import type { LatLng } from "@/features/routes/navegacion/types";
 import { theme } from "@/lib/theme";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, LayoutAnimation, Platform, StyleSheet, UIManager, View } from "react-native";
+import { LayoutAnimation, Platform, StyleSheet, UIManager, View } from "react-native";
 import { SafeMapWebView } from "@/features/map/lib/safe-map-webview";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
@@ -21,6 +20,8 @@ type CampoMapMessage = {
   type?: string;
   id?: string;
   on?: boolean;
+  northUp?: boolean;
+  heading?: number;
 };
 
 type CampoMapProps = {
@@ -77,8 +78,8 @@ export function CampoMap({
   }, [payload, idleOrigin, idleAccuracy, idleDest, idleDestColor, pins, selectedPinId, focusToken]);
 
   const [following, setFollowing] = useState(false);
-  const [compassOn, setCompassOn] = useState(false);
-  const heading = useCompassHeading(compassOn);
+  const [northUp, setNorthUp] = useState(true);
+  const [mapHeading, setMapHeading] = useState(0);
   const webRef = useRef<WebView>(null);
   const frameRef = useRef<{
     contentWindow: { postMessage: (data: unknown, origin: string) => void } | null;
@@ -92,24 +93,16 @@ export function CampoMap({
     webRef.current?.injectJavaScript(campoMapUpdateScript(data));
   }, []);
 
-  const pushCompass = useCallback((on: boolean, deg: number | null) => {
-    if (Platform.OS === "web") {
-      frameRef.current?.contentWindow?.postMessage({ type: "compass", on, heading: deg }, "*");
-      return;
-    }
-    webRef.current?.injectJavaScript(campoMapCompassScript(on, deg));
-  }, []);
-
   useEffect(() => {
     push(effective);
   }, [effective, push]);
 
   useEffect(() => {
-    pushCompass(compassOn, heading);
-  }, [compassOn, heading, pushCompass]);
-
-  useEffect(() => {
-    if (!effective.tracking) setFollowing(false);
+    if (!effective.tracking) {
+      setFollowing(false);
+      setNorthUp(true);
+      setMapHeading(0);
+    }
   }, [effective.tracking]);
 
   const swapCam = useCallback((next: boolean) => {
@@ -129,6 +122,7 @@ export function CampoMap({
   }, []);
 
   const recenter = useCallback(() => {
+    setNorthUp(false);
     swapCam(true);
     if (Platform.OS === "web") {
       frameRef.current?.contentWindow?.postMessage({ type: "recenter" }, "*");
@@ -138,6 +132,8 @@ export function CampoMap({
   }, [swapCam]);
 
   const centerRoute = useCallback(() => {
+    setNorthUp(true);
+    setMapHeading(0);
     swapCam(false);
     if (Platform.OS === "web") {
       frameRef.current?.contentWindow?.postMessage({ type: "center-route" }, "*");
@@ -146,26 +142,26 @@ export function CampoMap({
     webRef.current?.injectJavaScript(campoMapCenterRouteScript());
   }, [swapCam]);
 
-  const toggleCompass = useCallback(() => {
-    void (async () => {
-      if (!compassOn) {
-        const ok = await requestCompassPermission();
-        if (!ok) {
-          const msg = "Activa el permiso de brújula para girar el mapa.";
-          if (Platform.OS === "web") window.alert(msg);
-          else Alert.alert("Brújula", msg);
-          return;
-        }
-      }
-      setCompassOn((value) => !value);
-    })();
-  }, [compassOn]);
+  const resetNorth = useCallback(() => {
+    setNorthUp(true);
+    setMapHeading(0);
+    if (Platform.OS === "web") {
+      frameRef.current?.contentWindow?.postMessage({ type: "north-up" }, "*");
+      return;
+    }
+    webRef.current?.injectJavaScript(campoMapNorthUpScript());
+  }, []);
 
   const handleSelect = useCallback(
     (raw: unknown) => {
       const data = raw as CampoMapMessage;
       if (data?.type === "follow") {
         swapCam(!!data.on);
+        if (data.northUp != null) setNorthUp(!!data.northUp);
+        return;
+      }
+      if (data?.type === "map-heading" && Number.isFinite(data.heading)) {
+        setMapHeading(((Number(data.heading) % 360) + 360) % 360);
         return;
       }
       if (data?.type === "select-pin" && data.id) onSelectPin?.(data.id);
@@ -190,10 +186,18 @@ export function CampoMap({
   };
 
   const tracking = effective.tracking;
+  const headingUp = tracking && following && !northUp;
+  const spin = ((mapHeading % 360) + 360) % 360;
+  const fillCorners = spin > 8 && spin < 352;
+  const camSpin = {
+    transform: fillCorners
+      ? [{ rotate: `${-mapHeading}deg` }, { scale: 1.42 }]
+      : [{ rotate: `${-mapHeading}deg` }],
+  };
   const fabs = (
     <View style={[styles.fabs, { bottom: locateBottom }]} pointerEvents="box-none">
       {tracking ? (
-        following ? (
+        headingUp ? (
           <GmapsChip kind="center" onPress={centerRoute} />
         ) : (
           <GmapsChip kind="locate" onPress={recenter} />
@@ -201,27 +205,25 @@ export function CampoMap({
       ) : (
         <LocateButton active={following} onPress={recenter} />
       )}
-      <CompassButton active={compassOn} onPress={toggleCompass} />
+      <CompassButton heading={mapHeading} onPress={resetNorth} />
     </View>
   );
 
   if (Platform.OS === "web") {
     return (
       <View style={styles.wrap} collapsable={false}>
-        <iframe
-          ref={frameRef}
-          title="Mapa de campo"
-          srcDoc={html}
-          style={styles.frame}
-          allow="geolocation; accelerometer; gyroscope; magnetometer"
-          onLoad={() => {
-            frameRef.current?.contentWindow?.postMessage(effective, "*");
-            frameRef.current?.contentWindow?.postMessage(
-              { type: "compass", on: compassOn, heading },
-              "*",
-            );
-          }}
-        />
+        <View style={[styles.camSpin, camSpin]} collapsable={false}>
+          <iframe
+            ref={frameRef}
+            title="Mapa de campo"
+            srcDoc={html}
+            style={styles.frame}
+            allow="geolocation; accelerometer; gyroscope; magnetometer"
+            onLoad={() => {
+              frameRef.current?.contentWindow?.postMessage(effective, "*");
+            }}
+          />
+        </View>
         {fabs}
       </View>
     );
@@ -234,12 +236,11 @@ export function CampoMap({
         persist
         androidLayerType="hardware"
         source={{ html, baseUrl: "https://unpkg.com" }}
-        style={styles.map}
+        style={[styles.map, camSpin]}
         allowFileAccess
         onMessage={onMessage}
         onLoadEnd={() => {
           webRef.current?.injectJavaScript(campoMapUpdateScript(effective));
-          webRef.current?.injectJavaScript(campoMapCompassScript(compassOn, heading));
         }}
       />
       {fabs}
@@ -248,7 +249,8 @@ export function CampoMap({
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, minHeight: 0, width: "100%", backgroundColor: theme.colors.cream },
+  wrap: { flex: 1, minHeight: 0, width: "100%", overflow: "hidden", backgroundColor: theme.colors.cream },
+  camSpin: { flex: 1, minHeight: 0, width: "100%" },
   map: { flex: 1, minHeight: 0, width: "100%", backgroundColor: theme.colors.cream },
   frame: { width: "100%", height: "100%", borderWidth: 0 } as never,
   fabs: {

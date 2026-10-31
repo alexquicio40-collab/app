@@ -117,6 +117,7 @@ google.maps.Marker = function (opts) {
   opts = opts || {};
   this._icon = opts.icon;
   this._rotation = opts.rotation || (opts.icon && opts.icon.rotation) || 0;
+  this._spinable = opts.rotation != null || (opts.icon && opts.icon.rotation != null);
   this._listeners = {};
   var self = this;
   this._marker = L.marker(gmLL(opts.position) || [0, 0], {
@@ -137,6 +138,7 @@ google.maps.Marker = function (opts) {
   if (opts.map) this.setMap(opts.map);
 };
 google.maps.Marker.prototype._spin = function () {
+  if (!this._spinable) return;
   var el = this._marker.getElement && this._marker.getElement();
   if (!el) return;
   var spin = el.querySelector("[data-spin]") || el.querySelector("img");
@@ -172,7 +174,7 @@ google.maps.Marker.prototype.setTitle = function (t) { this._marker.options.titl
 google.maps.Marker.prototype.setZIndex = function (z) { this._marker.setZIndexOffset(z || 0); };
 google.maps.Marker.prototype.setOptions = function (opts) {
   if (!opts) return;
-  if (opts.rotation != null) { this._rotation = opts.rotation; this._spin(); }
+  if (opts.rotation != null) { this._spinable = true; this._rotation = opts.rotation; this._spin(); }
   if (opts.zIndex != null) this.setZIndex(opts.zIndex);
   if (opts.icon) this.setIcon(opts.icon);
 };
@@ -436,6 +438,7 @@ google.maps.Map.prototype.setMapTypeId = function (id) {
 };
 google.maps.Map.prototype.getMapTypeId = function () { return this._type; };
 google.maps.Map.prototype.setHeading = function (deg) {
+  // No rotar teselas en el WebView: CSS rotate las deja en blanco en Android.
   this._heading = ((Number(deg) || 0) + 360) % 360;
 };
 google.maps.Map.prototype.getHeading = function () { return this._heading || 0; };
