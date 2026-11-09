@@ -136,3 +136,17 @@ export function enLima(valor: string) {
   if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)) return fechaHora(raw);
   return raw;
 }
+
+/** Texto para pantalla: DD/MM/YYYY o DD/MM/YYYY HH:mm, siempre en Lima. */
+export function mostrar(valor?: string | null, conHora = true) {
+  if (valor == null || !String(valor).trim()) return "";
+  const raw = String(valor).trim();
+  const stamp = /[T\s]\d{2}:\d{2}/.test(raw) || /[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)
+    ? fechaHora(raw)
+    : dia(raw);
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/.exec(stamp);
+  if (!match) return raw;
+  const text = `${match[3]}/${match[2]}/${match[1]}`;
+  if (conHora && match[4]) return `${text} ${match[4]}:${match[5]}`;
+  return text;
+}

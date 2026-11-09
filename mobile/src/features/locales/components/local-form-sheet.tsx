@@ -69,6 +69,7 @@ type FormState = {
   bidonPasadoText: string;
   precioLitroText: string;
   precioBaldeText: string;
+  precioBalde20Text: string;
   precioGaloneraText: string;
   operadoresVenPrecio: boolean;
   operadoresVenTelefono: boolean;
@@ -103,6 +104,7 @@ const emptyForm = (): FormState => ({
   bidonPasadoText: "",
   precioLitroText: "",
   precioBaldeText: "",
+  precioBalde20Text: "",
   precioGaloneraText: "",
   operadoresVenPrecio: false,
   operadoresVenTelefono: true,
@@ -192,7 +194,8 @@ export function LocalFormSheet({
       bidonRealText: local.bidonReal != null ? String(local.bidonReal) : "",
       bidonPasadoText: local.bidonPasadoPor != null ? String(local.bidonPasadoPor) : "",
       precioLitroText: moneyText(local.precioLitro),
-      precioBaldeText: moneyText(local.precioBalde),
+      precioBaldeText: moneyText(local.precioBalde18 ?? local.precioBalde),
+      precioBalde20Text: moneyText(local.precioBalde20),
       precioGaloneraText: moneyText(local.precioGalonera),
       operadoresVenPrecio: local.operadoresVenPrecio,
       operadoresVenTelefono: local.operadoresVenTelefono !== false,
@@ -390,6 +393,8 @@ export function LocalFormSheet({
       bidonPasadoPor: parseOptionalInt(form.bidonPasadoText),
       precioLitro: parseMoney(form.precioLitroText),
       precioBalde: parseMoney(form.precioBaldeText),
+      precioBalde18: parseMoney(form.precioBaldeText),
+      precioBalde20: parseMoney(form.precioBalde20Text),
       precioGalonera: parseMoney(form.precioGaloneraText),
       operadoresVenPrecio: form.operadoresVenPrecio,
       operadoresVenTelefono: form.operadoresVenTelefono,
@@ -661,6 +666,7 @@ export function LocalFormSheet({
               value={{
                 precioLitroText: form.precioLitroText,
                 precioBaldeText: form.precioBaldeText,
+                precioBalde20Text: form.precioBalde20Text,
                 precioGaloneraText: form.precioGaloneraText,
                 operadoresVenPrecio: form.operadoresVenPrecio,
               }}

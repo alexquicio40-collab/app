@@ -12,6 +12,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,6 +27,7 @@ export function ReprogramAviso() {
   const [items, setItems] = useState<RouteItem[]>([]);
   const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [motivos, setMotivos] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,10 +63,15 @@ export function ReprogramAviso() {
 
   const saveFecha = async (item: RouteItem) => {
     const fecha = drafts[item.id] || limaDate();
+    const motivo = (motivos[item.id] ?? "").trim();
     setSavingId(item.id);
     setError(null);
     try {
-      await updateRoute(item.id, { fechaAsignacion: fecha, estado: "programado" });
+      await updateRoute(item.id, {
+        fechaAsignacion: fecha,
+        estado: "programado",
+        observaciones: motivo || item.observaciones || undefined,
+      });
       setItems((prev) => {
         const next = prev.filter((row) => row.id !== item.id);
         if (!next.length) setOpen(false);
@@ -88,7 +95,7 @@ export function ReprogramAviso() {
         <View style={[styles.card, { marginBottom: Math.max(insets.bottom, 16) }]}>
           <Text style={styles.kicker}>Reprogramar</Text>
           <Text style={styles.title}>{titulo}</Text>
-          <Text style={styles.hint}>Elige la nueva fecha y guárdala desde este aviso.</Text>
+          <Text style={styles.hint}>Elige la nueva fecha, indica por qué se reprograma y guárdala.</Text>
           <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
             {items.map((item, index) => (
               <View key={item.id} style={styles.item}>
@@ -103,6 +110,14 @@ export function ReprogramAviso() {
                   value={drafts[item.id] ?? limaDate()}
                   onChange={(fecha) => setDrafts((prev) => ({ ...prev, [item.id]: fecha }))}
                   autoOpen={index === 0}
+                />
+                <TextInput
+                  value={motivos[item.id] ?? item.observaciones ?? ""}
+                  onChangeText={(text) => setMotivos((prev) => ({ ...prev, [item.id]: text }))}
+                  placeholder="¿Por qué se reprograma?"
+                  placeholderTextColor={theme.colors.muted}
+                  multiline
+                  style={styles.obs}
                 />
                 <Pressable
                   onPress={() => void saveFecha(item)}
@@ -165,6 +180,19 @@ const styles = StyleSheet.create({
   },
   local: { color: theme.colors.ink, fontSize: 14, fontWeight: "800" },
   meta: { color: theme.colors.muted, fontSize: 12, fontWeight: "600" },
+  obs: {
+    minHeight: 52,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: theme.colors.line,
+    backgroundColor: theme.colors.surface,
+    color: theme.colors.ink,
+    fontSize: 13,
+    fontWeight: "600",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    textAlignVertical: "top",
+  },
   save: {
     height: 38,
     borderRadius: 10,

@@ -22,6 +22,7 @@ import {
   filterRoutes,
   hasActiveFilters,
 } from "./lib/filters";
+import { loadFechaAsignacion, rememberFechaAsignacion } from "./lib/fecha-asignacion-store";
 import { enrichRoutesWithLocales } from "./lib/enrich";
 import type { ConductorOption, RouteItem, RoutesFilters } from "./types";
 
@@ -146,7 +147,26 @@ export function useRoutesScreen() {
   );
 
   useEffect(() => {
-    void load("boot");
+    let alive = true;
+    const boot = async () => {
+      if (isOperador) {
+        await load("boot");
+        return;
+      }
+      const saved = await loadFechaAsignacion();
+      if (!alive) return;
+      const next = {
+        ...createDefaultFilters(),
+        fechaDesde: saved,
+        fechaHasta: saved,
+      };
+      setFilters(next);
+      await load("boot", next);
+    };
+    void boot();
+    return () => {
+      alive = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOperador, userId]);
 
@@ -281,6 +301,10 @@ export function useRoutesScreen() {
           patch.conductorId !== undefined ||
           patch.estado !== undefined;
 
+        if (next.fechaDesde && (patch.fechaDesde !== undefined || patch.fechaHasta !== undefined) && !isOperador) {
+          void rememberFechaAsignacion(next.fechaDesde);
+        }
+
         if (serverKeysChanged) {
           queueMicrotask(() => {
             void load("filter", next);
@@ -289,7 +313,7 @@ export function useRoutesScreen() {
         return next;
       });
     },
-    [load],
+    [load, isOperador],
   );
 
   const clearFilters = useCallback(() => {

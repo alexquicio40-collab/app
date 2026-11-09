@@ -58,11 +58,13 @@ export async function fetchFinalizacionConfig(userId: string | number): Promise<
   }
 }
 
-function setEstado(rutaId: string, estado: string) {
+function setEstado(rutaId: string, estado: string, observaciones?: string) {
   const query = `estado=${encodeURIComponent(estado)}`;
+  const body: Record<string, unknown> = { estado };
+  if (observaciones != null) body.observaciones = observaciones;
   return api<{ success?: boolean; message?: string }>(`/api/rutas/${rutaId}?${query}`, {
     method: "PUT",
-    body: { estado },
+    body,
   });
 }
 
@@ -78,8 +80,8 @@ export function marcarNoRecolectado(rutaId: string) {
   return setEstado(rutaId, "no_recolectado");
 }
 
-export function reprogramarRuta(rutaId: string) {
-  return setEstado(rutaId, "reprogramado");
+export function reprogramarRuta(rutaId: string, observaciones?: string) {
+  return setEstado(rutaId, "reprogramado", observaciones);
 }
 
 export function cerrarRuta(rutaId: string) {

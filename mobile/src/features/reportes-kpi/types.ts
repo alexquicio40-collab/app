@@ -60,6 +60,7 @@ export type AsignadorAgg = {
 export type RutaAsignadaItem = {
   id: string;
   fecha: string;
+  horaRecojo: string;
   asignador: string;
   conductor: string;
   local: string;
@@ -67,6 +68,21 @@ export type RutaAsignadaItem = {
   litros: number;
   baldes: number;
   galoneras: number;
+};
+
+export type VolumenProveedor = {
+  nombre: string;
+  distrito: string;
+  litros: number;
+  recojos: number;
+  ancla: boolean;
+};
+
+export type VolumenResumen = {
+  distritoTop: string;
+  distritoLitros: number;
+  anclasTotal: number;
+  proveedoresTop: VolumenProveedor[];
 };
 
 export type LocalAgg = {
@@ -114,6 +130,7 @@ export type ReportSnapshot = {
   porConductor: ConductorAgg[];
   porAsignador: AsignadorAgg[];
   rutasAsignadas: RutaAsignadaItem[];
+  volumen: VolumenResumen;
   porLocal: LocalAgg[];
   plantaPorAsesor: PlantaAsesorAgg[];
   plantaPorProveedor: PlantaProveedorAgg[];

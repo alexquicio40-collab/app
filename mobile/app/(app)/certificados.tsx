@@ -66,9 +66,20 @@ export default function CertificadosScreen() {
         compact
         trailing={
           screen.canUpload ? (
-            <Pressable onPress={screen.abrirManual} style={styles.manualBtn}>
-              <Text style={styles.manualText}>Manual</Text>
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => void screen.toggleCertificadosAuto()}
+                disabled={!screen.canToggleAuto || screen.mutating}
+                style={[styles.autoBtn, screen.certificadosAuto ? styles.autoBtnOn : null]}
+              >
+                <Text style={[styles.autoText, screen.certificadosAuto ? styles.autoTextOn : null]}>
+                  {screen.certificadosAuto ? "Auto ON" : "Auto OFF"}
+                </Text>
+              </Pressable>
+              <Pressable onPress={screen.abrirManual} style={styles.manualBtn}>
+                <Text style={styles.manualText}>Manual</Text>
+              </Pressable>
+            </View>
           ) : null
         }
       />
@@ -242,6 +253,21 @@ function Empty({
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bg },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 6 },
+  autoBtn: {
+    borderRadius: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1.5,
+    borderColor: theme.colors.line,
+    backgroundColor: theme.colors.surface,
+  },
+  autoBtnOn: {
+    borderColor: theme.colors.accent,
+    backgroundColor: theme.colors.accentSoft,
+  },
+  autoText: { color: theme.colors.muted, fontWeight: "800", fontSize: 12 },
+  autoTextOn: { color: theme.colors.accent },
   manualBtn: {
     backgroundColor: "#b45309",
     borderRadius: 9,

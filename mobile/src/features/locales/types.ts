@@ -45,6 +45,8 @@ export type LocalItem = {
   bidonPasadoPor: number | null;
   precioLitro: number | null;
   precioBalde: number | null;
+  precioBalde18: number | null;
+  precioBalde20: number | null;
   precioGalonera: number | null;
   operadoresVenPrecio: boolean;
   operadoresVenTelefono: boolean;
@@ -82,8 +84,11 @@ export type LocalFormInput = {
   bidonPasadoPor?: number | null;
   precioLitro?: number | null;
   precioBalde?: number | null;
+  precioBalde18?: number | null;
+  precioBalde20?: number | null;
   precioGalonera?: number | null;
   operadoresVenPrecio?: boolean;
+  force?: boolean;
   operadoresVenTelefono?: boolean;
   metodosPagoIds?: number[];
   prioridad?: "alta" | "media" | "baja";

@@ -42,6 +42,7 @@ export function useRutaFlujo(onChanged?: () => void) {
   const [finishRoute, setFinishRoute] = useState<RouteItem | null>(null);
   const [finishConfig, setFinishConfig] = useState<FinalizacionConfig>(emptyFinalizacionConfig);
   const [finishOpen, setFinishOpen] = useState(false);
+  const [reprogramRoute, setReprogramRoute] = useState<RouteItem | null>(null);
 
   const [mutating, setMutating] = useState(false);
   const [upload, setUpload] = useState<UploadProgress | null>(null);
@@ -190,8 +191,20 @@ export function useRutaFlujo(onChanged?: () => void) {
     arrive: (route: RouteItem) => runEstado(route, llegarRuta, "Llegó", "Quedó registrada la llegada"),
     skipCollection: (route: RouteItem) =>
       runEstado(route, marcarNoRecolectado, "No recolectado", "La visita quedó sin recojo"),
-    reprogram: (route: RouteItem) =>
-      runEstado(route, reprogramarRuta, "Reprogramado", "El recojo quedó reprogramado"),
+    reprogram: (route: RouteItem) => setReprogramRoute(route),
+    reprogramRoute,
+    reprogramOpen: Boolean(reprogramRoute),
+    closeReprogram: () => setReprogramRoute(null),
+    confirmReprogram: async (motivo: string) => {
+      if (!reprogramRoute) return;
+      await runEstado(
+        reprogramRoute,
+        (id) => reprogramarRuta(id, motivo),
+        "Reprogramado",
+        "El recojo quedó reprogramado",
+      );
+      setReprogramRoute(null);
+    },
     closeRoute: (route: RouteItem) => runEstado(route, cerrarRuta, "Cerrado", "La ruta quedó cerrada"),
     backToVehicle: () => {
       setCompanionsOpen(false);

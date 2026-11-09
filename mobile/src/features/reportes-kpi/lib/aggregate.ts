@@ -1,7 +1,9 @@
 import type { PlantaRegistro } from "@/features/planta/types";
 import { asEstado, estadoRecojoLabel } from "@/features/routes/lib/estados-recojo";
 import type { RouteItem } from "@/features/routes/types";
+import { mostrar } from "@/lib/fecha-lima";
 import { dayKeyFromIso } from "./period";
+import { analizarVolumen } from "./volumen";
 import type {
   AsignadorAgg,
   AsignadorOption,
@@ -12,6 +14,7 @@ import type {
   PlantaProveedorAgg,
   ReportSnapshot,
   RutaAsignadaItem,
+  VolumenResumen,
   RutasConteo,
 } from "../types";
 
@@ -148,6 +151,9 @@ function rutasAsignadas(rows: RouteItem[]): RutaAsignadaItem[] {
     .map((item) => ({
       id: item.id,
       fecha: (item.fechaAsignacion || "").slice(0, 10),
+      horaRecojo: item.fechaCompletada
+        ? mostrar(item.fechaCompletada)
+        : mostrar(item.fechaAsignacion, false),
       asignador: asignadorNombre(item),
       conductor: item.conductorNombre || "Sin operador",
       local: item.localNombre || "Sin local",
@@ -252,6 +258,20 @@ function plantaPorProveedor(rows: PlantaRegistro[]): PlantaProveedorAgg[] {
   return [...map.values()].sort((a, b) => b.total - a.total).slice(0, 10);
 }
 
+function volumenDe(rutas: RouteItem[]): VolumenResumen {
+  const vol = analizarVolumen(rutas);
+  const anclaIds = new Set(vol.anclas.map((item) => item.nombre));
+  return {
+    distritoTop: vol.distritoTop?.nombre || "—",
+    distritoLitros: vol.distritoTop?.litros ?? 0,
+    anclasTotal: vol.anclasTotal,
+    proveedoresTop: vol.proveedoresTop.map((item) => ({
+      ...item,
+      ancla: anclaIds.has(item.nombre),
+    })),
+  };
+}
+
 export function buildReportSnapshot(
   rutas: RouteItem[],
   planta: PlantaRegistro[],
@@ -267,6 +287,7 @@ export function buildReportSnapshot(
     porConductor: porConductor(rutas),
     porAsignador: porAsignador(rutas),
     rutasAsignadas: rutasAsignadas(rutas),
+    volumen: volumenDe(rutas),
     porLocal: porLocal(rutas),
     plantaPorAsesor: plantaPorAsesor(planta),
     plantaPorProveedor: plantaPorProveedor(planta),

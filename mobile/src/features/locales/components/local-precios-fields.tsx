@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 export type PreciosFormValues = {
   precioLitroText: string;
   precioBaldeText: string;
+  precioBalde20Text: string;
   precioGaloneraText: string;
   operadoresVenPrecio: boolean;
 };
@@ -29,14 +30,22 @@ export function LocalPreciosFields({ value, onChange }: LocalPreciosFieldsProps)
           onChange={(precioLitroText) => onChange({ precioLitroText })}
         />
         <MoneyField
-          label="Balde"
+          label="Galonera"
+          value={value.precioGaloneraText}
+          onChange={(precioGaloneraText) => onChange({ precioGaloneraText })}
+        />
+      </FieldRow>
+
+      <FieldRow>
+        <MoneyField
+          label="Balde 18 L"
           value={value.precioBaldeText}
           onChange={(precioBaldeText) => onChange({ precioBaldeText })}
         />
         <MoneyField
-          label="Galonera"
-          value={value.precioGaloneraText}
-          onChange={(precioGaloneraText) => onChange({ precioGaloneraText })}
+          label="Balde 20 L"
+          value={value.precioBalde20Text}
+          onChange={(precioBalde20Text) => onChange({ precioBalde20Text })}
         />
       </FieldRow>
 

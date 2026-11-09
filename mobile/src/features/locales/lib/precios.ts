@@ -1,6 +1,8 @@
 export type PreciosLocal = {
   precioLitro: number | null;
   precioBalde: number | null;
+  precioBalde18: number | null;
+  precioBalde20: number | null;
   precioGalonera: number | null;
   operadoresVenPrecio: boolean;
 };
@@ -8,6 +10,8 @@ export type PreciosLocal = {
 export const emptyPrecios = (): PreciosLocal => ({
   precioLitro: null,
   precioBalde: null,
+  precioBalde18: null,
+  precioBalde20: null,
   precioGalonera: null,
   operadoresVenPrecio: false,
 });
@@ -29,8 +33,19 @@ export function formatSoles(value: number | null | undefined) {
   return text ? `S/ ${text}` : "";
 }
 
-export function hasPrecios(precios: Pick<PreciosLocal, "precioLitro" | "precioBalde" | "precioGalonera">) {
-  return precios.precioLitro != null || precios.precioBalde != null || precios.precioGalonera != null;
+function balde18De(precios: Pick<PreciosLocal, "precioBalde" | "precioBalde18">) {
+  return precios.precioBalde18 ?? precios.precioBalde ?? null;
+}
+
+export function hasPrecios(
+  precios: Pick<PreciosLocal, "precioLitro" | "precioBalde" | "precioBalde18" | "precioBalde20" | "precioGalonera">,
+) {
+  return (
+    precios.precioLitro != null ||
+    balde18De(precios) != null ||
+    precios.precioBalde20 != null ||
+    precios.precioGalonera != null
+  );
 }
 
 /** Admin/asesor siempre ven. Operador solo si el local lo permite y hay montos. */
@@ -42,10 +57,14 @@ export function canSeePrecios(
   return canManage || precios.operadoresVenPrecio;
 }
 
-export function formatPrecios(precios: Pick<PreciosLocal, "precioLitro" | "precioBalde" | "precioGalonera">) {
+export function formatPrecios(
+  precios: Pick<PreciosLocal, "precioLitro" | "precioBalde" | "precioBalde18" | "precioBalde20" | "precioGalonera">,
+) {
   const parts: string[] = [];
   if (precios.precioLitro != null) parts.push(`${formatSoles(precios.precioLitro)} / L`);
-  if (precios.precioBalde != null) parts.push(`${formatSoles(precios.precioBalde)} / balde`);
+  const balde18 = balde18De(precios);
+  if (balde18 != null) parts.push(`${formatSoles(balde18)} / balde 18 L`);
+  if (precios.precioBalde20 != null) parts.push(`${formatSoles(precios.precioBalde20)} / balde 20 L`);
   if (precios.precioGalonera != null) parts.push(`${formatSoles(precios.precioGalonera)} / gal.`);
   return parts.join(" · ");
 }

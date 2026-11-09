@@ -1,5 +1,5 @@
 import { matchAsesorTag, seesAllUsers } from "@/lib/scope-user";
-import { isAsesor } from "@/lib/role-nav";
+import { isAdministrador, isAsesor } from "@/lib/role-nav";
 import { useAuth } from "@/providers/auth-provider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Linking, Platform } from "react-native";
@@ -9,7 +9,9 @@ import {
   fetchAsesoresFromPendientes,
   fetchHistorial,
   fetchBorradorCertificado,
+  fetchCertificadosAjuste,
   fetchPendientes,
+  saveCertificadosAjuste,
   peekHistorial,
   peekPendientes,
   generarCertificado,
@@ -72,6 +74,7 @@ export function useCertificadosScreen() {
   const rol = (user?.rol ?? "").toLowerCase();
   const canAccess = rol === "administrador" || rol === "asesor";
   const canDeleteHistorial = rol === "administrador";
+  const canToggleAuto = isAdministrador(rol);
   const canUpload = canAccess;
   const allUsers = seesAllUsers(rol) || isAsesor(rol);
 
@@ -105,6 +108,7 @@ export function useCertificadosScreen() {
   const [detailTarget, setDetailTarget] = useState<CertificadoPendiente | null>(null);
   const [historialDetail, setHistorialDetail] = useState<CertificadoHistorial | null>(null);
   const [viewer, setViewer] = useState<CertificadoHistorial | null>(null);
+  const [certificadosAuto, setCertificadosAuto] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendFiltersRef = useRef(pendFilters);
@@ -134,7 +138,7 @@ export function useCertificadosScreen() {
                 (item.usuarioId && user?.id != null && String(item.usuarioId) === String(user.id)) ||
                 matchAsesorTag(item.usuarioNombre, user),
             );
-      const [pendRows, histRows] = await Promise.all([
+      const [pendRows, histRows, autoOn] = await Promise.all([
         fetchPendientes(pendFiltersRef.current, {
           force: mode === "refresh",
           onPartial: (partial) => {
@@ -155,11 +159,13 @@ export function useCertificadosScreen() {
             },
           },
         ),
+        fetchCertificadosAjuste().catch(() => false),
       ]);
       const pendScoped = scopePend(pendRows);
       const histScoped = scopeHist(histRows);
       setPendientes(pendScoped);
       setHistorial(histScoped);
+      setCertificadosAuto(Boolean(autoOn));
       setAsesores(allUsers ? await fetchAsesoresFromPendientes(pendScoped) : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar los certificados");
@@ -377,10 +383,32 @@ export function useCertificadosScreen() {
     }
   }, []);
 
+  const toggleCertificadosAuto = useCallback(async () => {
+    if (!canToggleAuto) return;
+    setMutating(true);
+    try {
+      const next = await saveCertificadosAjuste(!certificadosAuto);
+      setCertificadosAuto(next);
+      notify(
+        "Certificados",
+        next
+          ? "Emisión automática encendida"
+          : "Emisión automática apagada. Usa Manual para generar.",
+      );
+    } catch (err) {
+      notify("Error", err instanceof Error ? err.message : "No se pudo cambiar el ajuste");
+    } finally {
+      setMutating(false);
+    }
+  }, [canToggleAuto, certificadosAuto]);
+
   return {
     canAccess,
     canUpload,
     canDeleteHistorial,
+    canToggleAuto,
+    certificadosAuto,
+    toggleCertificadosAuto,
     tab,
     setTab,
     loading,

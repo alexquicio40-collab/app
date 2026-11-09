@@ -50,6 +50,8 @@ export type RouteItem = {
   bidonPasadoPor: number | null;
   precioLitro: number | null;
   precioBalde: number | null;
+  precioBalde18: number | null;
+  precioBalde20: number | null;
   precioGalonera: number | null;
   operadoresVenPrecio: boolean;
   /** Formas de pago del local. */

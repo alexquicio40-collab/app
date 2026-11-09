@@ -294,6 +294,21 @@ export async function deleteHistorialItem(id: string) {
   return api<{ success?: boolean }>(`/api/certificados/historial/${id}`, { method: "DELETE" });
 }
 
+export async function fetchCertificadosAjuste() {
+  const payload = await api<UnknownRecord>("/api/ajustes");
+  const nested = isRecord(payload.ajustes) ? payload.ajustes : payload;
+  return Number(nested.certificados_auto) === 1;
+}
+
+export async function saveCertificadosAjuste(on: boolean) {
+  const payload = await api<UnknownRecord>("/api/ajustes", {
+    method: "PUT",
+    body: { certificados_auto: on ? 1 : 0 },
+  });
+  const nested = isRecord(payload.ajustes) ? payload.ajustes : payload;
+  return Number(nested.certificados_auto) === 1;
+}
+
 export async function fetchAsesoresFromPendientes(rows: CertificadoPendiente[]) {
   const map = new Map<string, string>();
   for (const row of rows) {

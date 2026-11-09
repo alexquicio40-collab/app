@@ -10,8 +10,9 @@ import {
 import type { LocalOption } from "@/features/routes/assign/types";
 import type { ConductorOption } from "@/features/routes/types";
 import { limaDate } from "@/lib/api";
+import { rememberFechaAsignacion } from "@/features/routes/lib/fecha-asignacion-store";
 import { theme } from "@/lib/theme";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
@@ -20,6 +21,7 @@ type AssignPanelProps = {
   locales: LocalOption[];
   localesLoading?: boolean;
   bottomPad?: number;
+  defaultFecha?: string;
   onAssign: (input: {
     conductorId: string;
     localId: string;
@@ -34,12 +36,17 @@ export function AssignPanel({
   locales,
   localesLoading = false,
   bottomPad = 120,
+  defaultFecha,
   onAssign,
   onDone,
 }: AssignPanelProps) {
   const [conductorId, setConductorId] = useState<string | null>(null);
   const [localId, setLocalId] = useState<string | null>(null);
-  const [fecha, setFecha] = useState(limaDate());
+  const [fecha, setFecha] = useState(defaultFecha || limaDate());
+
+  useEffect(() => {
+    if (defaultFecha) setFecha(defaultFecha);
+  }, [defaultFecha]);
   const [obs, setObs] = useState("");
   const [saving, setSaving] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -65,7 +72,7 @@ export function AssignPanel({
       setConductorId(null);
       setLocalId(null);
       setObs("");
-      setFecha(limaDate());
+      await rememberFechaAsignacion(fecha);
       notify("Listo", "Ruta asignada");
       onDone?.();
     } catch (err) {
@@ -147,7 +154,7 @@ export function AssignPanel({
                 setConductorId(null);
                 setLocalId(null);
                 setObs("");
-                setFecha(limaDate());
+                setFecha(defaultFecha || limaDate());
               }}
             />
           </View>

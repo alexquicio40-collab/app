@@ -14,7 +14,9 @@ export function enrichRouteWithLocal(route: RouteItem, local?: LocalItem | null)
     cantidadBidonesBlancos: route.cantidadBidonesBlancos ?? local.cantidadBidonesBlancos,
     bidonPasadoPor: route.bidonPasadoPor ?? local.bidonPasadoPor,
     precioLitro: route.precioLitro ?? local.precioLitro,
-    precioBalde: route.precioBalde ?? local.precioBalde,
+    precioBalde: route.precioBalde ?? local.precioBalde18 ?? local.precioBalde,
+    precioBalde18: route.precioBalde18 ?? local.precioBalde18 ?? local.precioBalde,
+    precioBalde20: route.precioBalde20 ?? local.precioBalde20,
     precioGalonera: route.precioGalonera ?? local.precioGalonera,
     operadoresVenPrecio: route.operadoresVenPrecio || local.operadoresVenPrecio,
     metodosPago: route.metodosPago.length

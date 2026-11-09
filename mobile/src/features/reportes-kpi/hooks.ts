@@ -33,6 +33,7 @@ const EMPTY: ReportSnapshot = {
   porConductor: [],
   porAsignador: [],
   rutasAsignadas: [],
+  volumen: { distritoTop: "—", distritoLitros: 0, anclasTotal: 0, proveedoresTop: [] },
   porLocal: [],
   plantaPorAsesor: [],
   plantaPorProveedor: [],

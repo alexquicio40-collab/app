@@ -5,6 +5,7 @@ import { ReportEnvasesCard } from "./report-envases-card";
 import { ReportPlantaSection } from "./report-planta-section";
 import { ReportRutasSection } from "./report-rutas-section";
 import { ReportTableCard } from "./report-table-card";
+import { ReportVolumenCard } from "./report-volumen-card";
 
 type ReportContentProps = {
   snapshot: ReportSnapshot;
@@ -40,12 +41,14 @@ export function ReportContent({ snapshot, rangeLabel }: ReportContentProps) {
       {hasRutas ? (
         <>
           <ReportRutasSection rutas={snapshot.rutas} />
+          {snapshot.volumen ? <ReportVolumenCard volumen={snapshot.volumen} /> : null}
 
           <ReportTableCard
             title="Rutas asignadas"
             subtitle={`${snapshot.rutasAsignadas.length} ruta${snapshot.rutasAsignadas.length === 1 ? "" : "s"}`}
             columns={[
               { key: "fecha", label: "Fecha", width: 88 },
+              { key: "horaRecojo", label: "Hora recojo", width: 118 },
               { key: "asignador", label: "Asignó", width: 110 },
               { key: "conductor", label: "Operador", width: 110 },
               { key: "local", label: "Local", width: 140 },
@@ -57,6 +60,7 @@ export function ReportContent({ snapshot, rangeLabel }: ReportContentProps) {
             rows={snapshot.rutasAsignadas.map((item) => ({
               id: item.id,
               fecha: item.fecha || "—",
+              horaRecojo: item.horaRecojo || "—",
               asignador: item.asignador,
               conductor: item.conductor,
               local: item.local,

@@ -9,6 +9,7 @@ import { Alert, InteractionManager, Platform } from "react-native";
 import {
   createLocal,
   createMetodoPago,
+  fetchLocalesDuplicados,
   deleteLocal,
   deleteMetodoPago,
   extractCreatedLocalId,
@@ -32,6 +33,7 @@ import {
   createDefaultLocalFilters,
   hasActiveLocalFilters,
 } from "./lib/filters";
+import { textoDuplicados } from "./lib/nombre";
 import type { LocalFormInput, LocalItem, LocalesFilters } from "./types";
 
 function notify(title: string, message: string) {
@@ -44,6 +46,17 @@ function avisoSoloConsulta() {
     "Solo consulta",
     "Este local lo registró otro asesor. Puedes verlo, pero no editarlo ni accionar.",
   );
+}
+
+async function confirmDuplicate(nombre: string, detalle: string) {
+  const message = `Ya existe un proveedor con un nombre parecido a "${nombre}":\n\n${detalle}\n\n¿Crearlo de todas formas?`;
+  if (Platform.OS === "web") return window.confirm(message);
+  return new Promise<boolean>((resolve) => {
+    Alert.alert("Proveedor duplicado", message, [
+      { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
+      { text: "Crear igual", onPress: () => resolve(true) },
+    ]);
+  });
 }
 
 async function confirmDelete(nombre: string) {
@@ -269,6 +282,12 @@ export function useLocalesScreen() {
         if (editingId) {
           await updateLocal(editingId, stamped);
         } else {
+          const duplicados = await fetchLocalesDuplicados(stamped.nombre);
+          if (duplicados.length) {
+            const ok = await confirmDuplicate(stamped.nombre, textoDuplicados(duplicados));
+            if (!ok) return;
+            stamped.force = true;
+          }
           const created = await createLocal(stamped);
           localId = extractCreatedLocalId(created);
           if (!localId) {

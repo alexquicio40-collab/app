@@ -14,6 +14,7 @@ import { RoutesToolbar } from "@/features/routes/components/routes-toolbar";
 import {
   CompanionsSheet,
   FinalizarRutaSheet,
+  ReprogramReasonSheet,
   useRutaFlujo,
   VehicleTypeSheet,
 } from "@/features/routes/flujo";
@@ -85,9 +86,13 @@ export default function RutasScreen() {
             locales={assign.locales}
             localesLoading={assign.localesLoading}
             bottomPad={bottomPad}
+            defaultFecha={routes.filters.fechaDesde || undefined}
             onAssign={async (input) => {
               await assign.assignRoute(input);
-              await routes.reload();
+              routes.patchFilters({
+                fechaDesde: input.fechaAsignacion,
+                fechaHasta: input.fechaAsignacion,
+              });
             }}
             onDone={() => setTab("listado")}
           />
@@ -378,6 +383,14 @@ function ListadoPanel({
         upload={flujo.upload}
         onClose={flujo.closeFinish}
         onSubmit={flujo.confirmFinish}
+      />
+
+      <ReprogramReasonSheet
+        open={flujo.reprogramOpen}
+        route={flujo.reprogramRoute}
+        saving={flujo.mutating}
+        onClose={flujo.closeReprogram}
+        onConfirm={flujo.confirmReprogram}
       />
     </View>
   );

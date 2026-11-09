@@ -2,6 +2,7 @@ import { api, apiOnline, apiUpload, getApiBaseUrl } from "@/lib/api";
 import { readJsonFile, writeJsonFile } from "@/lib/offline/storage";
 import { parseMoney } from "./lib/precios";
 import { normalizePrioridad } from "./lib/prioridad";
+import type { LocalDuplicado } from "./lib/nombre";
 import type { LocalFormInput, LocalFoto, LocalItem, PendingLocalFoto } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
@@ -121,7 +122,9 @@ export function parseLocalList(row: UnknownRecord): LocalItem | null {
     bidonReal: null,
     bidonPasadoPor: null,
     precioLitro: parseMoney(row.precio_litro ?? row.precioLitro),
-    precioBalde: parseMoney(row.precio_balde ?? row.precioBalde),
+    precioBalde: parseMoney(row.precio_balde_18 ?? row.precioBalde18 ?? row.precio_balde ?? row.precioBalde),
+    precioBalde18: parseMoney(row.precio_balde_18 ?? row.precioBalde18 ?? row.precio_balde ?? row.precioBalde),
+    precioBalde20: parseMoney(row.precio_balde_20 ?? row.precioBalde20),
     precioGalonera: parseMoney(row.precio_galonera ?? row.precioGalonera),
     operadoresVenPrecio: bool(row.operadores_ven_precio ?? row.operadoresVenPrecio),
     operadoresVenTelefono:
@@ -173,7 +176,9 @@ export function parseLocal(
     bidonReal: num(row.bidon_real),
     bidonPasadoPor: num(row.bidon_pasado_por),
     precioLitro: parseMoney(row.precio_litro ?? row.precioLitro),
-    precioBalde: parseMoney(row.precio_balde ?? row.precioBalde),
+    precioBalde: parseMoney(row.precio_balde_18 ?? row.precioBalde18 ?? row.precio_balde ?? row.precioBalde),
+    precioBalde18: parseMoney(row.precio_balde_18 ?? row.precioBalde18 ?? row.precio_balde ?? row.precioBalde),
+    precioBalde20: parseMoney(row.precio_balde_20 ?? row.precioBalde20),
     precioGalonera: parseMoney(row.precio_galonera ?? row.precioGalonera),
     operadoresVenPrecio: bool(row.operadores_ven_precio ?? row.operadoresVenPrecio),
     operadoresVenTelefono:
@@ -217,8 +222,11 @@ function toBody(input: LocalFormInput) {
     bidon_real: input.bidonReal ?? null,
     bidon_pasado_por: input.bidonPasadoPor ?? null,
     precio_litro: input.precioLitro ?? null,
-    precio_balde: input.precioBalde ?? null,
+    precio_balde: input.precioBalde18 ?? input.precioBalde ?? null,
+    precio_balde_18: input.precioBalde18 ?? input.precioBalde ?? null,
+    precio_balde_20: input.precioBalde20 ?? null,
     precio_galonera: input.precioGalonera ?? null,
+    force: input.force ? 1 : undefined,
     operadores_ven_precio: input.operadoresVenPrecio ? 1 : 0,
     operadores_ven_telefono: input.operadoresVenTelefono === false ? 0 : 1,
     metodos_pago_ids: input.metodosPagoIds ?? [],
@@ -412,6 +420,21 @@ export async function fetchLocalesLite(opts?: {
     nombre,
     direccion,
     asesorBioClim,
+  }));
+}
+
+export async function fetchLocalesDuplicados(nombre: string): Promise<LocalDuplicado[]> {
+  const needle = nombre.trim();
+  if (!needle) return [];
+  const payload = await api<UnknownRecord>(
+    `/api/locales/duplicados?nombre=${encodeURIComponent(needle)}`,
+  );
+  const rows = Array.isArray(payload.duplicados) ? payload.duplicados : [];
+  return rows.filter(isRecord).map((row) => ({
+    id: text(row.id),
+    nombre: text(row.nombre),
+    direccion: text(row.direccion),
+    ruc: text(row.ruc),
   }));
 }
 

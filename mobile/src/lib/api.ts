@@ -18,6 +18,7 @@ type ApiErrorBody = {
   message?: string;
   code?: string;
   success?: boolean;
+  duplicados?: unknown;
 };
 
 export class ApiError extends Error {
@@ -25,6 +26,7 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly code: string,
     message: string,
+    public readonly payload?: unknown,
   ) {
     super(message);
   }
@@ -244,7 +246,7 @@ async function parseApiResponse<T>(response: Response): Promise<T> {
       (payload as ApiErrorBody).message ||
       (payload as ApiErrorBody).error ||
       "No se pudo completar la solicitud";
-    throw new ApiError(response.status, code, message);
+    throw new ApiError(response.status, code, message, payload);
   }
 
   if (response.status === 204) {
